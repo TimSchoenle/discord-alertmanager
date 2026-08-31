@@ -1,0 +1,164 @@
+name: docs
+
+# `README.md` is generated from `.github/templates/README.md.hbs`. This workflow is what makes that
+# claim true in both directions.
+#
+# On a pull request it renders the template and commits the result to the branch, so nothing the
+# README states about itself is edited by hand: the tag its install snippet checks out, the MSRV
+# its badge shows, the licence its last section names, the crate map, and the configuration tables
+# lifted out of `docs/config.md`. The case that matters is the release pull request, which is the
+# commit that changes `version` and would otherwise leave the README advertising the previous tag.
+#
+# Everywhere it cannot commit, which is a push to `main` and a pull request from a fork, it renders
+# in `check` mode instead: nothing is written, and a stale `README.md` fails the job. Without that,
+# editing `README.md` directly would appear to work right up until the next pull request silently
+# reverted it.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Named for what it protects rather than for this workflow, so a second workflow that commits to a
+# pull request branch joins the same queue. The API call that makes a verified commit rejects one
+# whose parent has moved, and two renders of the same branch racing would leave one of them failing
+# for a reason nobody could act on. `cancel-in-progress: false` for the same reason: a cancelled run
+# here means a branch left holding a half-generated file.
+concurrency:
+  group: branch-writes-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  render:
+    name: render
+    # Forks get no secrets, so the App token would be empty and the commit could not be pushed to
+    # their branch anyway. `check` below picks those pull requests up instead.
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # the write happens with the App token below, not with GITHUB_TOKEN
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      # An App installation token, so the commit is verified and, unlike one made with
+      # `GITHUB_TOKEN`, re-triggers the checks on the branch it lands on. Scoped to contents:
+      # an unscoped App token inherits every permission the installation holds, which zizmor's
+      # `github-app` rule reports as an error.
+      - name: Generate Bot Token
+        id: generate_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.ACTIONS_MAINTENANCE_APP_ID }}
+          private-key: ${{ secrets.ACTIONS_MAINTENANCE_PRIVATE_KEY }}
+          permission-contents: write
+
+      # The head of the branch, not the merge commit: the render has to read the manifests the pull
+      # request proposes, and the commit has to land on top of what is there now.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.head_ref }}
+          persist-credentials: false
+
+      # Invoked through `bash` rather than executed: the repository is authored on Windows, where
+      # git does not record the executable bit.
+      #
+      # Assigned before it is echoed. With `echo "json=$(...)"` the exit status belongs to `echo`,
+      # so a failed generator leaves the step green, `readme-variables` reads the empty `extra` as
+      # `{}` by design, and the failure surfaces several steps later as a strict-mode error about
+      # an undefined template variable.
+      - name: Generate the README payload fragment
+        id: config
+        run: |
+          set -euo pipefail
+          json="$(bash .github/scripts/readme-variables.sh)"
+          echo "json=${json}" >> "$GITHUB_OUTPUT"
+
+      # `manifest` is the binary crate, not the repository root: the root is a virtual workspace
+      # manifest with no `[package]` table and the action refuses it by name. The crates that
+      # inherit their version from `[workspace.package]` cannot be read either, which is why the
+      # binary states its own and the script above fails when the two disagree.
+      #
+      # `branch` is the default branch rather than the action's `github.ref_name` default, which on
+      # a `pull_request` event is `<number>/merge`. Left alone, the badge URLs rendered here and the
+      # ones rendered by `check` on `main` differ, and the gate fails on every merge for a reason
+      # absent from the diff.
+      - name: Collect the README payload
+        id: variables
+        uses: TimSchoenle/actions/actions/common/readme-variables@e16a1e466faf8ec751b26289c1898143a253269f # tag=actions-common-readme-variables-v1.1.1
+        with:
+          manifest: crates/discord-alertmanager/Cargo.toml
+          branch: ${{ github.event.repository.default_branch }}
+          extra: ${{ steps.config.outputs.json }}
+
+      - name: Render and commit the README
+        id: readme
+        uses: TimSchoenle/actions/actions/common/render-template-and-commit@b9ac2dec974f92e901cd85426d05c1c57c3cd20b # tag=actions-common-render-template-and-commit-v1.1.4
+        with:
+          template: .github/templates/README.md.hbs
+          output: README.md
+          variables: ${{ steps.variables.outputs.variables }}
+          token: ${{ steps.generate_token.outputs.token }}
+          commit_message: "docs: render README from template"
+
+      - name: Summarise
+        env:
+          COMMITTED: ${{ steps.readme.outputs.changes_detected }}
+          COMMIT_URL: ${{ steps.readme.outputs.commit_url }}
+        run: |
+          if [ "${COMMITTED}" = "true" ]; then
+            echo "README.md re-rendered: ${COMMIT_URL}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "README.md already matched its template." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  check:
+    name: readme
+    # The complement of `render`: the pushes to `main` that no pull request rendered, and the fork
+    # pull requests that could not be committed to. Between the two conditions every event this
+    # workflow sees is handled by exactly one job.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Generate the README payload fragment
+        id: config
+        run: |
+          set -euo pipefail
+          json="$(bash .github/scripts/readme-variables.sh)"
+          echo "json=${json}" >> "$GITHUB_OUTPUT"
+
+      - name: Collect the README payload
+        id: variables
+        uses: TimSchoenle/actions/actions/common/readme-variables@e16a1e466faf8ec751b26289c1898143a253269f # tag=actions-common-readme-variables-v1.1.1
+        with:
+          manifest: crates/discord-alertmanager/Cargo.toml
+          branch: ${{ github.event.repository.default_branch }}
+          extra: ${{ steps.config.outputs.json }}
+
+      # Writes nothing; fails with the first differing line when README.md is stale.
+      - name: Verify README.md is current
+        uses: TimSchoenle/actions/actions/common/render-template@e16a1e466faf8ec751b26289c1898143a253269f # tag=actions-common-render-template-v1.1.2
+        with:
+          template: .github/templates/README.md.hbs
+          output: README.md
+          variables: ${{ steps.variables.outputs.variables }}
+          check: true

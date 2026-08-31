@@ -1,0 +1,10 @@
+# `core.autocrlf = true` is the usual setting on the machine this repository is authored from,
+# which would hand a Linux runner a script whose every line ends in a carriage return. `bash`
+# reports that as `$'\r': command not found` on the first line, several steps away from the cause.
+*.sh text eol=lf
+
+# Rendered by TimSchoenle/actions/actions/common/render-template, which normalizes to LF and
+# writes LF. Left to autocrlf, the working copy would differ from what the drift gate renders and
+# `check: true` would fail on line endings alone.
+*.hbs text eol=lf
+README.md text eol=lf

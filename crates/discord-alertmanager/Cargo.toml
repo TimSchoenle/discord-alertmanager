@@ -1,7 +1,12 @@
 [package]
 name = "discord-alertmanager"
 description = "A Discord operator surface for Prometheus Alertmanager."
-version.workspace = true
+# Literal, and the only member manifest that does not inherit this. The README payload is read
+# from here: `readme-variables` refuses a virtual workspace manifest for having no `[package]`
+# table, and refuses an inherited version for being absent from the file it was pointed at.
+# `.github/scripts/readme-variables.sh` fails the render when this and `[workspace.package]`
+# disagree, so the duplicate is checked on every pull request rather than trusted.
+version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

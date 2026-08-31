@@ -1,12 +1,23 @@
+{{!--
+  The README is generated from this file. GUIDE.md in TimSchoenle/actions/docs/readme has the
+  section order and the rules; PROSE.md governs every sentence written into it.
+
+  This block is a Handlebars comment and does not survive into the rendered file. The HTML comment
+  below it does, which is the point: it is what someone about to edit the wrong file will read.
+
+  Strict mode checks every root-scope name, so `repo`, `release`, `toolchain`, `docs`, `config` and
+  `crates` all have to be present in the payload. `config` and `crates` come from
+  .github/scripts/readme-variables.sh; the rest the action derives.
+--}}
 <!--
 Generated from .github/templates/README.md.hbs. Edit that file, not this one.
 
 CI renders it on every pull request and commits the result back to the branch. A push to
-`main` whose README.md does not match its template fails the `readme` job in
+`{{ repo.branch }}` whose README.md does not match its template fails the `readme` job in
 .github/workflows/docs.yml, which is a required check.
 
 The payload is collected by TimSchoenle/actions/actions/common/readme-variables, which reads
-crates/discord-alertmanager/Cargo.toml and walks docs/, merged over the output of one command:
+{{ repo.manifest }} and walks docs/, merged over the output of one command:
 
     bash .github/scripts/readme-variables.sh
 
@@ -17,13 +28,13 @@ pull request is therefore the commit that corrects them.
 Nothing in this comment may contain a mustache that is not a real reference.
 -->
 
-# discord-alertmanager
+# {{ repo.name }}
 
-A Discord operator surface for Prometheus Alertmanager.
+{{ repo.description }}
 
-[![Release](https://img.shields.io/github/v/release/TimSchoenle/discord-alertmanager?sort=semver)](https://github.com/TimSchoenle/discord-alertmanager/releases)
-[![Licence](https://img.shields.io/github/license/TimSchoenle/discord-alertmanager)](LICENSE)
-[![MSRV](https://img.shields.io/badge/MSRV-1.94-blue)](Cargo.toml)
+[![Release](https://img.shields.io/github/v/release/{{ repo.slug }}?sort=semver)]({{ repo.url }}/releases)
+[![Licence](https://img.shields.io/github/license/{{ repo.slug }})](LICENSE)
+[![MSRV](https://img.shields.io/badge/MSRV-{{ toolchain.msrv }}-blue)](Cargo.toml)
 
 ## What this is
 
@@ -42,8 +53,8 @@ store, and `discord-alertmanager-discord` is a crate of design notes with no cod
 The configuration surface is the part that is finished, and it renders from a clean checkout:
 
 ```bash
-git clone https://github.com/TimSchoenle/discord-alertmanager
-cd discord-alertmanager
+git clone {{ repo.url }}
+cd {{ repo.name }}
 
 # Every key the service reads, rendered from the Rust types that load it.
 cargo run -p discord-alertmanager-config --features config-schema \
@@ -96,9 +107,9 @@ The same generator writes `docs/config.md`, `docs/config.json` and `config.examp
 No image is published and there is no chart yet. Build it from source.
 
 ```bash
-git clone https://github.com/TimSchoenle/discord-alertmanager
-cd discord-alertmanager
-git checkout v0.1.0
+git clone {{ repo.url }}
+cd {{ repo.name }}
+git checkout {{ release.tag }}
 cargo build --release
 ```
 
@@ -147,16 +158,8 @@ differs from the package name throughout, so both are listed.
 
 | Crate | Import | Purpose |
 | --- | --- | --- |
-| [`discord-alertmanager-am`](crates/discord-alertmanager-am) | `dam_am` | Alertmanager API v2 client and the v4 webhook payload types. |
-| [`discord-alertmanager-config`](crates/discord-alertmanager-config) | `dam_config` | The configuration surface: terrace-config layers, Describe derives, generated reference. |
-| [`discord-alertmanager-core`](crates/discord-alertmanager-core) | `dam_core` | Domain types, matcher semantics and the notification state machine. No I/O. |
-| [`discord-alertmanager-discord`](crates/discord-alertmanager-discord) | `dam_discord` | The serenity layer: command registry, component handlers, card renderer, DiscordSink. |
-| [`discord-alertmanager-engine`](crates/discord-alertmanager-engine) | `dam_engine` | The decision pipeline: ingest, route, decide, outbox. Owns the two outbound ports. |
-| [`discord-alertmanager-ingest`](crates/discord-alertmanager-ingest) | `dam_ingest` | The axum listener: the Alertmanager webhook, the health probes, and /metrics. |
-| [`discord-alertmanager-store-postgres`](crates/discord-alertmanager-store-postgres) | `dam_store_postgres` | PostgreSQL backend: checked queries, migrations, and the FOR UPDATE SKIP LOCKED claim. |
-| [`discord-alertmanager-store-sqlite`](crates/discord-alertmanager-store-sqlite) | `dam_store_sqlite` | SQLite backend: checked queries, migrations, and the BEGIN IMMEDIATE claim. |
-| [`discord-alertmanager-store`](crates/discord-alertmanager-store) | `dam_store` | The Store trait, its row types, and the conformance suite both backends run. |
-| [`discord-alertmanager`](crates/discord-alertmanager) | — | A Discord operator surface for Prometheus Alertmanager. |
+{{#each crates}}| [`{{ name }}`](crates/{{ name }}) | {{#if library}}`{{ library }}`{{else}}—{{/if}} | {{ mdCell purpose }} |
+{{/each}}
 
 `xtask` sits beside them and is build tooling: it regenerates the configuration reference and the
 `sqlx` offline caches. `cargo xtask` is aliased in `.cargo/config.toml`.
@@ -168,12 +171,10 @@ before there is a configuration to describe them, so no file can supply one.
 
 | Variable | Role | Default | Purpose |
 | --- | --- | --- | --- |
-| `DAM_CONFIG` | config | `config.toml` | Names the TOML layer: a file, or a directory whose `*.toml` files are all merged in name order. |
-| `DAM_SECRETS_DIR` | secrets dir | — | Names a directory of key-named files — a mounted Kubernetes `Secret` volume. Each file supplies the key its name spells. |
-| `DAM_LOG_FORMAT` | reserved | — | Read directly from the environment before the layered config exists, so no file may supply it. |
-| `DAM_LOG_LEVEL` | reserved | — | Read directly from the environment before the layered config exists, so no file may supply it. |
+{{#each config.loaderRows}}{{{ this }}}
+{{/each}}
 
-Behind them are 63 keys. Each is spelled the same way in every layer: `__`
+Behind them are {{ config.keyCount }} keys. Each is spelled the same way in every layer: `__`
 separates nesting levels and case is folded, so `discord.token` is `DAM_DISCORD__TOKEN` as a
 variable and `discord__token` as a file name in the secrets directory.
 
@@ -181,13 +182,10 @@ These are the ones with no default, which the process will not start without:
 
 | TOML | Type | Environment | Default | Flags | Purpose |
 | --- | --- | --- | --- | --- | --- |
-| `discord.token` | `SecretString` | `DAM_DISCORD__TOKEN` | unset | secret | Bot token. Supply it through `DAM_DISCORD__TOKEN_FILE` or the secrets directory. |
-| `alertmanager.endpoints` | `Vec<Url>` | `DAM_ALERTMANAGER__ENDPOINTS` | `[]` | — | Base URLs of the Alertmanager peers, tried in order. |
-| `storage.backend` | `Backend`: `sqlite` \| `postgres` | `DAM_STORAGE__BACKEND` | `sqlite` | — | Which backend the bot connects to. |
-| `ingest.bind` | `SocketAddr` | `DAM_INGEST__BIND` | `0.0.0.0:9099` | — | Address and port to listen on. |
-| `ingest.webhook_token` | `SecretString` | `DAM_INGEST__WEBHOOK_TOKEN` | unset | secret | Bearer token every webhook request has to carry. |
+{{#each config.requiredRows}}{{{ this }}}
+{{/each}}
 
-[docs/config.md](docs/config.md) has all 63 of them with their defaults,
+[docs/config.md](docs/config.md) has all {{ config.keyCount }} of them with their defaults,
 [docs/config.json](docs/config.json) is the JSON Schema, and
 [config.example.toml](config.example.toml) is the same surface as a commented file. All three are
 written by `cargo xtask config-docs`.
@@ -214,21 +212,20 @@ drain before the listener stops.
 
 | | Supported |
 | --- | --- |
-| Rust | 1.94 or newer, edition 2024 |
-| Toolchain | 1.97.1, pinned in [rust-toolchain.toml](rust-toolchain.toml) |
+| Rust | {{ toolchain.msrv }} or newer, edition {{ toolchain.edition }} |
+| Toolchain | {{ toolchain.channel }}, pinned in [rust-toolchain.toml](rust-toolchain.toml) |
 | Alertmanager | API v2, which is the only one Alertmanager 0.27 and newer serves |
 | Storage | PostgreSQL and SQLite, one conformance suite between them |
 
-The pinned toolchain is about reproducibility and is not the floor. 1.94 is the
+The pinned toolchain is about reproducibility and is not the floor. {{ toolchain.msrv }} is the
 floor, and it comes from `terrace-config`, which declares the highest MSRV in the tree.
 
 ## Documentation
 
 | Document | Purpose |
 | --- | --- |
-| [Alertward — Implementation Plan](docs/Design.MD) | A Rust Discord application that is a full operator surface for Prometheus Alertmanager: |
-| [docs/config.json](docs/config.json) | — |
-| [Configuration reference](docs/config.md) | Every key the service reads, and the variables that decide where those keys come from. |
+{{#each docs}}| [{{ title }}]({{ path }}) | {{ default (mdCell summary) "—" }} |
+{{/each}}
 
 ## Contributing
 
@@ -246,4 +243,4 @@ past the capability they hold.
 
 ## Licence
 
-`MIT`. [LICENSE](LICENSE) has the terms.
+`{{ repo.license }}`. [LICENSE](LICENSE) has the terms.
