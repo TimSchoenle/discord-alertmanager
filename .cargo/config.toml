@@ -1,0 +1,12 @@
+# `sqlx::query!` resolves its schema from the checked-in `.sqlx/` caches rather than from a live
+# database. Pinning it here is what makes a plain `cargo build` need neither Docker nor a
+# database, and — just as important — makes it impossible for a build to silently reach a real
+# one because a stale DATABASE_URL was left in the environment.
+#
+# `force` is deliberately absent (it defaults to false), so an explicit `SQLX_OFFLINE=false` in
+# the environment still wins. That is exactly how `cargo xtask db-prepare` regenerates the caches.
+[env]
+SQLX_OFFLINE = "true"
+
+[alias]
+xtask = "run --quiet --package xtask --"

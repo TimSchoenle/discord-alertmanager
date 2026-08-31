@@ -1,0 +1,14 @@
+/target
+**/*.rs.bk
+Cargo.lock.orig
+
+# Local database URLs for `cargo sqlx prepare`; the checked-in `.sqlx/` caches are the artefact.
+.env.local
+
+# Editor / tooling state
+/.idea/
+/.serena/
+/.vscode/
+
+# insta review leftovers
+**/*.snap.new

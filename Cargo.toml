@@ -1,0 +1,159 @@
+# Virtual manifest. Every crate lives under `crates/`; `xtask` is the build-tooling binary and is
+# a member so that `cargo fmt --all` and `cargo clippy --workspace` cover it too.
+[workspace]
+resolver = "3"
+members = ["crates/*", "xtask"]
+
+# Inherited by every member with `field.workspace = true`, so a licence or an MSRV bump is one
+# edit rather than eleven.
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/TimSchoenle/discord-alertmanager"
+authors = ["Tim Schönle"]
+# The highest MSRV in the tree: terrace-config declares 1.94, serenity 0.12 needs only 1.74.
+rust-version = "1.94"
+
+# One version per dependency for the whole workspace. A member takes what it needs by name with
+# `dep.workspace = true`; nothing pins a version locally, so two crates cannot drift apart and
+# `cargo tree -d` stays quiet.
+[workspace.dependencies]
+
+# --- internal ---------------------------------------------------------------------------------
+# Each is renamed to a `dam-` alias. `discord_alertmanager_engine::decide` in every import line
+# of every other crate is the alternative, and the package names were chosen to match the
+# repository rather than to be typed.
+dam-core = { path = "crates/discord-alertmanager-core", package = "discord-alertmanager-core" }
+dam-config = { path = "crates/discord-alertmanager-config", package = "discord-alertmanager-config" }
+dam-am = { path = "crates/discord-alertmanager-am", package = "discord-alertmanager-am" }
+dam-store = { path = "crates/discord-alertmanager-store", package = "discord-alertmanager-store" }
+dam-store-postgres = { path = "crates/discord-alertmanager-store-postgres", package = "discord-alertmanager-store-postgres" }
+dam-store-sqlite = { path = "crates/discord-alertmanager-store-sqlite", package = "discord-alertmanager-store-sqlite" }
+dam-engine = { path = "crates/discord-alertmanager-engine", package = "discord-alertmanager-engine" }
+dam-discord = { path = "crates/discord-alertmanager-discord", package = "discord-alertmanager-discord" }
+dam-ingest = { path = "crates/discord-alertmanager-ingest", package = "discord-alertmanager-ingest" }
+
+# --- configuration ----------------------------------------------------------------------------
+# Pinned by tag, not branch: `cargo update` cannot then move across arbitrary commits, and every
+# bump is a manifest edit that shows up in review.
+terrace-config = { git = "https://github.com/TimSchoenle/terrace-config", tag = "v0.9.1" }
+
+# --- runtime ----------------------------------------------------------------------------------
+tokio = { version = "1.53", default-features = false }
+tokio-util = { version = "0.7", default-features = false }
+async-trait = "0.1"
+
+# --- discord ----------------------------------------------------------------------------------
+# `default-features = false` drops serenity's native-tls default; §9 requires one TLS stack, and
+# `rustls_backend` is it. `cache` earns its place for the role lookups authorisation performs.
+serenity = { version = "0.12", default-features = false, features = [
+    "builder",
+    "cache",
+    "chrono",
+    "client",
+    "gateway",
+    "http",
+    "model",
+    "rustls_backend",
+    "utils",
+] }
+
+# --- http -------------------------------------------------------------------------------------
+axum = "0.8"
+tower = "0.5"
+tower-http = { version = "0.6", default-features = false }
+# `>=0.11.22` in serenity's manifest unifies onto whatever this asks for; 0.12 is the newest line
+# serenity 0.12.5 was released against, so it stays here until serenity itself moves.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# --- storage ----------------------------------------------------------------------------------
+sqlx = { version = "0.9", default-features = false, features = [
+    "chrono",
+    "json",
+    "macros",
+    "migrate",
+    "runtime-tokio",
+    "tls-rustls-ring",
+] }
+
+# --- domain -----------------------------------------------------------------------------------
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
+regex = "1"
+minijinja = { version = "2", default-features = false, features = ["builtins"] }
+humantime = "2"
+url = { version = "2", features = ["serde"] }
+
+# --- security ---------------------------------------------------------------------------------
+secrecy = { version = "0.10", features = ["serde"] }
+subtle = "2"
+
+# --- plumbing ---------------------------------------------------------------------------------
+arc-swap = "1"
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = [
+    "env-filter",
+    "fmt",
+    "json",
+    "std",
+] }
+metrics = "0.24"
+metrics-exporter-prometheus = { version = "0.18", default-features = false }
+
+# --- tooling / tests --------------------------------------------------------------------------
+clap = { version = "4", features = ["derive"] }
+insta = "1"
+proptest = "1"
+rstest = "0.26"
+testcontainers = "0.27"
+testcontainers-modules = "0.15"
+wiremock = "0.6"
+
+# Declared once and inherited by every member, so a crate cannot be held to a looser standard
+# than its neighbours. CI runs clippy with `-D warnings`, which is what makes these gates.
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unreachable_pub = "warn"
+missing_docs = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+# `#[expect(…, reason = "…")]`, never a bare `#[allow(…)]`: an `allow` goes on silently forever,
+# an `expect` warns the moment its claim stops holding.
+allow_attributes = "warn"
+allow_attributes_without_reason = "warn"
+# serenity 0.12 pins `secrecy 0.8` while this workspace uses 0.10; nothing here can resolve that.
+multiple_crate_versions = "allow"
+# Every crate is `publish = false`. The metadata this lint asks for (keywords, categories, a
+# per-crate readme) documents a crates.io listing that will never exist.
+cargo_common_metadata = "allow"
+# The crate names are already `dam-…`; `dam_core::CoreError` is the readable spelling.
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+# An identifier written outside backticks renders as prose and stops being searchable.
+doc_markdown = "warn"
+# The missing blank line after the summary, which turns the whole comment into the index entry.
+too_long_first_doc_paragraph = "warn"
+doc_link_with_quotes = "warn"
+doc_broken_link = "warn"
+doc_include_without_cfg = "warn"
+# Both sit inside `pedantic`; named again so dropping `pedantic` would not drop them.
+missing_errors_doc = "warn"
+missing_panics_doc = "warn"
+
+[workspace.lints.rustdoc]
+broken_intra_doc_links = "deny"
+private_intra_doc_links = "warn"
+unescaped_backticks = "warn"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+panic = "abort"
+strip = "symbols"

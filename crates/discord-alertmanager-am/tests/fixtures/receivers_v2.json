@@ -1,0 +1,11 @@
+[
+  {
+    "name": "discord"
+  },
+  {
+    "name": "pagerduty-critical"
+  },
+  {
+    "name": "blackhole"
+  }
+]

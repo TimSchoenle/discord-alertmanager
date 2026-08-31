@@ -1,0 +1,46 @@
+[package]
+name = "discord-alertmanager"
+description = "A Discord operator surface for Prometheus Alertmanager."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+publish = false
+default-run = "discord-alertmanager"
+
+[[bin]]
+name = "discord-alertmanager"
+path = "src/main.rs"
+
+[features]
+default = ["postgres", "sqlite"]
+postgres = ["dep:dam-store-postgres"]
+sqlite = ["dep:dam-store-sqlite"]
+
+# The composition root, and the only crate allowed to carry `anyhow` (`deny.toml` enforces that).
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+dam-am.workspace = true
+dam-config.workspace = true
+dam-core.workspace = true
+dam-discord.workspace = true
+dam-engine.workspace = true
+dam-ingest.workspace = true
+dam-store.workspace = true
+dam-store-postgres = { workspace = true, optional = true }
+dam-store-sqlite = { workspace = true, optional = true }
+# The recorder is global state, so it is installed here and in no library.
+metrics-exporter-prometheus.workspace = true
+terrace-config = { workspace = true, features = ["explain", "reload"] }
+thiserror.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
+tokio-util.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[lints]
+workspace = true

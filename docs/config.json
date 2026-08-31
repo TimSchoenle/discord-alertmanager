@@ -1,0 +1,478 @@
+{
+  "$id": "https://github.com/TimSchoenle/discord-alertmanager/config.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "alertmanager": {
+      "additionalProperties": false,
+      "properties": {
+        "basic_password": {
+          "description": "Password for basic authentication. Supply it through the secrets directory or `_FILE`.",
+          "type": "string",
+          "writeOnly": true
+        },
+        "basic_username": {
+          "description": "Username for basic authentication. Ignored when `bearer_token` is set.",
+          "type": "string"
+        },
+        "bearer_token": {
+          "description": "Bearer token sent to Alertmanager. Supply it through the secrets directory or `_FILE`.",
+          "type": "string",
+          "writeOnly": true
+        },
+        "ca_bundle": {
+          "description": "PEM bundle of certificate authorities to trust in addition to the system roots.\n\nThere is deliberately no option to skip verification. An Alertmanager reachable only over\na certificate nothing trusts is a certificate to fix, not a check to disable.",
+          "type": "string"
+        },
+        "connect_timeout_secs": {
+          "default": 2,
+          "description": "Seconds to wait for a connection before trying the next endpoint.\n\nShort on purpose. This is how quickly a dead peer is abandoned for a live one.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "endpoints": {
+          "default": [],
+          "description": "Base URLs of the Alertmanager peers, tried in order.\n\nList every peer of a high-availability set. Silences gossip between peers, so any of them\naccepts a write and the first one that answers is used.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "retry": {
+          "additionalProperties": false,
+          "properties": {
+            "initial_backoff_ms": {
+              "default": 200,
+              "description": "Milliseconds to wait before the first retry.",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "max_backoff_secs": {
+              "default": 10,
+              "description": "Ceiling on a single wait, in seconds.",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "max_elapsed_secs": {
+              "default": 45,
+              "description": "Seconds to keep retrying one request before giving up on it.",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        },
+        "timeout_secs": {
+          "default": 10,
+          "description": "Seconds to wait for a whole request before giving up.",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "discord": {
+      "additionalProperties": false,
+      "properties": {
+        "capabilities": {
+          "additionalProperties": false,
+          "properties": {
+            "admin": {
+              "default": [],
+              "description": "Manage routes and read the effective configuration.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "operate": {
+              "default": [],
+              "description": "Acknowledge, assign, and add or remove bot-local ignores.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "silence": {
+              "default": [],
+              "description": "Create, extend and expire Alertmanager silences, which affects every receiver.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "view": {
+              "default": [
+                "@everyone"
+              ],
+              "description": "Read alerts, silences and routes. Grants no mutation of any kind.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        },
+        "capture_reply_text": {
+          "default": false,
+          "description": "Capture the text of thread replies, which needs the privileged `MESSAGE_CONTENT` intent.\n\nA card marks itself responded without this: the author and channel of a reply arrive\nwithout the privileged intent, and that is all the detection needs. Only the text of the\nreply is gated, so leaving this off costs nothing except the reply preview.",
+          "type": "boolean"
+        },
+        "dev_guild_id": {
+          "description": "Guild to register slash commands into. Registration is global when unset.\n\nGuild-scoped commands appear immediately; global ones take up to an hour to propagate.\nSet this in development and leave it unset in production.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "token": {
+          "description": "Bot token. Supply it through `DAM_DISCORD__TOKEN_FILE` or the secrets directory.\n\nPassing it as a plain environment variable puts it in the output of `docker inspect` and\nin any crash reporter that captures the environment.",
+          "type": "string",
+          "writeOnly": true
+        }
+      },
+      "type": "object"
+    },
+    "engine": {
+      "additionalProperties": false,
+      "properties": {
+        "deadman_window_secs": {
+          "default": 1800,
+          "description": "Seconds of webhook silence that, combined with an unreachable Alertmanager, trips the\ndeadman.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "dispatchers": {
+          "default": 4,
+          "description": "Outbox dispatcher workers.\n\nWork is hashed into one lane per worker by its dedupe key, so every effect for one alert\nlands on one worker. Raising this widens the fan-out across alerts and never splits an\nalert across two workers.",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "escalation_interval_secs": {
+          "default": 15,
+          "description": "Seconds between escalation timer sweeps.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "outbox_batch_size": {
+          "default": 16,
+          "description": "Outbox rows one worker claims per pass.",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "outbox_lease_secs": {
+          "default": 30,
+          "description": "Seconds a claimed outbox row stays claimed before a janitor may reclaim it.\n\nThe janitor reclaims at three times this, which is the margin for a worker that is slow\nrather than dead.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "persist_events": {
+          "default": true,
+          "description": "Record a row in `alert_events` for every state transition.\n\nTurning this off keeps the current `alerts` row and drops the history. The four reasons\nthe bot keeps its own alert table all rest on the current row, so nothing else changes.",
+          "type": "boolean"
+        },
+        "prune_interval_secs": {
+          "default": 3600,
+          "description": "Seconds between retention sweeps.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reconcile_interval_secs": {
+          "default": 60,
+          "description": "Seconds between reconciler polls of the Alertmanager alert set.\n\nThe reconciler is the authoritative path. Anything Alertmanager has that the database does\nnot is injected as a synthetic event, and anything firing in the database that Alertmanager\nhas not had for two consecutive polls is treated as resolved. That is what makes the bot\nconverge after a restart or a partition.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "regroup_window_secs": {
+          "default": 1800,
+          "description": "Seconds within which a re-fire reuses the existing card and thread.\n\nInside the window the card is reused and its flap count goes up. Outside it, a new card is\nposted carrying a link to the previous one.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "retention": {
+          "additionalProperties": false,
+          "properties": {
+            "audit_days": {
+              "default": 365,
+              "description": "Days of `audit_log`.\n\nKept far longer than the rest because it is small and it is the record of what people\ndecided. Check this horizon against what an incident review actually needs.",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "events_days": {
+              "default": 30,
+              "description": "Days of `alert_events` history. This is the expensive table.",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "resolved_days": {
+              "default": 30,
+              "description": "Days a resolved alert and its notification are kept.",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        },
+        "silence_sync_interval_secs": {
+          "default": 30,
+          "description": "Seconds between silence syncs.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "storm": {
+          "additionalProperties": false,
+          "properties": {
+            "forum_threshold": {
+              "default": 20,
+              "description": "Threshold for forum routes, which is lower.\n\nCreating a forum post is heavier than sending a message and is rate-limited per channel,\nso a forum route reaches trouble sooner than a text one.",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "threshold": {
+              "default": 50,
+              "description": "Alerts on one route inside the window that trigger digest mode.",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "window_secs": {
+              "default": 60,
+              "description": "Length of the window, in seconds.",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "ingest": {
+      "additionalProperties": false,
+      "properties": {
+        "bind": {
+          "default": "0.0.0.0:9099",
+          "description": "Address and port to listen on.",
+          "type": "string"
+        },
+        "body_limit_bytes": {
+          "default": 1048576,
+          "description": "Largest accepted request body, in bytes.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_concurrent_requests": {
+          "default": 64,
+          "description": "Requests handled at once. Further requests queue rather than being rejected.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "request_timeout_secs": {
+          "default": 10,
+          "description": "Seconds a request may take before the listener abandons it.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "shutdown_drain_secs": {
+          "default": 10,
+          "description": "Seconds to let in-flight requests finish during shutdown.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "webhook_path": {
+          "default": "/webhook",
+          "description": "Path Alertmanager posts the version-4 envelope to.",
+          "type": "string"
+        },
+        "webhook_token": {
+          "description": "Bearer token every webhook request has to carry.\n\nCompared in constant time. A mismatch is a 401 with no body, so a caller learns that the\ntoken was wrong and nothing about how it was wrong. Leaving this unset disables the check\nand is only defensible where the listener is unreachable from outside the namespace.",
+          "type": "string",
+          "writeOnly": true
+        }
+      },
+      "type": "object"
+    },
+    "links": {
+      "additionalProperties": false,
+      "properties": {
+        "allowed_hosts": {
+          "default": [],
+          "description": "Hosts a rendered button may point at.\n\nAn empty list rejects every button, which is the safe reading of \"nothing was configured\".\nThe scheme is checked separately and is always `http` or `https`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "buttons": {
+          "default": [],
+          "description": "The buttons themselves, rendered in order.",
+          "type": "array"
+        },
+        "grafana_base": {
+          "description": "Grafana base URL, available to templates as `links.grafana_base`.",
+          "type": "string"
+        },
+        "prometheus_base": {
+          "description": "Prometheus base URL, available to templates as `links.prometheus_base`.",
+          "type": "string"
+        },
+        "window_lead_secs": {
+          "default": 900,
+          "description": "Seconds of graph shown before the alert started.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "window_trail_secs": {
+          "default": 300,
+          "description": "Seconds of graph shown after the alert ended, or after now while it is firing.",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "observability": {
+      "additionalProperties": false,
+      "properties": {
+        "admin_channel_id": {
+          "description": "Channel the deadman and route-health notices post to.\n\nThe deadman fires when no webhook has arrived inside the deadman window *and*\nAlertmanager is unreachable. Pair it with a `Watchdog` alert in Prometheus, so that\nsilence on one side is always noise on the other.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "metrics_enabled": {
+          "default": true,
+          "description": "Serve Prometheus metrics at `/metrics` on the ingest listener.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "render": {
+      "additionalProperties": false,
+      "properties": {
+        "debounce_secs": {
+          "default": 3,
+          "description": "Seconds to coalesce edits to one card before sending them.\n\nEvery edit is also skipped when the newly computed render hash matches the stored one, so\na burst of updates that change nothing visible costs no API calls at all.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "description_budget": {
+          "default": 1500,
+          "description": "Characters of annotation text a card may carry before it is truncated.\n\nDiscord caps an embed at 6000 characters across every field, and a single alert can carry\na five-thousand-character annotation. The truncation marker links to `/alerts show`, which\nhas the full text.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "key_labels": {
+          "default": [
+            "namespace",
+            "instance",
+            "job"
+          ],
+          "description": "Labels promoted to their own inline field on the card, in order.\n\nEverything else stays in `/alerts show`. Three or four is the useful number; a card that\nlists sixty labels is a card nobody reads during an incident.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "show_fingerprint": {
+          "default": true,
+          "description": "Show a short fingerprint in the card footer.",
+          "type": "boolean"
+        },
+        "thread_archive_after_minutes": {
+          "default": 1440,
+          "description": "Minutes of inactivity after which an alert thread archives.\n\nDiscord accepts only 60, 1440, 4320 and 10080. A firing alert holds 10080 regardless, so\nthat a week-long incident never archives underneath the people working it.",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "routes": {
+      "default": [],
+      "description": "Routes declared in the file, which cannot be edited or deleted from Discord.\n\nDeclaring a route here is what makes a deployment reproducible from its manifests. A route\nthat disappears from this list is disabled rather than deleted, so the notifications it\ncreated keep their history. `/route add` writes the other kind, which lives only in the\ndatabase.",
+      "type": "array"
+    },
+    "storage": {
+      "additionalProperties": false,
+      "properties": {
+        "backend": {
+          "default": "sqlite",
+          "description": "Which backend the bot connects to.",
+          "enum": [
+            "sqlite",
+            "postgres"
+          ],
+          "type": "string"
+        },
+        "postgres": {
+          "additionalProperties": false,
+          "properties": {
+            "acquire_timeout_secs": {
+              "default": 5,
+              "description": "Seconds to wait for a connection from the pool before failing the operation.",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "max_connections": {
+              "default": 16,
+              "description": "Maximum pooled connections.",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "migrate_on_start": {
+              "default": true,
+              "description": "Run pending migrations during startup.",
+              "type": "boolean"
+            },
+            "url": {
+              "description": "Connection URL. Supply it through `DAM_STORAGE__POSTGRES__URL_FILE` or the secrets\ndirectory, since it carries the password.",
+              "type": "string",
+              "writeOnly": true
+            }
+          },
+          "type": "object"
+        },
+        "sqlite": {
+          "additionalProperties": false,
+          "properties": {
+            "acquire_timeout_secs": {
+              "default": 5,
+              "description": "Seconds to wait for a connection from the pool before failing the operation.",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "max_connections": {
+              "default": 4,
+              "description": "Size of the read pool. The writer is always one connection.",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "migrate_on_start": {
+              "default": true,
+              "description": "Run pending migrations during startup.\n\nSet this false where a separate job owns migrations, which is what a `GitOps` deployment\nusually wants: the bot then refuses to start against a schema it does not recognise\ninstead of migrating underneath a running replica.",
+              "type": "boolean"
+            },
+            "path": {
+              "default": "discord-alertmanager.db",
+              "description": "Path to the database file, created on first start if it does not exist.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "title": "discord-alertmanager configuration",
+  "type": "object"
+}

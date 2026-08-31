@@ -1,0 +1,38 @@
+[package]
+name = "discord-alertmanager-engine"
+description = "The decision pipeline: ingest, route, decide, outbox. Owns the two outbound ports."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "dam_engine"
+path = "src/lib.rs"
+
+# Neither `serenity` nor `reqwest` appears here. The engine sees `DiscordSink` and
+# `AlertmanagerApi`, both of which it defines, so the whole pipeline runs against in-memory fakes.
+[dependencies]
+arc-swap.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+dam-config.workspace = true
+dam-core.workspace = true
+dam-store.workspace = true
+metrics.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }
+tokio-util.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "test-util"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,41 @@
+[package]
+name = "discord-alertmanager-ingest"
+description = "The axum listener: the Alertmanager webhook, the health probes, and /metrics."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "dam_ingest"
+path = "src/lib.rs"
+
+[dependencies]
+async-trait.workspace = true
+axum.workspace = true
+chrono.workspace = true
+dam-am.workspace = true
+dam-config.workspace = true
+dam-core.workspace = true
+metrics.workspace = true
+metrics-exporter-prometheus.workspace = true
+secrecy.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+subtle.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["macros", "net", "rt", "signal", "time"] }
+tokio-util.workspace = true
+tower.workspace = true
+tower-http = { workspace = true, features = ["limit", "timeout", "trace"] }
+tracing.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tower = { workspace = true, features = ["util"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,36 @@
+[package]
+name = "discord-alertmanager-store"
+description = "The Store trait, its row types, and the conformance suite both backends run."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "dam_store"
+path = "src/lib.rs"
+
+[features]
+# The generic suite every backend runs against its own `dyn Store`. It is a feature on this crate
+# rather than a `tests/` directory, because a backend crate cannot reach another crate's `tests/`,
+# and the whole point is that one suite runs twice.
+conformance = []
+
+# Nothing here names `sqlx`. The trait is use cases, not rows, so a transaction never has to
+# cross a method boundary and never appears in a signature.
+[dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+dam-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

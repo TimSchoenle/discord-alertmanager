@@ -1,0 +1,84 @@
+[
+  {
+    "annotations": {
+      "description": "api-7d9f in namespace prod has been unready for 10m.",
+      "runbook_url": "https://runbooks.example.com/PodDown",
+      "summary": "Pod api-7d9f is down"
+    },
+    "endsAt": "2099-03-04T09:47:12.331Z",
+    "fingerprint": "9f8e7d6c5b4a3021",
+    "generatorURL": "https://prometheus.example.com/graph?g0.expr=kube_pod_status_ready%7Bcondition%3D%22false%22%7D&g0.tab=1",
+    "labels": {
+      "alertname": "PodDown",
+      "cluster": "eu-west-1",
+      "namespace": "prod",
+      "pod": "api-7d9f",
+      "severity": "critical"
+    },
+    "receivers": [
+      {
+        "name": "discord"
+      }
+    ],
+    "startsAt": "2026-03-04T09:12:31.415Z",
+    "status": {
+      "inhibitedBy": [],
+      "silencedBy": [],
+      "state": "active"
+    },
+    "updatedAt": "2026-03-04T09:42:12.331Z"
+  },
+  {
+    "annotations": {
+      "summary": "Disk on node-3 is 91% full"
+    },
+    "endsAt": "2099-03-04T09:47:12.331Z",
+    "fingerprint": "1122334455667788",
+    "generatorURL": "https://prometheus.example.com/graph?g0.expr=node_filesystem_avail_bytes&g0.tab=1",
+    "labels": {
+      "alertname": "DiskFillingUp",
+      "cluster": "eu-west-1",
+      "instance": "node-3",
+      "severity": "warning"
+    },
+    "receivers": [
+      {
+        "name": "discord"
+      }
+    ],
+    "startsAt": "2026-03-04T08:55:02.004Z",
+    "status": {
+      "inhibitedBy": [],
+      "silencedBy": [
+        "b3f4e0d1-6a2c-4c31-9f0b-77a1f2c8d5e9"
+      ],
+      "state": "suppressed"
+    },
+    "updatedAt": "2026-03-04T09:42:12.331Z"
+  },
+  {
+    "annotations": {
+      "summary": "Certificate for api.example.com expires in 6 days"
+    },
+    "endsAt": "2026-03-04T09:20:00.000Z",
+    "fingerprint": "aabbccdd00112233",
+    "generatorURL": "https://prometheus.example.com/graph?g0.expr=probe_ssl_earliest_cert_expiry&g0.tab=1",
+    "labels": {
+      "alertname": "CertificateExpiringSoon",
+      "cluster": "eu-west-1",
+      "severity": "info"
+    },
+    "receivers": [
+      {
+        "name": "discord"
+      }
+    ],
+    "startsAt": "2026-03-04T07:00:00.000Z",
+    "status": {
+      "inhibitedBy": [],
+      "silencedBy": [],
+      "state": "active"
+    },
+    "updatedAt": "2026-03-04T09:20:00.000Z"
+  }
+]

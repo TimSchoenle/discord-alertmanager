@@ -1,0 +1,32 @@
+[package]
+name = "discord-alertmanager-core"
+description = "Domain types, matcher semantics and the notification state machine. No I/O."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "dam_core"
+path = "src/lib.rs"
+
+# This list is the architecture rule from §2.1, and the `architecture` CI job asserts it stays
+# exactly this: no tokio, no serenity, no sqlx, no reqwest. That is what keeps the state machine
+# and the matcher semantics testable in milliseconds, and it is the enforcement mechanism for
+# "the domain does not know about Discord".
+[dependencies]
+chrono.workspace = true
+regex.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+rstest.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true
