@@ -169,6 +169,78 @@ receivers:
             credentials_file: /etc/alertmanager/discord-token
 ```
 
+### Discord permissions
+
+Invite the bot with the `bot` and `applications.commands` scopes, and grant it, on the channels it
+posts to: `View Channel`, `Send Messages`, `Embed Links` and `Read Message History` for the cards
+themselves; `Create Public Threads` and `Send Messages in Threads` for the reply thread opened on
+each one; and `Manage Threads` for pinning, archiving, locking and retagging a forum post. A route
+that lacks one of these reports it in the administrative channel rather than retrying forever.
+
+`Manage Channels` is optional and only used to create a forum's tags the first time a route names
+one that does not exist yet; without it, the tags that already resolve are used and the rest are
+left off a post, which is worse than a missing tag but not worse than not starting. The bot never
+asks for `Mention Everyone`: an escalation pings only the roles and users its route names.
+
+`discord.capture_reply_text` additionally asks the gateway for the privileged `Message Content`
+intent, which has to be turned on for the application in the Discord developer portal before the
+bot can use it.
+
+### Forum route example
+
+A forum route needs `target.kind = "forum"`, `target.id` set to the forum channel, and
+`target.policy` for the tag and lifecycle behaviour that only a forum has. Everything else — the
+matcher, the mentions, the escalation — works exactly as it does for a text channel:
+
+```toml
+[[routes]]
+name = "prod-forum"
+guild_id = 111111111111111111
+matchers = "namespace=~prod-.*"
+min_severity = "warning"
+priority = 10
+continue_to_next = false
+enabled = true
+
+[routes.target]
+kind = "forum"
+id = 222222222222222222
+
+[routes.target.policy]
+title_template = "{{ labels.alertname }} — {{ labels.namespace }}"
+manage_tags = true
+severity_tags = true
+label_tags = ["namespace"]
+default_tag = "unclassified"
+archive_on_resolve = true
+lock_on_resolve = false
+pin_min_severity = "critical"
+max_pinned = 5
+bump_on_state_change = true
+
+[routes.target.policy.state_tags]
+firing = "firing"
+acked = "acked"
+silenced = "silenced"
+resolved = "resolved"
+
+[routes.mentions]
+roles = [333333333333333333]
+min_severity = "critical"
+
+[routes.escalation]
+after_secs = 900
+roles = [333333333333333333]
+```
+
+Each firing alert becomes its own post, titled from `title_template` and tagged with its
+severity and its `namespace` label's value. `manage_tags = true` lets the bot create `unclassified`
+and any not-yet-seen `namespace` value or `state_tags` the first time a post needs one, which is
+why this route also wants `Manage Channels` from [Discord permissions](#discord-permissions);
+leave it `false` to only ever apply tags that already exist. The post is pinned once it turns
+critical, archived the moment its alert resolves, and never locked, so a flap can still reopen it
+without `Manage Threads` on hand.
+
 ### The workspace
 
 Ten crates, each written against a trait rather than against its neighbour. The import name
