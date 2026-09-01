@@ -7,7 +7,7 @@ members = ["crates/*", "xtask"]
 # Inherited by every member with `field.workspace = true`, so a licence or an MSRV bump is one
 # edit rather than eleven.
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/TimSchoenle/discord-alertmanager"
