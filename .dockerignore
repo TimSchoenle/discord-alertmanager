@@ -1,0 +1,19 @@
+# Keeps the build context small and cache mounts free of host-only artefacts. The image itself
+# never reads anything ignored here; everything it needs comes from `COPY . .` inside the build
+# stages, and BuildKit re-copies the whole tree the moment one tracked file changes anyway.
+target
+.git
+.github
+.idea
+.junie
+.serena
+docs
+deploy
+*.md
+.dockerignore
+Dockerfile
+contract-out
+
+# Never in a build context. `DAM_CONFIG` defaults to `config.toml`, so a developer's copy holds a
+# real bot token, and a layer that captured one would be pushed to two public registries.
+config.toml

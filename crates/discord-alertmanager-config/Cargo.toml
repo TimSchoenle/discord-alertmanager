@@ -1,0 +1,45 @@
+[package]
+name = "discord-alertmanager-config"
+description = "The configuration surface: terrace-config layers, Describe derives, generated reference."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "dam_config"
+path = "src/lib.rs"
+
+[features]
+# Per docs/SCHEMA.md, three things are gated together: the `Describe` derive, the
+# `#[config(...)]` helper attributes it defines, and `derive(Serialize)`, which the loader never
+# needs and `with_defaults_from` does. Leaving `Serialize` ungated would link serde's serialiser
+# into the shipped image for nothing.
+config-schema = ["terrace-config/schema-cli"]
+
+[dependencies]
+chrono.workspace = true
+humantime.workspace = true
+secrecy.workspace = true
+serde.workspace = true
+terrace-config.workspace = true
+thiserror.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+terrace-config = { workspace = true, features = ["testing"] }
+
+# The generator that writes docs/config.md, docs/config.json and config.example.toml. It lives
+# beside the root type rather than in the binary, because `Terrace::schema` walks from that type.
+# `required-features` keeps it out of a production build while `cargo clippy --all-features
+# --all-targets` still compiles it.
+[[example]]
+name = "config-schema"
+required-features = ["config-schema"]
+
+[lints]
+workspace = true

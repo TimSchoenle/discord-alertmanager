@@ -1,0 +1,81 @@
+# `cargo deny check` — one of the gates every pull request has to pass.
+
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+yanked = "deny"
+# `rustls-webpki 0.102` enters the graph one way only: serenity 0.12 pins tokio-tungstenite 0.21
+# for the gateway socket, that pins rustls 0.22, and that pins this line. 0.102.8 is the last
+# release of it and every fix landed in 0.103, so no `cargo update` clears the findings below.
+# Removing them means serenity moving off tokio-tungstenite 0.21; forking the gateway
+# stack to get there would put more risk in the tree than it takes out. Revisit when serenity
+# releases a line built against rustls 0.23.
+ignore = [
+    # URI name constraints were accepted rather than rejected. `rustls-webpki` asserts no URI
+    # names at all, so a constraint on them restricts nothing this code path ever checks.
+    { id = "RUSTSEC-2026-0098", reason = "The library asserts no URI names, and neither does the gateway client." },
+    # A permitted-subtree DNS constraint was accepted for a certificate asserting a wildcard.
+    # Name constraints bind certificates that are otherwise correctly signed, so reaching this
+    # needs a name-constrained CA in the webpki-roots store to misissue for gateway.discord.gg.
+    { id = "RUSTSEC-2026-0099", reason = "Reachable only after signature verification, and only through a misissuing name-constrained CA." },
+    # Two findings in the certificate revocation list code: a distribution point matched the
+    # wrong way, and a panic on a malformed list. Nothing here parses one — serenity builds its
+    # verifier from the webpki roots with no CRL — so neither entry point is ever called.
+    { id = "RUSTSEC-2026-0049", reason = "No certificate revocation list is ever parsed." },
+    { id = "RUSTSEC-2026-0104", reason = "No certificate revocation list is ever parsed." },
+]
+
+[licenses]
+version = 2
+confidence-threshold = 0.93
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    # `webpki-roots` ships Mozilla's certificate authority list under a data licence rather than
+    # a code one. Every HTTP client in the tree pulls it, and refusing it would mean shipping no
+    # trust store at all.
+    "CDLA-Permissive-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Zlib",
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+# A path dependency inside this workspace carries no version requirement, which is the correct
+# way to name a sibling crate and not the unpinned registry dependency this rule exists to catch.
+allow-wildcard-paths = true
+# The crate graph points one way only. These bans are the half of that rule `cargo deny` can
+# express; the other half — that `dam-core` names nothing outside its allowed set — is the
+# `architecture` job in CI.
+deny = [
+    # One TLS stack. Mixing native-tls into serenity or reqwest links a second one, doubles the
+    # vulnerability surface, and makes a static build painful.
+    { name = "native-tls" },
+    { name = "openssl-sys" },
+    # `anyhow` erases the error type, which is right for a program whose errors a person reads
+    # and wrong for a library whose caller matches on them. `prost-derive` is a proc macro that
+    # runs at build time and reaches the graph through the tracing stack; nothing it carries is
+    # linked into the binary, so it is listed rather than fought.
+    { name = "anyhow", wrappers = ["discord-alertmanager", "xtask", "prost-derive"] },
+    # Superseded by `std::sync::LazyLock`. Reached only through `sharded-slab`, which
+    # `tracing-subscriber` uses for its span registry, and `deadpool`, which the container
+    # runtime client used by the build tooling pools connections with.
+    { name = "lazy_static", wrappers = ["sharded-slab", "deadpool"] },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-git = ["https://github.com/TimSchoenle/terrace-config"]

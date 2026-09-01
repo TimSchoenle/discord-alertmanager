@@ -1,0 +1,18 @@
+name: Renovate Auto Approve
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions: {}
+
+jobs:
+  auto-approve-renovate:
+    name: Auto Approve Renovate
+    uses: TimSchoenle/actions/.github/workflows/maintenance-auto-approve-renovate.yaml@f01853c3e1b3eb332b02ed77f9aaaa862687792e # tag=workflows-maintenance-auto-approve-renovate-v1.4.21
+    permissions:
+      pull-requests: write # To approve PRs
+    with:
+      user_ids: '29139614,253958393' # Renovate, actions-maintenance-bot
+    secrets:
+      token: ${{ secrets.GITHUB_TOKEN }}

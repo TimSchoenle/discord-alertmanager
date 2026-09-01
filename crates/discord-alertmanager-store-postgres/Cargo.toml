@@ -1,0 +1,40 @@
+[package]
+name = "discord-alertmanager-store-postgres"
+description = "PostgreSQL backend: checked queries, migrations, and the FOR UPDATE SKIP LOCKED claim."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "dam_store_postgres"
+path = "src/lib.rs"
+
+# One dialect per crate. The split is what lets each backend own its own `migrations/` and its
+# own row mapping without either dialect's quirks leaking into the other.
+[dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+dam-core.workspace = true
+dam-store.workspace = true
+secrecy.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx = { workspace = true, features = ["postgres"] }
+thiserror.workspace = true
+tracing.workspace = true
+
+# The container is a test dependency and an xtask one, never a dependency of the binary. It is
+# also what makes `cargo test` reproduce the pipeline on a laptop, which a CI service container
+# cannot do.
+[dev-dependencies]
+dam-store = { workspace = true, features = ["conformance"] }
+testcontainers.workspace = true
+testcontainers-modules = { workspace = true, features = ["postgres"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

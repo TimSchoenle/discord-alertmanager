@@ -1,0 +1,34 @@
+name: Auto-Merge Release PRs
+
+# The release pull request release-please keeps open is merged on a timer rather than by hand.
+# `time_elapsed` is the window it has to stay green and unreviewed before that happens, so a
+# release that broke something has a week in which somebody notices.
+
+on:
+  schedule:
+    - cron: '0 */6 * * *' # Run every 6 hours
+  pull_request_review:
+    types: [dismissed]
+  workflow_dispatch:
+    inputs:
+      time_elapsed:
+        description: 'Time elapsed since PR creation (e.g. "24h", "1d").'
+        required: true
+        default: '1d'
+
+permissions: {}
+
+jobs:
+  auto-merge-releases:
+    name: Auto Merge Releases
+    permissions:
+      contents: write # Required to merge PRs
+      pull-requests: write # Required to merge PRs
+    uses: TimSchoenle/actions/.github/workflows/maintenance-timed-auto-pr-approve.yaml@386b440c8a3ebf8333d06fb8ccea9a4c698d5456 # tag=workflows-maintenance-timed-auto-pr-approve-v1.2.33
+    with:
+      time_elapsed: ${{ inputs.time_elapsed || '7d' }}
+      branch_pattern: 'release-please--branches--%'
+      trusted_authors: '253958393,248313786' # actions-maintenance-bot, automatic-release-manager
+    secrets:
+      app_id: ${{ secrets.ACTIONS_MAINTENANCE_APP_ID }}
+      private_key: ${{ secrets.ACTIONS_MAINTENANCE_PRIVATE_KEY }}

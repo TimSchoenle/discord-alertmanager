@@ -1,0 +1,22 @@
+# `core.autocrlf = true` is the usual setting on the machine this repository is authored from,
+# which would hand a Linux runner a script whose every line ends in a carriage return. `bash`
+# reports that as `$'\r': command not found` on the first line, several steps away from the cause.
+*.sh text eol=lf
+
+# Rendered by TimSchoenle/actions/actions/common/render-template, which normalizes to LF and
+# writes LF. Left to autocrlf, the working copy would differ from what the drift gate renders and
+# `check: true` would fail on line endings alone.
+*.hbs text eol=lf
+README.md text eol=lf
+
+# Written by `cargo xtask config-docs` and compared byte for byte by the `config-docs` and
+# `config-contract` jobs. Left to autocrlf the committed blob would depend on which platform last
+# ran the generator, and both gates would fail on line endings alone.
+docs/config.md text eol=lf
+docs/config.json text eol=lf
+docs/config.contract.json text eol=lf
+config.example.toml text eol=lf
+
+# Read as a text region rather than as a build input: the `config-contract` action cuts the
+# `terrace-config:labels` block out of it and compares it against the generator's output.
+Dockerfile text eol=lf

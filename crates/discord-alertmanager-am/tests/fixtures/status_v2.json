@@ -1,0 +1,28 @@
+{
+  "cluster": {
+    "name": "01HXQ7MJ4T8W2S0RCVZ6K9B3YD",
+    "peers": [
+      {
+        "address": "10.42.1.17:9094",
+        "name": "01HXQ7MJ4T8W2S0RCVZ6K9B3YD"
+      },
+      {
+        "address": "10.42.2.31:9094",
+        "name": "01HXQ7N2G5C1PA6E8YTQZ4RW7M"
+      }
+    ],
+    "status": "ready"
+  },
+  "config": {
+    "original": "global:\n  resolve_timeout: 5m\nroute:\n  group_by: ['alertname', 'cluster']\n  group_wait: 30s\n  group_interval: 5m\n  repeat_interval: 4h\n  receiver: discord\nreceivers:\n  - name: discord\n    webhook_configs:\n      - url: http://discord-alertmanager:9099/webhook\n        send_resolved: true\n"
+  },
+  "uptime": "2026-03-02T18:04:55.126Z",
+  "versionInfo": {
+    "branch": "HEAD",
+    "buildDate": "20260114-08:12:47",
+    "buildUser": "root@a2f1c9c4e5b7",
+    "goVersion": "go1.22.5",
+    "revision": "9d0f1a3c7e2b4d6f8a0c2e4b6d8f0a2c4e6b8d0f",
+    "version": "0.27.0"
+  }
+}

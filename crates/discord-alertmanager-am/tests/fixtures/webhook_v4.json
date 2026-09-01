@@ -1,0 +1,56 @@
+{
+  "alerts": [
+    {
+      "annotations": {
+        "description": "api-7d9f in namespace prod has been unready for 10m.",
+        "runbook_url": "https://runbooks.example.com/PodDown",
+        "summary": "Pod api-7d9f is down"
+      },
+      "endsAt": "0001-01-01T00:00:00Z",
+      "fingerprint": "9f8e7d6c5b4a3021",
+      "generatorURL": "https://prometheus.example.com/graph?g0.expr=kube_pod_status_ready%7Bcondition%3D%22false%22%7D&g0.tab=1",
+      "labels": {
+        "alertname": "PodDown",
+        "cluster": "eu-west-1",
+        "namespace": "prod",
+        "pod": "api-7d9f",
+        "severity": "critical"
+      },
+      "startsAt": "2026-03-04T09:12:31.415Z",
+      "status": "firing"
+    },
+    {
+      "annotations": {
+        "summary": "Pod worker-2b1a is down"
+      },
+      "endsAt": "2026-03-04T09:30:00.000Z",
+      "fingerprint": "5566778899aabbcc",
+      "generatorURL": "https://prometheus.example.com/graph?g0.expr=kube_pod_status_ready%7Bcondition%3D%22false%22%7D&g0.tab=1",
+      "labels": {
+        "alertname": "PodDown",
+        "cluster": "eu-west-1",
+        "namespace": "prod",
+        "pod": "worker-2b1a",
+        "severity": "warning"
+      },
+      "startsAt": "2026-03-04T08:41:02.900Z",
+      "status": "resolved"
+    }
+  ],
+  "commonAnnotations": {},
+  "commonLabels": {
+    "alertname": "PodDown",
+    "cluster": "eu-west-1",
+    "namespace": "prod"
+  },
+  "externalURL": "https://alertmanager.example.com",
+  "groupKey": "{}/{severity=~\"critical|warning\"}:{alertname=\"PodDown\", cluster=\"eu-west-1\"}",
+  "groupLabels": {
+    "alertname": "PodDown",
+    "cluster": "eu-west-1"
+  },
+  "receiver": "discord",
+  "status": "firing",
+  "truncatedAlerts": 0,
+  "version": "4"
+}

@@ -1,0 +1,42 @@
+[package]
+name = "discord-alertmanager-am"
+description = "Alertmanager API v2 client and the v4 webhook payload types."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "dam_am"
+path = "src/lib.rs"
+
+[dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+dam-config.workspace = true
+dam-core.workspace = true
+dam-engine.workspace = true
+# The port hands back a `SilenceRecord`, whose lifecycle field is `dam_store::SilenceLifecycle`.
+# Implementing `AlertmanagerApi` therefore means naming that type, and naming it means depending
+# on the crate that owns it.
+dam-store.workspace = true
+reqwest.workspace = true
+secrecy.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# Only the timer. Retrying without waiting is a way to turn one failing request into several, and
+# `reqwest` already pulls this feature in, so declaring it costs nothing at build time.
+tokio = { workspace = true, features = ["time"] }
+tracing.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+wiremock.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,76 @@
+name: Security
+
+# The two gates that read the supply chain rather than the code: the workflows themselves, and
+# the dependency graph.
+#
+# `pull_request: branches: ['**']` rather than `[ main ]`, because a workflow edit on a branch
+# that targets another branch is still a workflow edit, and it is the one class of change whose
+# damage is done before anyone reviews it.
+
+on:
+  push:
+    branches: [ 'main' ]
+  pull_request:
+    branches: [ '**' ]
+  # `cargo deny check advisories` reads a database that moves without this repository changing.
+  # A dependency that was clean when it was merged is the normal way an advisory arrives.
+  schedule:
+    - cron: '0 6 * * 1'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: { }
+
+jobs:
+  zizmor:
+    name: Zizmor
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # to fetch code
+      actions: read # to read action configurations
+      security-events: write # to upload SARIF results
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Run Zizmor
+        uses: zizmorcore/zizmor-action@3dc1ecc9bcb9e94e9b2c709687979e1298497054 # v0.6.2
+        with:
+          persona: pedantic
+
+  # `deny.toml` holds four rules and all four are this project's own decisions rather than
+  # defaults: the licence allowlist, one TLS stack, `anyhow` confined to the binary and the build
+  # tooling, and the git source allowlist that keeps `cargo update` from moving terrace-config
+  # across arbitrary commits. None of them is enforced by anything else in the pipeline.
+  deny:
+    name: Cargo Deny
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Required to checkout the code
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      # `deny.toml` sets `all-features = true` under `[graph]`, so the feature set is stated
+      # there rather than here and a local `cargo deny check` sees the same graph this job does.
+      - name: Run cargo-deny
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check
+          arguments: ''

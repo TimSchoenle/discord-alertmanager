@@ -1,0 +1,52 @@
+[package]
+name = "discord-alertmanager"
+description = "A Discord operator surface for Prometheus Alertmanager."
+# Literal, and the only member manifest that does not inherit this. The README payload is read
+# from here: `readme-variables` refuses a virtual workspace manifest for having no `[package]`
+# table, and refuses an inherited version for being absent from the file it was pointed at.
+# `.github/scripts/readme-variables.sh` fails the render when this and `[workspace.package]`
+# disagree, so the duplicate is checked on every pull request rather than trusted.
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+publish = false
+default-run = "discord-alertmanager"
+
+[[bin]]
+name = "discord-alertmanager"
+path = "src/main.rs"
+
+# The composition root, and the only crate allowed to carry `anyhow` (`deny.toml` enforces that).
+#
+# Both backends are linked unconditionally. Which one a process opens is `storage.backend`, and
+# nothing else: one artefact answers every deployment, and a binary that had to be rebuilt to
+# change database would make the choice a property of the build rather than of the environment it
+# runs in.
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+dam-am.workspace = true
+dam-config.workspace = true
+dam-core.workspace = true
+dam-discord.workspace = true
+dam-engine.workspace = true
+dam-ingest.workspace = true
+dam-store.workspace = true
+dam-store-postgres.workspace = true
+dam-store-sqlite.workspace = true
+metrics.workspace = true
+# The recorder is global state, so it is installed here and in no library.
+metrics-exporter-prometheus.workspace = true
+terrace-config = { workspace = true, features = ["explain", "reload"] }
+thiserror.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
+tokio-util.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[lints]
+workspace = true

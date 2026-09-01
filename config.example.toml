@@ -1,0 +1,534 @@
+# Configuration for a service reading DAM_-prefixed keys.
+#
+# Generated from the configuration type, so it lists every key that type can carry and nothing
+# else. Each key shows the value it already has, commented out: a commented key and a deleted key
+# mean the same thing to the loader, so uncomment one only to change it. A key that is not
+# commented out has no default, and nothing loads until something supplies it.
+#
+# Three layers can supply any key below, and all three win over this file: the environment
+# variable named above the key, a file named by that variable plus `_FILE`, and a key-named file
+# in the secrets directory. A secret belongs in one of those — this file is usually committed.
+#
+# Read before this file exists:
+#
+#   DAM_CONFIG — config, default `config.toml`
+#     Names the TOML layer: a file, or a directory whose `*.toml` files are all merged in name
+#     order.
+#
+#   DAM_SECRETS_DIR — secrets dir
+#     Names a directory of key-named files — a mounted Kubernetes `Secret` volume. Each file
+#     supplies the key its name spells.
+#
+#   DAM_LOG_FORMAT — reserved
+#     Read directly from the environment before the layered config exists, so no file may supply
+#     it.
+#
+#   DAM_LOG_LEVEL — reserved
+#     Read directly from the environment before the layered config exists, so no file may supply
+#     it.
+
+# Routes declared in the file, which cannot be edited or deleted from Discord.
+#
+# Declaring a route here is what makes a deployment reproducible from its manifests. A route
+# that disappears from this list is disabled rather than deleted, so the notifications it
+# created keep their history. `/route add` writes the other kind, which lives only in the
+# database.
+# Type: Vec<RouteConfig>
+# Also from: DAM_ROUTES, DAM_ROUTES_FILE=/path/to/file, routes in the secrets directory
+# routes = []
+
+[discord]
+# Bot token. Supply it through `DAM_DISCORD__TOKEN_FILE` or the secrets directory.
+#
+# Passing it as a plain environment variable puts it in the output of `docker inspect` and
+# in any crash reporter that captures the environment.
+# Type: SecretString
+# Also from: DAM_DISCORD__TOKEN, DAM_DISCORD__TOKEN_FILE=/path/to/file, discord__token in the
+#   secrets directory
+# Secret: the value below is a placeholder.
+# token = "<secret>"
+
+# Guild to register slash commands into. Registration is global when unset.
+#
+# Guild-scoped commands appear immediately; global ones take up to an hour to propagate.
+# Set this in development and leave it unset in production.
+# Type: u64
+# Also from: DAM_DISCORD__DEV_GUILD_ID, DAM_DISCORD__DEV_GUILD_ID_FILE=/path/to/file,
+#   discord__dev_guild_id in the secrets directory
+# Unset by default: the value below is only the shape.
+# dev_guild_id = 0
+
+# Capture the text of thread replies, which needs the privileged `MESSAGE_CONTENT` intent.
+#
+# A card marks itself responded without this: the author and channel of a reply arrive
+# without the privileged intent, and that is all the detection needs. Only the text of the
+# reply is gated, so leaving this off costs nothing except the reply preview.
+# Type: bool
+# Also from: DAM_DISCORD__CAPTURE_REPLY_TEXT, DAM_DISCORD__CAPTURE_REPLY_TEXT_FILE=/path/to/file,
+#   discord__capture_reply_text in the secrets directory
+# capture_reply_text = false
+
+[discord.capabilities]
+# Read alerts, silences and routes. Grants no mutation of any kind.
+# Type: Vec<String>
+# Also from: DAM_DISCORD__CAPABILITIES__VIEW, DAM_DISCORD__CAPABILITIES__VIEW_FILE=/path/to/file,
+#   discord__capabilities__view in the secrets directory
+# view = ["@everyone"]
+
+# Acknowledge, assign, and add or remove bot-local ignores.
+# Type: Vec<String>
+# Also from: DAM_DISCORD__CAPABILITIES__OPERATE,
+#   DAM_DISCORD__CAPABILITIES__OPERATE_FILE=/path/to/file, discord__capabilities__operate in the
+#   secrets directory
+# operate = []
+
+# Create, extend and expire Alertmanager silences, which affects every receiver.
+# Type: Vec<String>
+# Also from: DAM_DISCORD__CAPABILITIES__SILENCE,
+#   DAM_DISCORD__CAPABILITIES__SILENCE_FILE=/path/to/file, discord__capabilities__silence in the
+#   secrets directory
+# silence = []
+
+# Manage routes and read the effective configuration.
+# Type: Vec<String>
+# Also from: DAM_DISCORD__CAPABILITIES__ADMIN,
+#   DAM_DISCORD__CAPABILITIES__ADMIN_FILE=/path/to/file, discord__capabilities__admin in the
+#   secrets directory
+# admin = []
+
+[alertmanager]
+# Base URLs of the Alertmanager peers, tried in order.
+#
+# List every peer of a high-availability set. Silences gossip between peers, so any of them
+# accepts a write and the first one that answers is used.
+# Type: Vec<Url>
+# Also from: DAM_ALERTMANAGER__ENDPOINTS, DAM_ALERTMANAGER__ENDPOINTS_FILE=/path/to/file,
+#   alertmanager__endpoints in the secrets directory
+# endpoints = []
+
+# Bearer token sent to Alertmanager. Supply it through the secrets directory or `_FILE`.
+# Type: SecretString
+# Also from: DAM_ALERTMANAGER__BEARER_TOKEN, DAM_ALERTMANAGER__BEARER_TOKEN_FILE=/path/to/file,
+#   alertmanager__bearer_token in the secrets directory
+# Secret: the value below is a placeholder.
+# bearer_token = "<secret>"
+
+# Username for basic authentication. Ignored when `bearer_token` is set.
+# Type: String
+# Also from: DAM_ALERTMANAGER__BASIC_USERNAME,
+#   DAM_ALERTMANAGER__BASIC_USERNAME_FILE=/path/to/file, alertmanager__basic_username in the
+#   secrets directory
+# Unset by default: the value below is only the shape.
+# basic_username = "<value>"
+
+# Password for basic authentication. Supply it through the secrets directory or `_FILE`.
+# Type: SecretString
+# Also from: DAM_ALERTMANAGER__BASIC_PASSWORD,
+#   DAM_ALERTMANAGER__BASIC_PASSWORD_FILE=/path/to/file, alertmanager__basic_password in the
+#   secrets directory
+# Secret: the value below is a placeholder.
+# basic_password = "<secret>"
+
+# PEM bundle of certificate authorities to trust in addition to the system roots.
+#
+# There is deliberately no option to skip verification. An Alertmanager reachable only over
+# a certificate nothing trusts is a certificate to fix, not a check to disable.
+# Type: PathBuf
+# Also from: DAM_ALERTMANAGER__CA_BUNDLE, DAM_ALERTMANAGER__CA_BUNDLE_FILE=/path/to/file,
+#   alertmanager__ca_bundle in the secrets directory
+# Unset by default: the value below is only the shape.
+# ca_bundle = "<value>"
+
+# Seconds to wait for a whole request before giving up.
+# Type: u64
+# Also from: DAM_ALERTMANAGER__TIMEOUT_SECS, DAM_ALERTMANAGER__TIMEOUT_SECS_FILE=/path/to/file,
+#   alertmanager__timeout_secs in the secrets directory
+# timeout_secs = 10
+
+# Seconds to wait for a connection before trying the next endpoint.
+#
+# Short on purpose. This is how quickly a dead peer is abandoned for a live one.
+# Type: u64
+# Also from: DAM_ALERTMANAGER__CONNECT_TIMEOUT_SECS,
+#   DAM_ALERTMANAGER__CONNECT_TIMEOUT_SECS_FILE=/path/to/file, alertmanager__connect_timeout_secs
+#   in the secrets directory
+# connect_timeout_secs = 2
+
+[alertmanager.retry]
+# Milliseconds to wait before the first retry.
+# Type: u64
+# Also from: DAM_ALERTMANAGER__RETRY__INITIAL_BACKOFF_MS,
+#   DAM_ALERTMANAGER__RETRY__INITIAL_BACKOFF_MS_FILE=/path/to/file,
+#   alertmanager__retry__initial_backoff_ms in the secrets directory
+# initial_backoff_ms = 200
+
+# Ceiling on a single wait, in seconds.
+# Type: u64
+# Also from: DAM_ALERTMANAGER__RETRY__MAX_BACKOFF_SECS,
+#   DAM_ALERTMANAGER__RETRY__MAX_BACKOFF_SECS_FILE=/path/to/file,
+#   alertmanager__retry__max_backoff_secs in the secrets directory
+# max_backoff_secs = 10
+
+# Seconds to keep retrying one request before giving up on it.
+# Type: u64
+# Also from: DAM_ALERTMANAGER__RETRY__MAX_ELAPSED_SECS,
+#   DAM_ALERTMANAGER__RETRY__MAX_ELAPSED_SECS_FILE=/path/to/file,
+#   alertmanager__retry__max_elapsed_secs in the secrets directory
+# max_elapsed_secs = 45
+
+[storage]
+# Which backend the bot connects to.
+# Type: Backend — one of: sqlite, postgres
+# Also from: DAM_STORAGE__BACKEND, DAM_STORAGE__BACKEND_FILE=/path/to/file, storage__backend in
+#   the secrets directory
+# backend = "sqlite"
+
+[storage.sqlite]
+# Path to the database file, created on first start if it does not exist.
+# Type: PathBuf
+# Also from: DAM_STORAGE__SQLITE__PATH, DAM_STORAGE__SQLITE__PATH_FILE=/path/to/file,
+#   storage__sqlite__path in the secrets directory
+# path = "discord-alertmanager.db"
+
+# Size of the read pool. The writer is always one connection.
+# Type: u32
+# Also from: DAM_STORAGE__SQLITE__MAX_CONNECTIONS,
+#   DAM_STORAGE__SQLITE__MAX_CONNECTIONS_FILE=/path/to/file, storage__sqlite__max_connections in
+#   the secrets directory
+# max_connections = 4
+
+# Seconds to wait for a connection from the pool before failing the operation.
+# Type: u64
+# Also from: DAM_STORAGE__SQLITE__ACQUIRE_TIMEOUT_SECS,
+#   DAM_STORAGE__SQLITE__ACQUIRE_TIMEOUT_SECS_FILE=/path/to/file,
+#   storage__sqlite__acquire_timeout_secs in the secrets directory
+# acquire_timeout_secs = 5
+
+# Run pending migrations during startup.
+#
+# Set this false where a separate job owns migrations, which is what a `GitOps` deployment
+# usually wants: the bot then refuses to start against a schema it does not recognise
+# instead of migrating underneath a running replica.
+# Type: bool
+# Also from: DAM_STORAGE__SQLITE__MIGRATE_ON_START,
+#   DAM_STORAGE__SQLITE__MIGRATE_ON_START_FILE=/path/to/file, storage__sqlite__migrate_on_start in
+#   the secrets directory
+# migrate_on_start = true
+
+[storage.postgres]
+# Connection URL. Supply it through `DAM_STORAGE__POSTGRES__URL_FILE` or the secrets
+# directory, since it carries the password.
+# Type: SecretString
+# Also from: DAM_STORAGE__POSTGRES__URL, DAM_STORAGE__POSTGRES__URL_FILE=/path/to/file,
+#   storage__postgres__url in the secrets directory
+# Secret: the value below is a placeholder.
+# url = "<secret>"
+
+# Maximum pooled connections.
+# Type: u32
+# Also from: DAM_STORAGE__POSTGRES__MAX_CONNECTIONS,
+#   DAM_STORAGE__POSTGRES__MAX_CONNECTIONS_FILE=/path/to/file, storage__postgres__max_connections
+#   in the secrets directory
+# max_connections = 16
+
+# Seconds to wait for a connection from the pool before failing the operation.
+# Type: u64
+# Also from: DAM_STORAGE__POSTGRES__ACQUIRE_TIMEOUT_SECS,
+#   DAM_STORAGE__POSTGRES__ACQUIRE_TIMEOUT_SECS_FILE=/path/to/file,
+#   storage__postgres__acquire_timeout_secs in the secrets directory
+# acquire_timeout_secs = 5
+
+# Run pending migrations during startup.
+# Type: bool
+# Also from: DAM_STORAGE__POSTGRES__MIGRATE_ON_START,
+#   DAM_STORAGE__POSTGRES__MIGRATE_ON_START_FILE=/path/to/file,
+#   storage__postgres__migrate_on_start in the secrets directory
+# migrate_on_start = true
+
+[ingest]
+# Address and port to listen on.
+# Type: SocketAddr
+# Also from: DAM_INGEST__BIND, DAM_INGEST__BIND_FILE=/path/to/file, ingest__bind in the secrets
+#   directory
+# bind = "0.0.0.0:9099"
+
+# Path Alertmanager posts the version-4 envelope to.
+# Type: String
+# Also from: DAM_INGEST__WEBHOOK_PATH, DAM_INGEST__WEBHOOK_PATH_FILE=/path/to/file,
+#   ingest__webhook_path in the secrets directory
+# webhook_path = "/webhook"
+
+# Bearer token every webhook request has to carry.
+#
+# Compared in constant time. A mismatch is a 401 with no body, so a caller learns that the
+# token was wrong and nothing about how it was wrong. Leaving this unset disables the check
+# and is only defensible where the listener is unreachable from outside the namespace.
+# Type: SecretString
+# Also from: DAM_INGEST__WEBHOOK_TOKEN, DAM_INGEST__WEBHOOK_TOKEN_FILE=/path/to/file,
+#   ingest__webhook_token in the secrets directory
+# Secret: the value below is a placeholder.
+# webhook_token = "<secret>"
+
+# Largest accepted request body, in bytes.
+# Type: usize
+# Also from: DAM_INGEST__BODY_LIMIT_BYTES, DAM_INGEST__BODY_LIMIT_BYTES_FILE=/path/to/file,
+#   ingest__body_limit_bytes in the secrets directory
+# body_limit_bytes = 1048576
+
+# Seconds a request may take before the listener abandons it.
+# Type: u64
+# Also from: DAM_INGEST__REQUEST_TIMEOUT_SECS,
+#   DAM_INGEST__REQUEST_TIMEOUT_SECS_FILE=/path/to/file, ingest__request_timeout_secs in the
+#   secrets directory
+# request_timeout_secs = 10
+
+# Requests handled at once. Further requests queue rather than being rejected.
+# Type: usize
+# Also from: DAM_INGEST__MAX_CONCURRENT_REQUESTS,
+#   DAM_INGEST__MAX_CONCURRENT_REQUESTS_FILE=/path/to/file, ingest__max_concurrent_requests in the
+#   secrets directory
+# max_concurrent_requests = 64
+
+# Seconds to let in-flight requests finish during shutdown.
+# Type: u64
+# Also from: DAM_INGEST__SHUTDOWN_DRAIN_SECS, DAM_INGEST__SHUTDOWN_DRAIN_SECS_FILE=/path/to/file,
+#   ingest__shutdown_drain_secs in the secrets directory
+# shutdown_drain_secs = 10
+
+[engine]
+# Outbox dispatcher workers.
+#
+# Work is hashed into one lane per worker by its dedupe key, so every effect for one alert
+# lands on one worker. Raising this widens the fan-out across alerts and never splits an
+# alert across two workers.
+# Type: u32
+# Also from: DAM_ENGINE__DISPATCHERS, DAM_ENGINE__DISPATCHERS_FILE=/path/to/file,
+#   engine__dispatchers in the secrets directory
+# dispatchers = 4
+
+# Seconds a claimed outbox row stays claimed before a janitor may reclaim it.
+#
+# The janitor reclaims at three times this, which is the margin for a worker that is slow
+# rather than dead.
+# Type: u64
+# Also from: DAM_ENGINE__OUTBOX_LEASE_SECS, DAM_ENGINE__OUTBOX_LEASE_SECS_FILE=/path/to/file,
+#   engine__outbox_lease_secs in the secrets directory
+# outbox_lease_secs = 30
+
+# Outbox rows one worker claims per pass.
+# Type: u32
+# Also from: DAM_ENGINE__OUTBOX_BATCH_SIZE, DAM_ENGINE__OUTBOX_BATCH_SIZE_FILE=/path/to/file,
+#   engine__outbox_batch_size in the secrets directory
+# outbox_batch_size = 16
+
+# Seconds between reconciler polls of the Alertmanager alert set.
+#
+# The reconciler is the authoritative path. Anything Alertmanager has that the database does
+# not is injected as a synthetic event, and anything firing in the database that Alertmanager
+# has not had for two consecutive polls is treated as resolved. That is what makes the bot
+# converge after a restart or a partition.
+# Type: u64
+# Also from: DAM_ENGINE__RECONCILE_INTERVAL_SECS,
+#   DAM_ENGINE__RECONCILE_INTERVAL_SECS_FILE=/path/to/file, engine__reconcile_interval_secs in the
+#   secrets directory
+# reconcile_interval_secs = 60
+
+# Seconds between silence syncs.
+# Type: u64
+# Also from: DAM_ENGINE__SILENCE_SYNC_INTERVAL_SECS,
+#   DAM_ENGINE__SILENCE_SYNC_INTERVAL_SECS_FILE=/path/to/file, engine__silence_sync_interval_secs
+#   in the secrets directory
+# silence_sync_interval_secs = 30
+
+# Seconds between escalation timer sweeps.
+# Type: u64
+# Also from: DAM_ENGINE__ESCALATION_INTERVAL_SECS,
+#   DAM_ENGINE__ESCALATION_INTERVAL_SECS_FILE=/path/to/file, engine__escalation_interval_secs in
+#   the secrets directory
+# escalation_interval_secs = 15
+
+# Seconds between retention sweeps.
+# Type: u64
+# Also from: DAM_ENGINE__PRUNE_INTERVAL_SECS, DAM_ENGINE__PRUNE_INTERVAL_SECS_FILE=/path/to/file,
+#   engine__prune_interval_secs in the secrets directory
+# prune_interval_secs = 3600
+
+# Seconds of webhook silence that, combined with an unreachable Alertmanager, trips the
+# deadman.
+# Type: u64
+# Also from: DAM_ENGINE__DEADMAN_WINDOW_SECS, DAM_ENGINE__DEADMAN_WINDOW_SECS_FILE=/path/to/file,
+#   engine__deadman_window_secs in the secrets directory
+# deadman_window_secs = 1800
+
+# Seconds within which a re-fire reuses the existing card and thread.
+#
+# Inside the window the card is reused and its flap count goes up. Outside it, a new card is
+# posted carrying a link to the previous one.
+# Type: u64
+# Also from: DAM_ENGINE__REGROUP_WINDOW_SECS, DAM_ENGINE__REGROUP_WINDOW_SECS_FILE=/path/to/file,
+#   engine__regroup_window_secs in the secrets directory
+# regroup_window_secs = 1800
+
+# Record a row in `alert_events` for every state transition.
+#
+# Turning this off keeps the current `alerts` row and drops the history. The four reasons
+# the bot keeps its own alert table all rest on the current row, so nothing else changes.
+# Type: bool
+# Also from: DAM_ENGINE__PERSIST_EVENTS, DAM_ENGINE__PERSIST_EVENTS_FILE=/path/to/file,
+#   engine__persist_events in the secrets directory
+# persist_events = true
+
+[engine.storm]
+# Alerts on one route inside the window that trigger digest mode.
+# Type: u32
+# Also from: DAM_ENGINE__STORM__THRESHOLD, DAM_ENGINE__STORM__THRESHOLD_FILE=/path/to/file,
+#   engine__storm__threshold in the secrets directory
+# threshold = 50
+
+# Length of the window, in seconds.
+# Type: u64
+# Also from: DAM_ENGINE__STORM__WINDOW_SECS, DAM_ENGINE__STORM__WINDOW_SECS_FILE=/path/to/file,
+#   engine__storm__window_secs in the secrets directory
+# window_secs = 60
+
+# Threshold for forum routes, which is lower.
+#
+# Creating a forum post is heavier than sending a message and is rate-limited per channel,
+# so a forum route reaches trouble sooner than a text one.
+# Type: u32
+# Also from: DAM_ENGINE__STORM__FORUM_THRESHOLD,
+#   DAM_ENGINE__STORM__FORUM_THRESHOLD_FILE=/path/to/file, engine__storm__forum_threshold in the
+#   secrets directory
+# forum_threshold = 20
+
+[engine.retention]
+# Days of `alert_events` history. This is the expensive table.
+# Type: u32
+# Also from: DAM_ENGINE__RETENTION__EVENTS_DAYS,
+#   DAM_ENGINE__RETENTION__EVENTS_DAYS_FILE=/path/to/file, engine__retention__events_days in the
+#   secrets directory
+# events_days = 30
+
+# Days a resolved alert and its notification are kept.
+# Type: u32
+# Also from: DAM_ENGINE__RETENTION__RESOLVED_DAYS,
+#   DAM_ENGINE__RETENTION__RESOLVED_DAYS_FILE=/path/to/file, engine__retention__resolved_days in
+#   the secrets directory
+# resolved_days = 30
+
+# Days of `audit_log`.
+#
+# Kept far longer than the rest because it is small and it is the record of what people
+# decided. Check this horizon against what an incident review actually needs.
+# Type: u32
+# Also from: DAM_ENGINE__RETENTION__AUDIT_DAYS,
+#   DAM_ENGINE__RETENTION__AUDIT_DAYS_FILE=/path/to/file, engine__retention__audit_days in the
+#   secrets directory
+# audit_days = 365
+
+[render]
+# Seconds to coalesce edits to one card before sending them.
+#
+# Every edit is also skipped when the newly computed render hash matches the stored one, so
+# a burst of updates that change nothing visible costs no API calls at all.
+# Type: u64
+# Also from: DAM_RENDER__DEBOUNCE_SECS, DAM_RENDER__DEBOUNCE_SECS_FILE=/path/to/file,
+#   render__debounce_secs in the secrets directory
+# debounce_secs = 3
+
+# Characters of annotation text a card may carry before it is truncated.
+#
+# Discord caps an embed at 6000 characters across every field, and a single alert can carry
+# a five-thousand-character annotation. The truncation marker links to `/alerts show`, which
+# has the full text.
+# Type: usize
+# Also from: DAM_RENDER__DESCRIPTION_BUDGET, DAM_RENDER__DESCRIPTION_BUDGET_FILE=/path/to/file,
+#   render__description_budget in the secrets directory
+# description_budget = 1500
+
+# Labels promoted to their own inline field on the card, in order.
+#
+# Everything else stays in `/alerts show`. Three or four is the useful number; a card that
+# lists sixty labels is a card nobody reads during an incident.
+# Type: Vec<String>
+# Also from: DAM_RENDER__KEY_LABELS, DAM_RENDER__KEY_LABELS_FILE=/path/to/file, render__key_labels
+#   in the secrets directory
+# key_labels = ["namespace", "instance", "job"]
+
+# Minutes of inactivity after which an alert thread archives.
+#
+# Discord accepts only 60, 1440, 4320 and 10080. A firing alert holds 10080 regardless, so
+# that a week-long incident never archives underneath the people working it.
+# Type: u32
+# Also from: DAM_RENDER__THREAD_ARCHIVE_AFTER_MINUTES,
+#   DAM_RENDER__THREAD_ARCHIVE_AFTER_MINUTES_FILE=/path/to/file,
+#   render__thread_archive_after_minutes in the secrets directory
+# thread_archive_after_minutes = 1440
+
+# Show a short fingerprint in the card footer.
+# Type: bool
+# Also from: DAM_RENDER__SHOW_FINGERPRINT, DAM_RENDER__SHOW_FINGERPRINT_FILE=/path/to/file,
+#   render__show_fingerprint in the secrets directory
+# show_fingerprint = true
+
+[links]
+# Prometheus base URL, available to templates as `links.prometheus_base`.
+# Type: Url
+# Also from: DAM_LINKS__PROMETHEUS_BASE, DAM_LINKS__PROMETHEUS_BASE_FILE=/path/to/file,
+#   links__prometheus_base in the secrets directory
+# Unset by default: the value below is only the shape.
+# prometheus_base = "<value>"
+
+# Grafana base URL, available to templates as `links.grafana_base`.
+# Type: Url
+# Also from: DAM_LINKS__GRAFANA_BASE, DAM_LINKS__GRAFANA_BASE_FILE=/path/to/file,
+#   links__grafana_base in the secrets directory
+# Unset by default: the value below is only the shape.
+# grafana_base = "<value>"
+
+# Hosts a rendered button may point at.
+#
+# An empty list rejects every button, which is the safe reading of "nothing was configured".
+# The scheme is checked separately and is always `http` or `https`.
+# Type: Vec<String>
+# Also from: DAM_LINKS__ALLOWED_HOSTS, DAM_LINKS__ALLOWED_HOSTS_FILE=/path/to/file,
+#   links__allowed_hosts in the secrets directory
+# allowed_hosts = []
+
+# Seconds of graph shown before the alert started.
+# Type: u64
+# Also from: DAM_LINKS__WINDOW_LEAD_SECS, DAM_LINKS__WINDOW_LEAD_SECS_FILE=/path/to/file,
+#   links__window_lead_secs in the secrets directory
+# window_lead_secs = 900
+
+# Seconds of graph shown after the alert ended, or after now while it is firing.
+# Type: u64
+# Also from: DAM_LINKS__WINDOW_TRAIL_SECS, DAM_LINKS__WINDOW_TRAIL_SECS_FILE=/path/to/file,
+#   links__window_trail_secs in the secrets directory
+# window_trail_secs = 300
+
+# The buttons themselves, rendered in order.
+# Type: Vec<LinkButton>
+# Also from: DAM_LINKS__BUTTONS, DAM_LINKS__BUTTONS_FILE=/path/to/file, links__buttons in the
+#   secrets directory
+# buttons = []
+
+[observability]
+# Serve Prometheus metrics at `/metrics` on the ingest listener.
+# Type: bool
+# Also from: DAM_OBSERVABILITY__METRICS_ENABLED,
+#   DAM_OBSERVABILITY__METRICS_ENABLED_FILE=/path/to/file, observability__metrics_enabled in the
+#   secrets directory
+# metrics_enabled = true
+
+# Channel the deadman and route-health notices post to.
+#
+# The deadman fires when no webhook has arrived inside the deadman window *and*
+# Alertmanager is unreachable. Pair it with a `Watchdog` alert in Prometheus, so that
+# silence on one side is always noise on the other.
+# Type: u64
+# Also from: DAM_OBSERVABILITY__ADMIN_CHANNEL_ID,
+#   DAM_OBSERVABILITY__ADMIN_CHANNEL_ID_FILE=/path/to/file, observability__admin_channel_id in the
+#   secrets directory
+# Unset by default: the value below is only the shape.
+# admin_channel_id = 0
