@@ -60,7 +60,6 @@ jobs:
           private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
           permission-contents: write # release commits, tags and the GitHub release
           permission-pull-requests: write # the release pull request
-          permission-issues: write # release-please comments on the issues a release closes
 
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
         id: release
