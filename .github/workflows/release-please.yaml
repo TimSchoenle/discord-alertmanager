@@ -23,6 +23,8 @@ permissions: { }
 env:
   DOCKERHUB_REPO: docker.io/timschoenle/discord-alertmanager
   GHCR_REPO: ghcr.io/timschoenle/discord-alertmanager
+  HELM_REPO: TimSchoenle/helm-charts
+  CHART_PATH: charts/netcup-offer-bot
 
 jobs:
   release-please:
@@ -474,3 +476,34 @@ jobs:
 
             cosign sign --yes "${repo}@${referrer}"
           done
+
+  helm-release:
+    environment:
+      name: release
+      deployment: false
+    name: Helm Release
+    needs: [ release-please, docker-release ]
+    if: ${{ needs.release-please.outputs.release_created }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Required to checkout the code
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - uses: TimSchoenle/actions/actions/helm/update-chart-version@cd1171997b1a077166b5f0709b807a6ba8234bc5 # tag=actions-helm-update-chart-version-v1.6.4
+        with:
+          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+          helm-repo: ${{ env.HELM_REPO }}
+          chart-path: ${{ env.CHART_PATH }}
+          images: |
+            {
+              "image.tag": {
+                "tag": "${{ needs.release-please.outputs.tag_name }}",
+                "digest": "${{ needs.docker-release.outputs.image_digest }}"
+              }
+            }
+          app-version: ${{ needs.release-please.outputs.tag_name }}
