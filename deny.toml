@@ -6,7 +6,26 @@ all-features = true
 [advisories]
 version = 2
 yanked = "deny"
-ignore = []
+# `rustls-webpki 0.102` enters the graph one way only: serenity 0.12 pins tokio-tungstenite 0.21
+# for the gateway socket, that pins rustls 0.22, and that pins this line. 0.102.8 is the last
+# release of it and every fix landed in 0.103, so no `cargo update` clears the findings below.
+# Removing them means serenity moving off tokio-tungstenite 0.21; forking the gateway
+# stack to get there would put more risk in the tree than it takes out. Revisit when serenity
+# releases a line built against rustls 0.23.
+ignore = [
+    # URI name constraints were accepted rather than rejected. `rustls-webpki` asserts no URI
+    # names at all, so a constraint on them restricts nothing this code path ever checks.
+    { id = "RUSTSEC-2026-0098", reason = "The library asserts no URI names, and neither does the gateway client." },
+    # A permitted-subtree DNS constraint was accepted for a certificate asserting a wildcard.
+    # Name constraints bind certificates that are otherwise correctly signed, so reaching this
+    # needs a name-constrained CA in the webpki-roots store to misissue for gateway.discord.gg.
+    { id = "RUSTSEC-2026-0099", reason = "Reachable only after signature verification, and only through a misissuing name-constrained CA." },
+    # Two findings in the certificate revocation list code: a distribution point matched the
+    # wrong way, and a panic on a malformed list. Nothing here parses one — serenity builds its
+    # verifier from the webpki roots with no CRL — so neither entry point is ever called.
+    { id = "RUSTSEC-2026-0049", reason = "No certificate revocation list is ever parsed." },
+    { id = "RUSTSEC-2026-0104", reason = "No certificate revocation list is ever parsed." },
+]
 
 [licenses]
 version = 2
