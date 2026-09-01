@@ -1,0 +1,24 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "github>TimSchoenle/actions//configs/renovate/default"
+  ],
+  "packageRules": [
+    {
+      "description": "Pinned by the workflows that use them, and bumped when the shared actions repository bumps them. A pull request here would only ever disagree with TimSchoenle/actions.",
+      "matchPackageNames": [
+        "dtolnay/rust-toolchain",
+        "aquasecurity/trivy-action",
+        "taiki-e/install-action"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "cargo-chef stays enabled, unlike in the other repositories of this estate. They track the floating latest-rust-alpine tag, which has nothing to bump; this Dockerfile pins it by digest, so leaving it disabled would freeze the build toolchain image at whatever digest was current the day it was written.",
+      "matchPackageNames": [
+        "lukemathwalker/cargo-chef"
+      ],
+      "enabled": true
+    }
+  ]
+}

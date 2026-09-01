@@ -1,0 +1,496 @@
+name: Build
+
+# Everything a pull request has to pass before it can be merged, plus the same set on every push
+# to `main` so that a merge queue skipped nothing.
+#
+# Three kinds of job live here. The first kind compiles and runs the workspace — `check`, `test`,
+# `clippy`, `doc`, `msrv`. The second kind reads a committed artefact and regenerates it —
+# `config-docs` and `config-contract` — so a generated file cannot drift from the types that
+# produce it. The third kind builds the image the release will push, on both architectures, and
+# checks that what came out describes the configuration the source tree declares.
+
+on:
+  push:
+    branches: [ "main" ]
+
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+permissions: { }
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Required to checkout the code
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Run Check
+        uses: TimSchoenle/actions/actions/rust/cargo-check@e16a1e466faf8ec751b26289c1898143a253269f # tag=actions-rust-cargo-check-v1.1.6
+        with:
+          check_arguments: '--workspace --all-targets --all-features'
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Required to checkout the code
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      # `discord-alertmanager-store-postgres` starts a throwaway PostgreSQL container rather than
+      # taking a service container, so that `cargo test` on a laptop exercises the same backend
+      # this job does. The runner image ships a Docker daemon, so nothing here has to arrange one.
+      - name: Run Test
+        uses: TimSchoenle/actions/actions/rust/test@e16a1e466faf8ec751b26289c1898143a253269f # tag=actions-rust-test-v1.1.2
+        with:
+          test_arguments: '--workspace --all-features'
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Required to checkout the code
+      checks: write # Required to annotate the commit with clippy warnings
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      # The lint set is `[workspace.lints]` in the root manifest and is inherited by every member.
+      # `-D warnings` is what turns those `warn` levels into a gate.
+      - name: Run Clippy
+        uses: TimSchoenle/actions/actions/rust/clippy@e16a1e466faf8ec751b26289c1898143a253269f # tag=actions-rust-clippy-v1.1.10
+        with:
+          clippy_arguments: '--workspace --all-targets --all-features'
+
+  coverage:
+    name: Coverage
+    environment:
+      name: ci
+      deployment: false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Required to checkout the code
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Run Coverage
+        uses: TimSchoenle/actions/actions/rust/coverage-codecov@e16a1e466faf8ec751b26289c1898143a253269f # tag=actions-rust-coverage-codecov-v1.1.41
+        with:
+          codecov_token: ${{ secrets.CODECOV_TOKEN }}
+          test_arguments: '--workspace --all-features'
+
+  fmt:
+    name: Auto Format
+    environment:
+      name: ci
+      deployment: false
+    runs-on: ubuntu-latest
+    # Shared with docs.yml rather than with the rest of this workflow: both jobs commit to the
+    # pull request branch through the API, which rejects a commit whose parent has moved. Racing
+    # them would fail one of the two for a reason its log does not explain, so they queue.
+    concurrency:
+      group: branch-writes-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Auto Format
+        uses: TimSchoenle/actions/actions/rust/auto-format@e16a1e466faf8ec751b26289c1898143a253269f # tag=actions-rust-auto-format-v1.1.12
+        with:
+          bot_app_id: ${{ secrets.ACTIONS_MAINTENANCE_APP_ID }}
+          bot_private_key: ${{ secrets.ACTIONS_MAINTENANCE_PRIVATE_KEY }}
+
+  # rustdoc, with warnings fatal. `cargo check` never runs the rustdoc lints, so a broken
+  # intra-doc link or an unescaped backtick reaches the rendered page and nobody else's job
+  # notices. `missing_docs` is in `[workspace.lints.rust]` and fails `check` on its own.
+  doc:
+    name: Doc
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Required to checkout the code
+    env:
+      RUSTDOCFLAGS: '-D warnings'
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Install pinned toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+
+      # `config-schema` gates the `Describe` derives and the generator example, and the module
+      # documentation in `discord-alertmanager-config` links items that exist only under it.
+      - name: Document
+        run: cargo doc --workspace --all-features --no-deps
+
+      - name: Doctests
+        run: cargo test --workspace --all-features --doc
+
+  # The floor, which is not the pinned toolchain. `rust-toolchain.toml` pins 1.97.1 for
+  # reproducibility; `rust-version` in `[workspace.package]` is 1.94, inherited from
+  # terrace-config, and it is a claim about what compiles rather than about what CI uses.
+  #
+  # `RUSTUP_TOOLCHAIN` rather than the action's `toolchain` input alone: `rust-toolchain.toml`
+  # sits in the working directory and rustup honours it over a default, so without the variable
+  # this job would silently re-download 1.97.1 and check nothing.
+  #
+  # No `--all-targets`. The floor is about the crates, and the dev-dependencies — proptest,
+  # testcontainers, wiremock — carry MSRVs of their own that nothing depending on this workspace
+  # would ever compile.
+  msrv:
+    name: MSRV
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Required to checkout the code
+    env:
+      RUSTUP_TOOLCHAIN: '1.94'
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Install the declared MSRV toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          toolchain: '1.94'
+
+      - name: Check
+        run: cargo check --workspace --all-features
+
+  # The rule `discord-alertmanager-core` states about itself, asserted rather than trusted. Its
+  # crate documentation and `deny.toml` both name this job, and both would be prose without it.
+  architecture:
+    name: Architecture
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Required to checkout the code
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Install pinned toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+
+      # Invoked through `bash` rather than executed: the repository is authored on Windows, where
+      # git does not record the executable bit.
+      - name: Verify the domain crate's dependency rule
+        run: bash .github/scripts/verify-architecture.sh
+
+  # The generated half of the configuration surface, regenerated and diffed. `docs/config.md`,
+  # `docs/config.json`, `docs/config.contract.json` and `config.example.toml` all come out of the
+  # types in `discord-alertmanager-config`, and a key added without them is a key an operator
+  # cannot find.
+  config-docs:
+    name: Config Docs
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Required to checkout the code
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Install pinned toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+
+      # `db-prepare` is the other half of `xtask` and is deliberately not run here: no query in
+      # this workspace goes through the `query!` macro, so there is no offline cache to compare.
+      - name: Regenerate
+        run: cargo xtask config-docs
+
+      - name: Fail if anything moved
+        run: |
+          set -euo pipefail
+          if ! git diff --exit-code --stat; then
+            echo "::error::A generated file is stale. Run 'cargo xtask config-docs' and commit the result."
+            git --no-pager diff
+            exit 1
+          fi
+
+  # The reverse gate on the config contract: regenerate the committed document and the
+  # Dockerfile's `LABEL` block from the Rust types and fail if either has drifted. A renamed key
+  # or a renamed prefix then shows up in the pull request that renamed it, as a diff a reviewer
+  # reads — one step earlier than the label check on the built image, and far cheaper.
+  #
+  # It overlaps `config-docs` on `docs/config.contract.json` by design. That job proves the
+  # committed document matches the generator; this one proves the Dockerfile's labels match the
+  # same generator, and a `LABEL` key cannot be interpolated from anything.
+  config-contract:
+    name: Config Contract
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Required to checkout the code
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      # The action checks out nothing and installs nothing — it runs after a build, where a fresh
+      # checkout would discard what the build produced — so the toolchain is this job's business.
+      - name: Install pinned toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+
+      # `image` is empty, so the two checks needing one are skipped and this job stays the
+      # cheap half.
+      - name: Check the committed contract and the Dockerfile LABEL region
+        uses: TimSchoenle/actions/actions/rust/config-contract@e16a1e466faf8ec751b26289c1898143a253269f # tag=actions-rust-config-contract-v1.2.0
+        with:
+          example: config-schema
+          package: discord-alertmanager-config
+          features: config-schema
+          contract: docs/config.contract.json
+          image: ''
+
+  docker-build-test:
+    name: Docker Build and Test (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-docker-${{ matrix.arch }}
+      cancel-in-progress: true
+    permissions:
+      contents: read # Required to checkout the code
+      security-events: write # Required to upload Trivy scan results
+      pull-requests: write # Required to comment on PRs with image size
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      # Each architecture builds on a runner of its own architecture, so no QEMU
+      # emulation layer is involved.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+
+      - name: Build Docker image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          push: false
+          load: true
+          tags: discord-alertmanager:test
+          build-args: |
+            version=test
+            release=test
+            vendor=Timmi6790
+            VERSION=test
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+
+      # Exported from the same build graph the image came from, so the generator is not run a
+      # second time at a second moment and the labels cannot describe a different document than
+      # the one in the image. `VERSION` matches the image build's, because it reaches the
+      # document's `app.version` field and the two copies are compared below.
+      - name: Export the config contract
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          docker buildx build \
+            --target contract-export \
+            --platform "${PLATFORM}" \
+            --output "type=local,dest=./contract-out" \
+            --build-arg VERSION=test \
+            .
+
+      # The image, never the Dockerfile. A source diff cannot see a base image that overrode a
+      # label, a `LABEL` line deleted on a branch nobody diffed, or a build argument that
+      # silently failed to interpolate.
+      #
+      # The toolchain is here rather than at the top of the job because only this step needs
+      # it, and `cache: false` because this job also builds an image: a restored cache is
+      # writable by any branch, and caching in a job that produces a runtime artefact is the
+      # cache-poisoning path zizmor flags. Only the generator is compiled, so there is nearly
+      # nothing to save.
+      - name: Install pinned toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          cache: false
+
+      # `contract` is empty. The committed document is the `config-contract` job's business, and
+      # checking it again from a runner that has just spent ten minutes building an image buys
+      # nothing. What is left is the image half: the labels, and that the path they advertise has
+      # a contract behind it.
+      - name: Verify the image carries the contract labels
+        id: contract
+        uses: TimSchoenle/actions/actions/rust/config-contract@e16a1e466faf8ec751b26289c1898143a253269f # tag=actions-rust-config-contract-v1.2.0
+        with:
+          example: config-schema
+          package: discord-alertmanager-config
+          features: config-schema
+          contract: ''
+          image: discord-alertmanager:test
+
+      # The cross-check the dropped `sha256` label would have bought. The build is the one place
+      # that holds both copies, so it costs nothing here and is invisible everywhere else — a
+      # stale in-image copy is exactly the failure nothing downstream can see.
+      #
+      # The path comes from the label rather than from a literal, which ties the two together: a
+      # `COPY` that lands the document somewhere the label does not name fails right here. A
+      # `FROM scratch` image has no shell, and `docker cp` does not need one.
+      - name: Verify the in-image contract is the document that was exported
+        env:
+          # The label set the step above rendered, as JSON. Read through the environment
+          # rather than interpolated into the script, which would be a shell injection
+          # wearing a template's clothes.
+          LABELS: ${{ steps.contract.outputs.labels }}
+        run: |
+          set -euo pipefail
+          contract_path="$(printf '%s' "${LABELS}" | jq -r '.["dev.terrace.config.contract.path"]')"
+          probe="$(docker create discord-alertmanager:test)"
+          docker cp "${probe}:${contract_path}" ./from-image.json
+          docker rm "${probe}" > /dev/null
+          cmp ./from-image.json ./contract-out/contract.json
+
+      # `FROM scratch` has no shell, so the binary is the only thing in the image that can run,
+      # and it exits non-zero here because nothing supplied a Discord token or a writable
+      # database. Reaching that error is the assertion: the musl binary loaded, found its
+      # certificate bundle and installed logging before it complained. A UPX stub that cannot
+      # start on the runner's kernel prints nothing at all, which is the arm64 failure the
+      # Dockerfile turns UPX off for and the one this step is here to catch.
+      - name: Test Docker image runs
+        run: |
+          set -euo pipefail
+          output="$(docker run --rm discord-alertmanager:test 2>&1 || true)"
+          printf '%s\n' "${output}"
+          printf '%s' "${output}" | grep -q 'starting version='
+
+      - name: Check image size
+        id: size-check
+        run: |
+          SIZE=$(docker image inspect discord-alertmanager:test --format='{{.Size}}' | awk '{print int($1/1024/1024)}')
+          echo "size=${SIZE}" >> "$GITHUB_OUTPUT"
+          echo "Image size: ${SIZE}MB"
+          if [ "${SIZE}" -gt 150 ]; then
+            echo "::warning::Image size (${SIZE}MB) exceeds 150MB threshold"
+          fi
+
+      - name: Scan Docker image for vulnerabilities
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+        with:
+          image-ref: discord-alertmanager:test
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      # A distinct category per architecture keeps the matrix jobs from overwriting
+      # each other's results in the security dashboard.
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+          category: trivy-${{ matrix.arch }}
+
+      - name: Comment image size on PR
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        if: github.event_name == 'pull_request'
+        env:
+          SIZE: ${{ steps.size-check.outputs.size }}
+          ARCH: ${{ matrix.arch }}
+        with:
+          script: |
+            const { SIZE, ARCH } = process.env;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `🐳 Docker image size (\`linux/${ARCH}\`): **${SIZE}MB**`
+            });
+
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    needs: check
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-dependency-review
+      cancel-in-progress: true
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read # Required to checkout the code
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0

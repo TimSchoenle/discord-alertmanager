@@ -12,3 +12,12 @@ Cargo.lock.orig
 
 # insta review leftovers
 **/*.snap.new
+
+# The local configuration layer. It holds the bot token and the ingest webhook token on a
+# developer machine, and `DAM_CONFIG` defaults to it, so it is the one file in this tree that a
+# working checkout is expected to have and no checkout may ever commit.
+/config.toml
+
+# `docker buildx build --target contract-export --output type=local,dest=./contract-out` writes
+# here. The committed copy of the same document is docs/config.contract.json.
+/contract-out/

@@ -1,8 +1,12 @@
 //! Generates the configuration reference from the types that load it.
 //!
-//! Six renderings come out of one schema. CI regenerates `docs/config.md`, `docs/config.json` and
-//! `config.example.toml` on every pull request and fails on any difference, so a key cannot be
-//! added without its documentation.
+//! Nine renderings come out of one schema. CI regenerates `docs/config.md`, `docs/config.json`,
+//! `docs/config.contract.json` and `config.example.toml` on every pull request and fails on any
+//! difference, so a key cannot be added without its documentation.
+//!
+//! The `contract` and `labels` renderings are the pipeline's half of the same schema. The
+//! container build runs both in one stage, so the labels an image carries and the document it
+//! publishes cannot describe different configurations.
 //!
 //! ```bash
 //! cargo run -p discord-alertmanager-config --features config-schema --example config-schema \
@@ -31,9 +35,13 @@ fn main() -> ExitCode {
         .expect("the default configuration serialises");
 
     Cli::new(
-        // `v0.1.0`, not `0.1.0`: the field exists to be compared against an image tag.
+        // No `.version()` here. The release is passed as `--version` by the container build,
+        // which is the only place that knows one. Deriving it from `CARGO_PKG_VERSION` would put
+        // the previous release into the committed `docs/config.contract.json` the moment
+        // release-please opened a pull request bumping the manifests, and the drift gate would
+        // then fail the release pull request itself, every release, over a field that describes
+        // no configuration key.
         App::new("discord-alertmanager")
-            .version(concat!("v", env!("CARGO_PKG_VERSION")))
             .source("https://github.com/TimSchoenle/discord-alertmanager"),
     )
     .json_schema(

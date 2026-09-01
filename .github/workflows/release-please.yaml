@@ -1,0 +1,477 @@
+name: release-please
+
+# The release. release-please keeps a pull request open that holds the next version and the
+# changelog entry for everything merged since the last tag; merging it creates the tag, and
+# everything below runs off that tag.
+#
+# The image is published to two registries. Docker Hub is where the estate's other services live,
+# and GitHub Container Registry is where this repository's own packages page looks for one.
+# Neither is a mirror of the other made afterwards: both are named in the single build below and
+# receive the same manifests, so a digest quoted from one resolves in the other.
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: { }
+
+env:
+  DOCKERHUB_REPO: docker.io/timmi6790/discord-alertmanager
+  GHCR_REPO: ghcr.io/timschoenle/discord-alertmanager
+
+jobs:
+  release-please:
+    environment:
+      name: release
+      deployment: false
+    name: Release Please
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Required to create release commits and tags
+      issues: write # Required to create release issues
+      pull-requests: write # Required to create release PRs
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      # An App token rather than GITHUB_TOKEN: a pull request opened with the latter does not
+      # trigger the checks in build.yaml, and a release pull request nothing has checked is the
+      # one pull request that must not be merged unchecked.
+      #
+      # The three permissions release-please actually uses, named rather than left to the
+      # installation's own set. An unscoped App token inherits every permission the installation
+      # holds, which is what zizmor's `github-app` rule reports and is more than a tool that
+      # writes a changelog and opens a pull request needs.
+      - name: Generate Bot Token
+        id: generate_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+          permission-contents: write # release commits, tags and the GitHub release
+          permission-pull-requests: write # the release pull request
+          permission-issues: write # release-please comments on the issues a release closes
+
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
+        id: release
+        with:
+          token: ${{ steps.generate_token.outputs.token }}
+
+  # Each architecture is built on a runner of its own architecture and pushed untagged to both
+  # registries, addressed only by digest. The docker-release job then merges the per-architecture
+  # manifests into one tagged multi-platform index per registry.
+  docker-build:
+    environment:
+      name: release
+      deployment: false
+    name: Docker Build (${{ matrix.arch }})
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    permissions:
+      contents: read # Required to checkout the code
+      packages: write # Required to push to GitHub Container Registry
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Labels only. The tag is built from the release tag directly in the job below, one
+      # reference per registry, so nothing here has to unpick a two-image tag list.
+      - name: Extract metadata (labels) for Docker
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: |
+            ${{ env.DOCKERHUB_REPO }}
+            ${{ env.GHCR_REPO }}
+          tags: |
+            type=raw,value=${{ needs.release-please.outputs.tag_name }}
+
+      # One build, two destinations. The `name` value is a quoted CSV field holding both
+      # repositories, which is how the image exporter takes more than one: BuildKit pushes the
+      # same manifest and the same blobs to each, so the per-architecture digest below is one
+      # value that resolves in both registries.
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          provenance: mode=max
+          sbom: true
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,"name=${{ env.DOCKERHUB_REPO }},${{ env.GHCR_REPO }}",push-by-digest=true,name-canonical=true,push=true
+          build-args: |
+            version=${{ needs.release-please.outputs.tag_name }}
+            release=${{ needs.release-please.outputs.tag_name }}
+            vendor=Timmi6790
+            SENTRY_ORG=${{ secrets.SENTRY_ORG }}
+            SENTRY_PROJECT=${{ secrets.SENTRY_PROJECT }}
+            VERSION=${{ needs.release-please.outputs.tag_name }}
+          secrets: |
+            sentry_token=${{ secrets.SENTRY_AUTH_TOKEN }}
+
+      # The same build graph the push above used, so the generator runs once per architecture
+      # and BuildKit serves this from the cache it just wrote. `VERSION` is the release tag,
+      # which is what reaches the document's `app.version`; the exported bytes are what get
+      # attached to the digest, so they have to be the bytes that went into the image.
+      - name: Export the config contract
+        env:
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          docker buildx build \
+            --target contract-export \
+            --platform "${PLATFORM}" \
+            --output "type=local,dest=/tmp/contract" \
+            --build-arg "VERSION=${TAG}" \
+            .
+
+      - name: Upload the config contract
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: contract-${{ matrix.arch }}
+          path: /tmp/contract/*
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Export digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: digests-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  docker-release:
+    environment:
+      name: release
+      deployment: false
+    name: Docker Release
+    needs: [ release-please, docker-build ]
+    if: ${{ needs.release-please.outputs.release_created }}
+    outputs:
+      image_digest: ${{ steps.manifest.outputs.digest }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Required to checkout the code
+      packages: write # Required to push the manifest list to GitHub Container Registry
+      id-token: write # Required for OIDC authentication with Cosign
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+
+      # The contract check and the attach step both run from this job, and both read scripts
+      # from the repository.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # Reads a specific platform's config blob and filesystem out of a multi-platform index
+      # without pulling it into a daemon that can only hold one architecture at a time.
+      - name: Install Crane
+        uses: imjasonh/setup-crane@feee3b6bb0d4c68370f256a4502498c9227e5c6b # v0.7
+
+      # Pinned by version as well as by commit: the attach below writes to a registry, and which
+      # fallback an OCI 1.0 registry gets — Docker Hub is one — is the client's decision.
+      - name: Install ORAS
+        uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2.0.1
+        with:
+          version: 1.3.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download digests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      # Not merged: each architecture's copy stays in its own directory so the step below can
+      # compare them instead of letting one silently overwrite the other.
+      - name: Download the config contracts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: /tmp/contracts
+          pattern: contract-*
+
+      # One index per registry, each built from that registry's own by-digest references. The
+      # alternative — creating both from one registry's sources — would make buildx copy every
+      # blob across, for content the build already pushed to both.
+      - name: Create multi-platform manifest lists and push
+        working-directory: /tmp/digests
+        env:
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+
+          # One empty file per per-architecture digest, named after it. Both registries are given
+          # the same list in the same order, which is what makes the two indexes the same bytes
+          # and so the same digest — the property the next step asserts.
+          for repo in "${DOCKERHUB_REPO}" "${GHCR_REPO}"; do
+            references=""
+            for digest in *; do
+              references="${references} ${repo}@sha256:${digest}"
+            done
+
+            # Word splitting is intentional: ${references} is one string holding several
+            # arguments.
+            # shellcheck disable=SC2086
+            docker buildx imagetools create -t "${repo}:${TAG}" ${references}
+          done
+
+      # Both indexes list the same per-architecture digests in the same order, so they are the
+      # same bytes and therefore the same digest. Asserted rather than assumed: if they ever
+      # differ, the verification below would have covered one registry and not the other, and
+      # that is a release to stop rather than a discrepancy to report.
+      - name: Resolve pushed image digest
+        id: manifest
+        env:
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+
+          digest_of() {
+            docker buildx imagetools inspect "$1:${TAG}" --format '{{json .Manifest}}' | jq -r '.digest'
+          }
+
+          DIGEST="$(digest_of "${DOCKERHUB_REPO}")"
+          GHCR_DIGEST="$(digest_of "${GHCR_REPO}")"
+
+          if [ "${DIGEST}" != "${GHCR_DIGEST}" ]; then
+            echo "error: ${DOCKERHUB_REPO}:${TAG} is ${DIGEST} and ${GHCR_REPO}:${TAG} is" >&2
+            echo "       ${GHCR_DIGEST}. The two registries are serving different images under" >&2
+            echo "       one release tag." >&2
+            exit 1
+          fi
+
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "Multi-platform index digest: ${DIGEST}"
+
+      # Every architecture generates the document from one source tree with one set of
+      # arguments, so the copies must be byte-identical. If they are not, which one gets
+      # attached to the index would be arbitrary — so this is a failure, not a tie to break.
+      - name: Reduce the per-architecture contracts to one
+        run: |
+          set -euo pipefail
+
+          canonical=""
+          for dir in /tmp/contracts/contract-*; do
+            [ -d "${dir}" ] || continue
+            if [ -z "${canonical}" ]; then
+              canonical="${dir}"
+              continue
+            fi
+            cmp "${canonical}/contract.json"   "${dir}/contract.json"
+            cmp "${canonical}/contract.labels" "${dir}/contract.labels"
+          done
+
+          if [ -z "${canonical}" ]; then
+            echo "error: no build job exported a config contract, so there is nothing to" >&2
+            echo "       check the pushed image against." >&2
+            exit 1
+          fi
+
+          cp "${canonical}/contract.json"   /tmp/contract.json
+          cp "${canonical}/contract.labels" /tmp/contract.labels
+
+      # The checkpoint everything below rests on. Multi-platform, so it necessarily runs after
+      # the push — `--load` cannot take an index. The floating tag is briefly unverified, which
+      # is acceptable because nothing is attached or signed until this passes.
+      #
+      # Every platform, read out of the index rather than out of the build matrix: labels live
+      # in each manifest's own config blob, so one architecture can carry them and another not,
+      # and a list maintained by hand here would be the first thing to go stale. The provenance
+      # and SBOM manifests carry `unknown/unknown` and are not platforms.
+      #
+      # One registry is read, because the step above proved both serve the same index digest.
+      #
+      # `crane config` reports `.config.Labels`; `docker inspect` reports `.Config.Labels`.
+      # Reading the wrong one yields null, which the script refuses rather than reads as empty.
+      # `--platform` is not optional either: without it, `crane config` against an index does
+      # not fail loudly in every version.
+      - name: Verify the pushed image against its config contract
+        env:
+          DIGEST: ${{ steps.manifest.outputs.digest }}
+        run: |
+          set -euo pipefail
+
+          platforms="$(docker buildx imagetools inspect "${DOCKERHUB_REPO}@${DIGEST}" --format '{{json .Manifest}}' \
+            | jq -r '.manifests[] | select(.platform.os != "unknown") | "\(.platform.os)/\(.platform.architecture)"')"
+
+          if [ -z "${platforms}" ]; then
+            echo "error: ${DIGEST} lists no platforms, so nothing was checked." >&2
+            exit 1
+          fi
+
+          status=0
+          for platform in ${platforms}; do
+            slug="${platform//\//-}"
+
+            crane config --platform "${platform}" "${DOCKERHUB_REPO}@${DIGEST}" \
+              | jq -c '.config.Labels' > "labels.${slug}.json"
+
+            if ! bash .github/scripts/verify-contract-labels.sh \
+                   "labels.${slug}.json" /tmp/contract.labels "${platform}"; then
+              status=1
+              continue
+            fi
+
+            # The cross-check the dropped `sha256` label would have bought: the copy inside the
+            # image and the bytes about to be attached are one document. The path comes from
+            # the label, so a `COPY` that landed it elsewhere fails here.
+            contract_path="$(jq -r '.["dev.terrace.config.contract.path"]' "labels.${slug}.json")"
+            crane export --platform "${platform}" "${DOCKERHUB_REPO}@${DIGEST}" - \
+              | tar -xO "${contract_path#/}" > "from-image.${slug}.json"
+
+            if ! cmp "from-image.${slug}.json" /tmp/contract.json; then
+              echo "error: ${platform}: the copy at ${contract_path} is not the document being" >&2
+              echo "       attached to this digest." >&2
+              status=1
+            fi
+          done
+
+          exit "${status}"
+
+      - name: Sign the images with GitHub OIDC Token
+        env:
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+          DIGEST: ${{ steps.manifest.outputs.digest }}
+        run: |
+          set -euo pipefail
+          cosign sign --yes \
+            "${DOCKERHUB_REPO}:${TAG}@${DIGEST}" \
+            "${GHCR_REPO}:${TAG}@${DIGEST}"
+
+      # Attached to the digest, not to a tag: the referrer's subject is the exact build a
+      # deployment pins, and a tag can be moved. Attached verbatim — the bytes the generator
+      # wrote, with nothing added afterwards. There is no digest field to fill in; the attachment
+      # to a digest *is* the tie between image and document.
+      #
+      # Two spellings this step is picky about, both of which fail it outright:
+      #
+      #  - the registry is named. `oras` applies no implicit `docker.io` default the way buildx,
+      #    crane and cosign do — it reads the first segment of a bare `user/repo` as a registry
+      #    hostname and tries to resolve it in DNS. Both repositories above carry one for that
+      #    reason.
+      #  - the contract is passed as a relative path from its own directory. `oras` rejects an
+      #    absolute one outright, and `--disable-path-validation` would only trade that for a
+      #    runner path published as the attachment's title annotation.
+      #
+      # Discovery is polled rather than read once. `oras attach` does not report the referrer's
+      # own digest, and Docker Hub's referrers index is eventually consistent: it keeps answering
+      # with an empty index for seconds after the attach returns, and a single read there fails
+      # the release over a contract that is attached.
+      - name: Attach and sign the config contract on both registries
+        env:
+          DIGEST: ${{ steps.manifest.outputs.digest }}
+          ARTIFACT_TYPE: application/vnd.terrace.config-schema.v1+json
+        run: |
+          set -euo pipefail
+          cd /tmp
+
+          for repo in "${DOCKERHUB_REPO}" "${GHCR_REPO}"; do
+            oras attach \
+              --artifact-type "${ARTIFACT_TYPE}" \
+              "${repo}@${DIGEST}" \
+              contract.json:application/json
+
+            referrer=""
+            for attempt in 1 2 3 4 5 6; do
+              if [ "${attempt}" -gt 1 ]; then
+                sleep $(( (attempt - 1) * 5 ))
+              fi
+
+              # `.referrers` is the shape oras 1.3 emits; `.manifests` is accepted so a version
+              # bump that renames the field fails visibly here rather than signing nothing.
+              referrer="$(oras discover --format json \
+                --artifact-type "${ARTIFACT_TYPE}" \
+                "${repo}@${DIGEST}" \
+                | jq -r 'first((.referrers // .manifests // [])[].digest) // empty')"
+
+              if [ -n "${referrer}" ]; then
+                break
+              fi
+            done
+
+            if [ -z "${referrer}" ]; then
+              echo "error: no config-schema referrer on ${repo}@${DIGEST}, 75s after attaching" >&2
+              echo "       one. The registry did not keep it, and an unsigned contract is one" >&2
+              echo "       no deployment will vendor." >&2
+              exit 1
+            fi
+
+            cosign sign --yes "${repo}@${referrer}"
+          done

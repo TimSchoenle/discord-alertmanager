@@ -111,8 +111,8 @@ The same generator writes `docs/config.md`, `docs/config.json` and `config.examp
   Alertmanager cannot be reached, it says so in the administrative channel, as does a route that
   has stopped delivering because the bot lacks a permission in it.
 - The configuration tables below are generated, not written. They come out of the Rust types that
-  load the configuration, as do `config.example.toml` and the JSON Schema, so renaming a key
-  corrects all four in the commit that renames it.
+  load the configuration, as do `config.example.toml`, the JSON Schema and the contract document
+  the image carries, so renaming a key corrects all five in the commit that renames it.
 - A key can arrive from a TOML file, a `DAM_`-prefixed variable, a file in a mounted secrets
   directory, or a `_FILE` variable naming a path. The last two exist because a Kubernetes `Secret`
   arrives as a directory of files, and a key supplied by two of them fails the load instead of
@@ -120,7 +120,28 @@ The same generator writes `docs/config.md`, `docs/config.json` and `config.examp
 
 ## Installation
 
-No image is published and there is no chart yet. Build it from source.
+Each release publishes one multi-platform image, `linux/amd64` and `linux/arm64`, to two
+registries. Both receive the same manifests from the same build, so a digest read from one
+resolves in the other.
+
+```bash
+docker pull timmi6790/{{ repo.name }}:{{ release.tag }}
+docker pull ghcr.io/timschoenle/{{ repo.name }}:{{ release.tag }}
+```
+
+Pin the digest in production. Every published index is signed with cosign against a GitHub OIDC
+identity, and the configuration contract is attached to that digest as an OCI referrer and signed
+alongside it, so an image can be checked without trusting the tag it arrived under:
+
+```bash
+cosign verify ghcr.io/timschoenle/{{ repo.name }}:{{ release.tag }} \
+    --certificate-identity-regexp '^https://github.com/{{ repo.slug }}/\.github/workflows/' \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+There is no chart yet.
+
+From source:
 
 ```bash
 git clone {{ repo.url }}

@@ -6,7 +6,8 @@
 //!
 //! ```bash
 //! cargo xtask db-prepare      # regenerate both .sqlx offline caches
-//! cargo xtask config-docs     # regenerate docs/config.md, docs/config.json, config.example.toml
+//! cargo xtask config-docs     # regenerate docs/config.md, docs/config.json,
+//!                             # docs/config.contract.json and config.example.toml
 //! ```
 
 use std::env;
@@ -68,7 +69,7 @@ enum Task {
     /// query against the resulting schema.
     DbPrepare,
 
-    /// Regenerates the configuration reference, the JSON schema and the example file.
+    /// Regenerates the configuration reference, the JSON schema, the contract and the example.
     ConfigDocs,
 }
 
@@ -159,7 +160,7 @@ async fn prepare(root: &Path, crate_name: &str, database_url: &str) -> Result<()
     .with_context(|| format!("recording {crate_name} queries"))
 }
 
-/// Regenerates the three files that describe the configuration surface.
+/// Regenerates the four files that describe the configuration surface.
 async fn config_docs() -> Result<()> {
     let root = workspace_root()?;
     let docs = root.join("docs");
@@ -172,6 +173,12 @@ async fn config_docs() -> Result<()> {
             CONFIG_REFERENCE_PREAMBLE,
         ),
         ("json-schema", docs.join("config.json"), ""),
+        // The document the container build embeds and the release attaches to the pushed digest.
+        // Committed as well, so a renamed key or a renamed prefix shows up as a diff in the pull
+        // request that renamed it rather than as a label mismatch against an image nobody has
+        // built yet. Rendered without `--version`, `--revision` or `--created`, which is what
+        // keeps this copy identical across rebuilds and across a version bump.
+        ("contract", docs.join("config.contract.json"), ""),
         // The TOML renderer writes its own banner, and a JSON document cannot carry one.
         ("toml", root.join("config.example.toml"), ""),
     ];
