@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.2.0...v0.3.0) (2026-09-01)
+
+
+### Features
+
+* update terrace-config version to v0.9.2 ([c66f203](https://github.com/TimSchoenle/discord-alertmanager/commit/c66f2037655e5b24df910859beb1ef8e6eb44253))
+
+
+### Documentation
+
+* fix readme docker target ([c789692](https://github.com/TimSchoenle/discord-alertmanager/commit/c78969253467a84fab76df954be490a2383fbeea))
+
 ## [0.2.0](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.1.0...v0.2.0) (2026-09-01)
 
 
