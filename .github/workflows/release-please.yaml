@@ -21,7 +21,7 @@ concurrency:
 permissions: { }
 
 env:
-  DOCKERHUB_REPO: docker.io/timmi6790/discord-alertmanager
+  DOCKERHUB_REPO: docker.io/timschoenle/discord-alertmanager
   GHCR_REPO: ghcr.io/timschoenle/discord-alertmanager
 
 jobs:
@@ -147,7 +147,7 @@ jobs:
           build-args: |
             version=${{ needs.release-please.outputs.tag_name }}
             release=${{ needs.release-please.outputs.tag_name }}
-            vendor=Timmi6790
+            vendor=Tim Schönle
             SENTRY_ORG=${{ secrets.SENTRY_ORG }}
             SENTRY_PROJECT=${{ secrets.SENTRY_PROJECT }}
             VERSION=${{ needs.release-please.outputs.tag_name }}

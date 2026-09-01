@@ -339,7 +339,7 @@ jobs:
           build-args: |
             version=test
             release=test
-            vendor=Timmi6790
+            vendor=Tim Schönle
             VERSION=test
           cache-from: type=gha,scope=${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
