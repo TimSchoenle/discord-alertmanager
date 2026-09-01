@@ -813,7 +813,7 @@ dependencies = [
 
 [[package]]
 name = "discord-alertmanager"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -839,7 +839,7 @@ dependencies = [
 
 [[package]]
 name = "discord-alertmanager-am"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -860,7 +860,7 @@ dependencies = [
 
 [[package]]
 name = "discord-alertmanager-config"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "humantime",
@@ -874,7 +874,7 @@ dependencies = [
 
 [[package]]
 name = "discord-alertmanager-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "proptest",
@@ -887,7 +887,7 @@ dependencies = [
 
 [[package]]
 name = "discord-alertmanager-discord"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -913,7 +913,7 @@ dependencies = [
 
 [[package]]
 name = "discord-alertmanager-engine"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -933,7 +933,7 @@ dependencies = [
 
 [[package]]
 name = "discord-alertmanager-ingest"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -957,7 +957,7 @@ dependencies = [
 
 [[package]]
 name = "discord-alertmanager-store"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -970,7 +970,7 @@ dependencies = [
 
 [[package]]
 name = "discord-alertmanager-store-postgres"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -989,7 +989,7 @@ dependencies = [
 
 [[package]]
 name = "discord-alertmanager-store-sqlite"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -4946,7 +4946,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
