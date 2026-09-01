@@ -33,13 +33,14 @@ leaving the client. A silence goes to Alertmanager and stops every receiver, the
 An ignore is bot-local and stops only Discord, which is what "stop pinging #ops at 3am but keep
 paging" actually asks for.
 
-It does not start yet. The webhook listener, the Alertmanager client, the decision pipeline and
-both storage backends are written and covered by tests. The composition root refuses to open a
-store, and `discord-alertmanager-discord` is a crate of design notes with no code under them.
+It has not been released. Every part of it is written and covered by tests — the listener, the
+Alertmanager client, the decision pipeline, both storage backends, the gateway and the commands —
+and it has not yet run anywhere long enough for that to mean what a version number would.
 
 ## Quick start
 
-The configuration surface is the part that is finished, and it renders from a clean checkout:
+Two things need supplying before it does anything: a bot token and somewhere to send its cards.
+Everything else has a default.
 
 ```bash
 git clone https://github.com/TimSchoenle/discord-alertmanager
@@ -82,10 +83,25 @@ The same generator writes `docs/config.md`, `docs/config.json` and `config.examp
   a lease, and the claim is the one query the two backends implement differently:
   `FOR UPDATE SKIP LOCKED` on PostgreSQL, `BEGIN IMMEDIATE` on SQLite.
 - One `Store` trait, one conformance suite, and both backends run it. A behaviour that holds on
-  SQLite and not on PostgreSQL is a failing test rather than a production surprise.
+  SQLite and not on PostgreSQL is a failing test rather than a production surprise. Which backend
+  a process opens is a configuration key, not a build flag, so one binary answers both.
+- A route past its alert threshold stops posting one card per alert and rolls one card per window
+  instead, saying on the card why it did. Discord's per-channel limits are strict enough that an
+  unthrottled storm produces rate-limit responses rather than notifications, and a worse card in a
+  readable channel beats a better one nobody receives.
+- An alert that resolves and fires again minutes later reuses its card and counts the flap. One
+  that comes back a week later gets a new card carrying a link to the old one, because reviving a
+  card that scrolled away days ago tells nobody anything.
+- A route can escalate. A card that stays firing and unacknowledged past its deadline mentions the
+  people the route names, once. The failure this exists for is the quiet one: the message arrived,
+  it scrolled past, and the channel is silent precisely because everybody assumes somebody else
+  took it.
+- A deadman watches the bot itself. When no webhook has arrived inside its window *and*
+  Alertmanager cannot be reached, it says so in the administrative channel, as does a route that
+  has stopped delivering because the bot lacks a permission in it.
 - The configuration tables below are generated, not written. They come out of the Rust types that
-  load the configuration, as do `config.example.toml` and the JSON Schema, so renaming a key
-  corrects all four in the commit that renames it.
+  load the configuration, as do `config.example.toml`, the JSON Schema and the contract document
+  the image carries, so renaming a key corrects all five in the commit that renames it.
 - A key can arrive from a TOML file, a `DAM_`-prefixed variable, a file in a mounted secrets
   directory, or a `_FILE` variable naming a path. The last two exist because a Kubernetes `Secret`
   arrives as a directory of files, and a key supplied by two of them fails the load instead of
@@ -93,7 +109,28 @@ The same generator writes `docs/config.md`, `docs/config.json` and `config.examp
 
 ## Installation
 
-No image is published and there is no chart yet. Build it from source.
+Each release publishes one multi-platform image, `linux/amd64` and `linux/arm64`, to two
+registries. Both receive the same manifests from the same build, so a digest read from one
+resolves in the other.
+
+```bash
+docker pull timmi6790/discord-alertmanager:v0.1.0
+docker pull ghcr.io/timschoenle/discord-alertmanager:v0.1.0
+```
+
+Pin the digest in production. Every published index is signed with cosign against a GitHub OIDC
+identity, and the configuration contract is attached to that digest as an OCI referrer and signed
+alongside it, so an image can be checked without trusting the tag it arrived under:
+
+```bash
+cosign verify ghcr.io/timschoenle/discord-alertmanager:v0.1.0 \
+    --certificate-identity-regexp '^https://github.com/TimSchoenle/discord-alertmanager/\.github/workflows/' \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+There is no chart yet.
+
+From source:
 
 ```bash
 git clone https://github.com/TimSchoenle/discord-alertmanager
@@ -102,16 +139,9 @@ git checkout v0.1.0
 cargo build --release
 ```
 
-Both backends compile in by default. A deployment that runs one has no reason to carry the
-other's driver:
-
-```bash
-cargo build --release --no-default-features --features postgres
-```
-
-The binary refuses to start when its configuration selects a backend the build does not carry.
-That is deliberate, and it is checked at boot rather than at the first query: a container that
-accepts webhooks and drops them is worse than one that will not start.
+Both backends are in every build, and `storage.backend` decides which one a process opens. The
+pool is opened at boot rather than at the first query: a container that accepts webhooks and drops
+them is worse than one that will not start.
 
 ## Usage
 
@@ -125,8 +155,7 @@ DAM_ALERTMANAGER__ENDPOINTS='["http://alertmanager:9093"]' \
     cargo run -p discord-alertmanager
 ```
 
-Today that reaches the store and stops there, because the composition root does not yet build one.
-Point Alertmanager at the listener with an ordinary `webhook_config` receiver once it does:
+Point Alertmanager at the listener with an ordinary `webhook_config` receiver:
 
 ```yaml
 receivers:
@@ -207,8 +236,17 @@ because a configuration error is the failure most worth seeing and it happens be
 configuration to describe how to report it. `DAM_LOG_FORMAT=json` switches the subscriber to JSON
 for a log aggregator.
 
+Five things run on their own clocks beside the listener: the reconciler, the silence sync, the
+lease janitor, the escalation sweep and the retention pruner. Each has its own interval key, a
+failed pass is logged rather than retried early, and the next tick is the retry.
+
+`observability.admin_channel_id` is where the bot reports on itself. Leaving it unset is
+supported and silences both notices, which is the right choice only where something else is
+watching the process.
+
 `SIGTERM` and `SIGINT` both cancel the shutdown token. In-flight requests are given a bounded
-drain before the listener stops.
+drain before the listener stops, and every dispatcher finishes the item it holds rather than
+leaving a claimed row for its lease to release.
 
 ## Compatibility
 
@@ -226,6 +264,7 @@ floor, and it comes from `terrace-config`, which declares the highest MSRV in th
 
 | Document | Purpose |
 | --- | --- |
+| [docs/config.contract.json](docs/config.contract.json) | — |
 | [docs/config.json](docs/config.json) | — |
 | [Configuration reference](docs/config.md) | Every key the service reads, and the variables that decide where those keys come from. |
 
