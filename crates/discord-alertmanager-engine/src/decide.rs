@@ -13,13 +13,21 @@ use dam_core::{
 };
 use dam_store::{
     CardUpdate, ChannelId, Decision, Effect, ForumPolicy, GroupStrategy, NewNotification,
-    NewOutboxItem, Notification, PlannedCard, Route, RouteTarget,
+    NewOutboxItem, Notification, NotificationId, PlannedCard, Route, RouteTarget,
 };
 
 use crate::routing::RoutingSnapshot;
+use crate::storm::StormState;
 
 /// Discord's cap on tags applied to one forum post.
 const MAX_APPLIED_TAGS: usize = 5;
+
+/// The longest Discord will leave a thread unarchived: one week.
+///
+/// What a firing alert holds, whatever its route asks for. An incident that runs into a second
+/// day should not have its thread close underneath the people working it, and the route's own
+/// window is about the quiet that follows rather than the incident itself.
+const MAX_AUTO_ARCHIVE: u32 = 10_080;
 
 /// The knobs the decision reads, all of them from the engine's configuration section.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,6 +41,12 @@ pub struct DecisionSettings {
 
     /// How long one digest card covers.
     pub digest_window: Duration,
+
+    /// Minutes of inactivity after which a thread that is no longer firing archives.
+    ///
+    /// Only ever applied to a card that has stopped firing. A live one holds Discord's maximum,
+    /// because the thread is where the incident is being worked.
+    pub archive_after_minutes: u32,
 }
 
 impl Default for DecisionSettings {
@@ -40,6 +54,7 @@ impl Default for DecisionSettings {
         Self {
             debounce: Duration::seconds(3),
             digest_window: Duration::minutes(5),
+            archive_after_minutes: 1440,
         }
     }
 }
@@ -55,10 +70,18 @@ pub type ExistingCards = HashMap<(ChannelId, DedupeKey), Notification>;
 /// The three questions, in order: which routes want this alert, is any of them muted by an ignore
 /// rule, and does each route already have a card for it. Everything else — mentions, tags, pins,
 /// thread notes, archiving — follows from the answers.
+///
+/// `storm` decides only one of them, and it decides it before the rest: a route over its
+/// threshold posts a new alert onto the window's rolling card rather than one of its own.
+///
+/// # Panics
+///
+/// Never: [`dedupe_keys`] returns at least one key for every route.
 #[must_use]
 pub fn decide(
     delta: &AlertDelta,
     snapshot: &RoutingSnapshot,
+    storm: &StormState,
     existing: &ExistingCards,
     acknowledged: bool,
     settings: &DecisionSettings,
@@ -74,38 +97,73 @@ pub fn decide(
 
     for route in snapshot.resolve(labels, severity) {
         let channel = delivery_channel(&route.target);
-        let key = dedupe_key(delta, route, settings, now);
         let ignore = snapshot.ignore_for(route.guild_id, channel, labels, now);
+        let mut keys = dedupe_keys(delta, route, storm, settings, now);
 
-        match existing.get(&(channel, key.clone())) {
-            Some(card) => {
-                if let Some(update) = update_for(
-                    delta,
-                    route,
-                    snapshot,
-                    card,
-                    ignore.is_some(),
-                    acknowledged,
-                    settings,
-                    now,
-                ) {
-                    decision.updates.push(update);
-                }
+        let held = keys
+            .iter()
+            .find_map(|key| existing.get(&(channel, key.clone())));
+
+        if let Some(card) = held {
+            if let Some(update) = update_for(
+                delta,
+                route,
+                snapshot,
+                card,
+                ignore.is_some(),
+                acknowledged,
+                settings,
+                now,
+            ) {
+                decision.updates.push(update);
             }
-            None => {
-                if let Some(planned) =
-                    creation_for(delta, route, channel, key, ignore.is_some(), severity, now)
-                {
-                    decision.new_cards.push(planned);
-                }
-            }
+
+            continue;
+        }
+
+        // The last key rather than the first: with nothing to edit, a storming route posts into
+        // its digest and a quiet one posts a card of its own.
+        let key = keys.pop().expect("every route has at least one key");
+
+        if let Some(planned) = creation_for(
+            delta,
+            route,
+            channel,
+            key,
+            ignore.is_some(),
+            severity,
+            superseded(delta, channel, existing),
+            now,
+        ) {
+            decision.new_cards.push(planned);
         }
     }
 
     decision
 }
 
+/// The card a new episode's card replaces, when the caller read one.
+///
+/// Only ever the immediately preceding episode. An alert that has flapped in and out for a month
+/// has a chain of cards behind it, and a card linking to the one before it walks that chain one
+/// step at a time, which is what somebody following it actually wants.
+fn superseded(
+    delta: &AlertDelta,
+    channel: ChannelId,
+    existing: &ExistingCards,
+) -> Option<NotificationId> {
+    let previous = delta.episode.checked_sub(1)?;
+    let key = DedupeKey::per_alert(&delta.alert.fingerprint, previous);
+
+    existing.get(&(channel, key)).map(|card| card.id)
+}
+
 /// The card to create for a route that has none, if one is warranted.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "every argument is an independent input to a pure function; bundling them into a \
+              context struct would only move the same list one line up"
+)]
 fn creation_for(
     delta: &AlertDelta,
     route: &Route,
@@ -113,6 +171,7 @@ fn creation_for(
     key: DedupeKey,
     ignored: bool,
     severity: Severity,
+    supersedes: Option<NotificationId>,
     now: DateTime<Utc>,
 ) -> Option<PlannedCard> {
     // A muted alert gets no card at all. It still has its row and still answers `/alerts list`;
@@ -133,10 +192,12 @@ fn creation_for(
     Some(PlannedCard {
         card: NewNotification {
             dedupe_key: key,
+            fingerprint: delta.alert.fingerprint.clone(),
             route_id: route.id,
             guild_id: route.guild_id,
             channel_id: channel,
             state,
+            supersedes,
             created_at: now,
         },
         // Mentions happen on the way into firing and never again. A silenced first sighting does
@@ -194,7 +255,7 @@ fn update_for(
                 notification: card.id,
                 archived: false,
                 locked: false,
-                auto_archive_minutes: auto_archive_minutes(route),
+                auto_archive_minutes: auto_archive_minutes(route, effective, settings),
             },
             card,
             now,
@@ -233,9 +294,14 @@ fn update_for(
                     notification: card.id,
                     archived: true,
                     locked: policy.lock_on_resolve,
-                    // An hour, not a week: the incident is over, and a resolved post that lingers
-                    // at the top of the index buries the ones that are not.
-                    auto_archive_minutes: 60,
+                    // The route's own window rather than a week: the incident is over, and a
+                    // resolved post that lingers at the top of the index buries the ones that
+                    // are not.
+                    auto_archive_minutes: auto_archive_minutes(
+                        route,
+                        NotificationState::Resolved,
+                        settings,
+                    ),
                 },
                 card,
                 now,
@@ -245,6 +311,7 @@ fn update_for(
 
     Some(CardUpdate {
         id: card.id,
+        fingerprint: delta.alert.fingerprint.clone(),
         state,
         effects,
     })
@@ -274,7 +341,7 @@ fn forum_effects(
             channel,
             policy,
             effective,
-            delta,
+            delta.alert.severity(),
             &delta.alert.labels,
         );
 
@@ -333,7 +400,8 @@ fn immediate(effect: Effect, card: &Notification, now: DateTime<Utc>) -> NewOutb
 /// A direct message has no channel until one is opened, so the user's own id stands in. It is
 /// unique, it is stable, and it keeps the card's uniqueness constraint working without a second
 /// nullable column that means "or a user".
-fn delivery_channel(target: &RouteTarget) -> ChannelId {
+#[must_use]
+pub fn delivery_channel(target: &RouteTarget) -> ChannelId {
     match target {
         RouteTarget::Text { channel, .. } | RouteTarget::Forum { channel, .. } => *channel,
         RouteTarget::Thread { thread } => *thread,
@@ -341,34 +409,91 @@ fn delivery_channel(target: &RouteTarget) -> ChannelId {
     }
 }
 
-/// What a card on this route is keyed by.
-fn dedupe_key(
+/// Every key a card for this alert on this route could be under, least preferred last.
+///
+/// One key ordinarily. Two while a route is over its storm threshold, because a card that already
+/// exists keeps its own key and only an alert without one joins the digest. The strategy says how
+/// an operator wants the route to read; the threshold is the point at which Discord stops letting
+/// it read that way at all, and one rolling card is what is left.
+#[must_use]
+pub fn dedupe_keys(
     delta: &AlertDelta,
     route: &Route,
+    storm: &StormState,
+    settings: &DecisionSettings,
+    now: DateTime<Utc>,
+) -> Vec<DedupeKey> {
+    let configured = match route.group_strategy {
+        GroupStrategy::PerGroup => delta.per_group_key(),
+        // The per-alert key carries the episode, so an alert that re-fired after a whole regroup
+        // window of quiet resolves to a key no card holds yet and is posted afresh.
+        GroupStrategy::PerAlert => delta.per_alert_key(),
+        GroupStrategy::Digest => return vec![digest_key(route, settings, now)],
+    };
+
+    if !storm.is_storming(route) {
+        return vec![configured];
+    }
+
+    // Two, in this order, and the order is the point. An alert that already has a card goes on
+    // being edited on it even while the route digests: freezing a live card halfway through an
+    // incident because its route got busy would leave it saying "firing" long after the alert had
+    // stopped. Only an alert with no card yet is folded into the digest, which is exactly the load
+    // the digest exists to shed.
+    vec![configured, digest_key(route, settings, now)]
+}
+
+/// The key a card takes when this alert reaches this route with no card of its own.
+///
+/// The last of [`dedupe_keys`], which is the digest while a route is storming and its configured
+/// key otherwise.
+///
+/// # Panics
+///
+/// Never: [`dedupe_keys`] returns at least one key for every route.
+#[must_use]
+pub fn dedupe_key(
+    delta: &AlertDelta,
+    route: &Route,
+    storm: &StormState,
     settings: &DecisionSettings,
     now: DateTime<Utc>,
 ) -> DedupeKey {
-    match route.group_strategy {
-        GroupStrategy::PerAlert => delta.per_alert_key(),
-        GroupStrategy::PerGroup => delta.per_group_key(),
-        GroupStrategy::Digest => {
-            let window = settings.digest_window.num_seconds().max(1);
-            let start = now.timestamp() - now.timestamp().rem_euclid(window);
-            DedupeKey::digest(
-                route.id.get(),
-                DateTime::from_timestamp(start, 0).unwrap_or(now),
-            )
-        }
-    }
+    dedupe_keys(delta, route, storm, settings, now)
+        .pop()
+        .expect("every route has at least one key")
 }
 
-/// How long a post on this route may sit idle before Discord archives it.
-fn auto_archive_minutes(route: &Route) -> u32 {
+/// The rolling key one window on one route shares.
+fn digest_key(route: &Route, settings: &DecisionSettings, now: DateTime<Utc>) -> DedupeKey {
+    let window = settings.digest_window.num_seconds().max(1);
+    let start = now.timestamp() - now.timestamp().rem_euclid(window);
+
+    DedupeKey::digest(
+        route.id.get(),
+        DateTime::from_timestamp(start, 0).unwrap_or(now),
+    )
+}
+
+/// How long a post on this route may sit idle before Discord archives it, given where it stands.
+///
+/// A card that is still live holds Discord's maximum whatever the route asks for: the window
+/// belongs to the quiet after an incident, and a thread that archives during one takes the
+/// discussion with it. Everything else takes the route's window, or the deployment's where the
+/// route names none.
+fn auto_archive_minutes(
+    route: &Route,
+    state: NotificationState,
+    settings: &DecisionSettings,
+) -> u32 {
+    if state != NotificationState::Resolved && state != NotificationState::Orphaned {
+        return MAX_AUTO_ARCHIVE;
+    }
+
     match &route.target {
         RouteTarget::Forum { policy, .. } => policy.auto_archive_minutes,
         RouteTarget::Text { thread, .. } => thread.archive_after_minutes,
-        // A week, so a long incident never archives underneath the people working it.
-        RouteTarget::Thread { .. } | RouteTarget::Dm { .. } => 10_080,
+        RouteTarget::Thread { .. } | RouteTarget::Dm { .. } => settings.archive_after_minutes,
     }
 }
 
@@ -376,12 +501,13 @@ fn auto_archive_minutes(route: &Route) -> u32 {
 ///
 /// State first, then severity, then label values: when the five slots run out, the tag dropped is
 /// the one an operator scanning the index is least likely to be reading.
-fn desired_tags(
+#[must_use]
+pub fn desired_tags(
     snapshot: &RoutingSnapshot,
     channel: ChannelId,
     policy: &ForumPolicy,
     state: NotificationState,
-    delta: &AlertDelta,
+    severity: Severity,
     labels: &Labels,
 ) -> Vec<dam_store::TagId> {
     let mut names = Vec::new();
@@ -394,7 +520,7 @@ fn desired_tags(
     });
 
     if policy.severity_tags {
-        names.push(delta.alert.severity().as_str().to_owned());
+        names.push(severity.as_str().to_owned());
     }
 
     for label in &policy.label_tags {
@@ -510,6 +636,7 @@ mod tests {
                 group_key: None,
             },
             flap_count: 0,
+            episode: 0,
             observed_at: now(),
         }
     }
@@ -532,6 +659,7 @@ mod tests {
                 users: Vec::new(),
                 min_severity: Some(Severity::Critical),
             },
+            escalation: None,
             priority: 100,
             continue_to_next: false,
             source: RouteSource::Config,
@@ -587,6 +715,7 @@ mod tests {
         Notification {
             id: NotificationId::new(7),
             dedupe_key: key.clone(),
+            fingerprint: Fingerprint::new("deadbeef").expect("the fingerprint is hexadecimal"),
             route_id: RouteId::new(1),
             guild_id: GuildId::new(1),
             channel_id: channel,
@@ -599,10 +728,21 @@ mod tests {
             pinned: false,
             archived: false,
             responded_at: None,
+            escalated_at: None,
+            supersedes: None,
             reply_count: 0,
             created_at: now(),
             updated_at: now(),
         }
+    }
+
+    /// A storm state in which no route is over its threshold.
+    ///
+    /// What every test that is not about storms wants, and the reason it is a function rather
+    /// than a constant: the thresholds are the configuration's own, so a test that does care
+    /// reads the same numbers a deployment would.
+    fn quiet() -> StormState {
+        StormState::empty(50, 20, Duration::seconds(60))
     }
 
     fn kinds(update: &CardUpdate) -> Vec<&'static str> {
@@ -613,6 +753,276 @@ mod tests {
             .collect()
     }
 
+    /// A storm state in which the one route under test is well past its threshold.
+    fn storming() -> StormState {
+        StormState::new(
+            std::iter::once((RouteId::new(1), 500)).collect(),
+            50,
+            20,
+            Duration::seconds(60),
+        )
+    }
+
+    #[test]
+    fn a_storming_route_is_keyed_as_a_digest_whatever_it_was_configured_as() {
+        let route = text_route();
+        let delta = delta(EventKind::Fired, AlertStatus::Firing, AmState::Active);
+
+        assert_eq!(
+            dedupe_key(
+                &delta,
+                &route,
+                &quiet(),
+                &DecisionSettings::default(),
+                now()
+            ),
+            delta.per_alert_key(),
+            "a quiet per-alert route keeps its own card per alert"
+        );
+
+        let key = dedupe_key(
+            &delta,
+            &route,
+            &storming(),
+            &DecisionSettings::default(),
+            now(),
+        );
+
+        assert_ne!(key, delta.per_alert_key());
+        assert!(
+            key.as_str().starts_with("d:"),
+            "past the threshold the route rolls one card per window: {key:?}"
+        );
+    }
+
+    #[test]
+    fn a_card_that_already_exists_survives_its_route_digesting() {
+        let route = text_route();
+        let channel = ChannelId::new(100);
+        let snapshot = RoutingSnapshot::new(vec![route], Vec::new(), Vec::new());
+
+        let key = DedupeKey::per_alert(
+            &Fingerprint::new("0123456789abcdef").expect("hex is a fingerprint"),
+            0,
+        );
+        let mut existing = ExistingCards::new();
+        existing.insert(
+            (channel, key.clone()),
+            card(NotificationState::Firing, channel, &key),
+        );
+
+        let decision = decide(
+            &delta(EventKind::Resolved, AlertStatus::Resolved, AmState::Active),
+            &snapshot,
+            &storming(),
+            &existing,
+            false,
+            &DecisionSettings::default(),
+            now(),
+        );
+
+        assert!(
+            decision.new_cards.is_empty(),
+            "an alert with a card of its own is not folded into the digest"
+        );
+        assert_eq!(
+            decision.updates.len(),
+            1,
+            "and its card still learns that the alert resolved, rather than freezing on `firing`"
+        );
+        assert_eq!(decision.updates[0].state, Some(NotificationState::Resolved));
+    }
+
+    #[test]
+    fn every_alert_in_one_window_lands_on_one_digest_card() {
+        let route = text_route();
+        let settings = DecisionSettings::default();
+        let first = delta(EventKind::Fired, AlertStatus::Firing, AmState::Active);
+        let mut second = first.clone();
+        second.alert.fingerprint =
+            Fingerprint::new("fedcba9876543210").expect("hex is a fingerprint");
+
+        assert_eq!(
+            dedupe_key(&first, &route, &storming(), &settings, now()),
+            dedupe_key(&second, &route, &storming(), &settings, now()),
+            "two alerts inside one window are one card, which is the whole point of a digest"
+        );
+    }
+
+    #[test]
+    fn a_digest_window_rolls_over() {
+        let route = text_route();
+        let settings = DecisionSettings::default();
+        let delta = delta(EventKind::Fired, AlertStatus::Firing, AmState::Active);
+
+        assert_ne!(
+            dedupe_key(&delta, &route, &storming(), &settings, now()),
+            dedupe_key(
+                &delta,
+                &route,
+                &storming(),
+                &settings,
+                now() + settings.digest_window,
+            ),
+            "the next window is the next card, not an ever-growing one"
+        );
+    }
+
+    #[test]
+    fn a_new_episode_links_back_to_the_card_it_replaced() {
+        let route = text_route();
+        let channel = ChannelId::new(100);
+        let snapshot = RoutingSnapshot::new(vec![route], Vec::new(), Vec::new());
+
+        let mut delta = delta(EventKind::Fired, AlertStatus::Firing, AmState::Active);
+        delta.episode = 1;
+
+        let previous = DedupeKey::per_alert(&delta.alert.fingerprint, 0);
+        let mut existing = ExistingCards::new();
+        existing.insert(
+            (channel, previous.clone()),
+            card(NotificationState::Resolved, channel, &previous),
+        );
+
+        let decision = decide(
+            &delta,
+            &snapshot,
+            &quiet(),
+            &existing,
+            false,
+            &DecisionSettings::default(),
+            now(),
+        );
+
+        assert_eq!(
+            decision.new_cards.len(),
+            1,
+            "the resolved card of the last episode is not edited back to firing"
+        );
+        assert_eq!(
+            decision.new_cards[0].card.supersedes,
+            Some(NotificationId::new(7)),
+            "the replacement carries the link to what it replaced"
+        );
+        assert_eq!(
+            decision.new_cards[0].card.dedupe_key,
+            DedupeKey::per_alert(&delta.alert.fingerprint, 1)
+        );
+    }
+
+    #[test]
+    fn a_first_episode_supersedes_nothing() {
+        let snapshot = RoutingSnapshot::new(vec![text_route()], Vec::new(), Vec::new());
+        let delta = delta(EventKind::Fired, AlertStatus::Firing, AmState::Active);
+
+        let decision = decide(
+            &delta,
+            &snapshot,
+            &quiet(),
+            &ExistingCards::new(),
+            false,
+            &DecisionSettings::default(),
+            now(),
+        );
+
+        assert_eq!(decision.new_cards[0].card.supersedes, None);
+    }
+
+    #[test]
+    fn a_resolved_forum_post_archives_on_the_configured_window() {
+        let route = forum_route();
+        let channel = ChannelId::new(200);
+        let snapshot = RoutingSnapshot::new(vec![route], Vec::new(), forum_tags());
+
+        let key = DedupeKey::per_alert(
+            &Fingerprint::new("0123456789abcdef").expect("hex is a fingerprint"),
+            0,
+        );
+        let mut existing = ExistingCards::new();
+        existing.insert(
+            (channel, key.clone()),
+            card(NotificationState::Firing, channel, &key),
+        );
+
+        let settings = DecisionSettings {
+            archive_after_minutes: 4_320,
+            ..DecisionSettings::default()
+        };
+
+        let decision = decide(
+            &delta(EventKind::Resolved, AlertStatus::Resolved, AmState::Active),
+            &snapshot,
+            &quiet(),
+            &existing,
+            false,
+            &settings,
+            now(),
+        );
+
+        let archive = decision.updates[0]
+            .effects
+            .iter()
+            .find_map(|item| match item.effect {
+                Effect::SetFlags {
+                    archived: true,
+                    auto_archive_minutes,
+                    ..
+                } => Some(auto_archive_minutes),
+                _ => None,
+            })
+            .expect("a resolved post on this route archives");
+
+        assert_eq!(
+            archive, 10_080,
+            "the route's own window wins over the deployment's default"
+        );
+    }
+
+    #[test]
+    fn a_reopened_card_holds_the_maximum_archive_window() {
+        let route = text_route();
+        let channel = ChannelId::new(100);
+        let snapshot = RoutingSnapshot::new(vec![route], Vec::new(), Vec::new());
+
+        let key = DedupeKey::per_alert(
+            &Fingerprint::new("0123456789abcdef").expect("hex is a fingerprint"),
+            0,
+        );
+        let mut archived = card(NotificationState::Resolved, channel, &key);
+        archived.archived = true;
+
+        let mut existing = ExistingCards::new();
+        existing.insert((channel, key.clone()), archived);
+
+        let decision = decide(
+            &delta(EventKind::Fired, AlertStatus::Firing, AmState::Active),
+            &snapshot,
+            &quiet(),
+            &existing,
+            false,
+            &DecisionSettings::default(),
+            now(),
+        );
+
+        let reopen = decision.updates[0]
+            .effects
+            .iter()
+            .find_map(|item| match item.effect {
+                Effect::SetFlags {
+                    archived: false,
+                    auto_archive_minutes,
+                    ..
+                } => Some(auto_archive_minutes),
+                _ => None,
+            })
+            .expect("an archived card is reopened before it is edited");
+
+        assert_eq!(
+            reopen, 10_080,
+            "a card that is firing again holds Discord's maximum, whatever its route asks for"
+        );
+    }
+
     #[test]
     fn a_new_firing_alert_produces_one_card_and_one_mention() {
         let snapshot = RoutingSnapshot::new(vec![text_route()], Vec::new(), Vec::new());
@@ -621,6 +1031,7 @@ mod tests {
         let decision = decide(
             &delta,
             &snapshot,
+            &quiet(),
             &ExistingCards::new(),
             false,
             &DecisionSettings::default(),
@@ -641,6 +1052,7 @@ mod tests {
         let decision = decide(
             &delta,
             &snapshot,
+            &quiet(),
             &ExistingCards::new(),
             false,
             &DecisionSettings::default(),
@@ -671,6 +1083,7 @@ mod tests {
         let decision = decide(
             &delta,
             &snapshot,
+            &quiet(),
             &ExistingCards::new(),
             false,
             &DecisionSettings::default(),
@@ -688,6 +1101,7 @@ mod tests {
         let decision = decide(
             &delta,
             &snapshot,
+            &quiet(),
             &ExistingCards::new(),
             false,
             &DecisionSettings::default(),
@@ -716,6 +1130,7 @@ mod tests {
         let decision = decide(
             &delta,
             &snapshot,
+            &quiet(),
             &existing,
             false,
             &DecisionSettings::default(),
@@ -744,7 +1159,15 @@ mod tests {
             ..DecisionSettings::default()
         };
 
-        let decision = decide(&delta, &snapshot, &existing, false, &settings, now());
+        let decision = decide(
+            &delta,
+            &snapshot,
+            &quiet(),
+            &existing,
+            false,
+            &settings,
+            now(),
+        );
 
         assert_eq!(
             decision.updates[0].effects[0].not_before,
@@ -766,6 +1189,7 @@ mod tests {
         let decision = decide(
             &delta,
             &snapshot,
+            &quiet(),
             &existing,
             false,
             &DecisionSettings::default(),
@@ -802,6 +1226,7 @@ mod tests {
         let decision = decide(
             &delta,
             &snapshot,
+            &quiet(),
             &existing,
             false,
             &DecisionSettings::default(),
@@ -831,6 +1256,7 @@ mod tests {
         let decision = decide(
             &delta,
             &snapshot,
+            &quiet(),
             &existing,
             true,
             &DecisionSettings::default(),
@@ -866,6 +1292,7 @@ mod tests {
         let decision = decide(
             &delta,
             &snapshot,
+            &quiet(),
             &existing,
             false,
             &DecisionSettings::default(),
@@ -902,6 +1329,7 @@ mod tests {
         let decision = decide(
             &delta,
             &snapshot,
+            &quiet(),
             &existing,
             false,
             &DecisionSettings::default(),

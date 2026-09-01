@@ -1,7 +1,9 @@
 //! Routes, ignore rules, subscriptions, and the forum tag cache.
 
+use std::str::FromStr;
+
 use chrono::{DateTime, Utc};
-use dam_core::{Labels, MatcherSet, Severity};
+use dam_core::{CoreError, Labels, MatcherSet, Severity};
 use serde::{Deserialize, Serialize};
 
 use crate::ids::{ChannelId, GuildId, IgnoreId, RoleId, RouteId, SubscriptionId, TagId, UserId};
@@ -39,6 +41,21 @@ impl RouteSource {
     }
 }
 
+impl FromStr for RouteSource {
+    type Err = CoreError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "config" => Ok(Self::Config),
+            "discord" => Ok(Self::Discord),
+            other => Err(CoreError::UnknownVariant {
+                kind: "route source",
+                value: other.to_owned(),
+            }),
+        }
+    }
+}
+
 /// One routing rule, as it is stored and as the pipeline evaluates it.
 ///
 /// Holds a compiled [`MatcherSet`] rather than the expression alone, so evaluating a route against
@@ -72,6 +89,9 @@ pub struct Route {
 
     /// Who is mentioned on a new firing alert.
     pub mentions: Mentions,
+
+    /// When and to whom this route escalates a card nobody has taken.
+    pub escalation: Option<Escalation>,
 
     /// Evaluation order. Lower runs first.
     pub priority: i32,
@@ -139,6 +159,22 @@ impl GroupStrategy {
             Self::PerAlert => "per_alert",
             Self::PerGroup => "per_group",
             Self::Digest => "digest",
+        }
+    }
+}
+
+impl FromStr for GroupStrategy {
+    type Err = CoreError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "per_alert" => Ok(Self::PerAlert),
+            "per_group" => Ok(Self::PerGroup),
+            "digest" => Ok(Self::Digest),
+            other => Err(CoreError::UnknownVariant {
+                kind: "group strategy",
+                value: other.to_owned(),
+            }),
         }
     }
 }
@@ -335,6 +371,44 @@ impl Mentions {
     }
 }
 
+/// When a route escalates a card nobody has acknowledged, and who hears about it.
+///
+/// A firing alert nobody takes is the failure a chat notification is worst at: the message is
+/// there, it scrolled past, and the channel is quiet precisely because everybody assumes somebody
+/// else has it. The escalation is one mentioning note in the card's thread, sent once, and the
+/// card records that it was sent.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Escalation {
+    /// Seconds a card may stay firing and unacknowledged before it escalates.
+    pub after_secs: u64,
+
+    /// Roles the escalation mentions.
+    pub roles: Vec<RoleId>,
+
+    /// Users the escalation mentions.
+    pub users: Vec<UserId>,
+}
+
+impl Escalation {
+    /// How long a card may stay unanswered, as a duration.
+    ///
+    /// Floored at a second, because a policy of zero would escalate every alert at the moment it
+    /// fired, which is the mention the card itself already carries.
+    #[must_use]
+    pub fn after(&self) -> chrono::Duration {
+        chrono::Duration::seconds(i64::try_from(self.after_secs.max(1)).unwrap_or(i64::MAX))
+    }
+
+    /// Whether there is anybody for an escalation to reach.
+    ///
+    /// A policy naming nobody is a policy that would post an unaddressed line into a thread the
+    /// people who need it are not reading.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.roles.is_empty() && self.users.is_empty()
+    }
+}
+
 /// A bot-local mute.
 ///
 /// An ignored alert still gets its row, still appears in `/alerts list`, and still fires
@@ -420,6 +494,21 @@ impl IgnoreScope {
     }
 }
 
+impl FromStr for IgnoreScope {
+    type Err = CoreError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "guild" => Ok(Self::Guild),
+            "channel" => Ok(Self::Channel),
+            other => Err(CoreError::UnknownVariant {
+                kind: "ignore scope",
+                value: other.to_owned(),
+            }),
+        }
+    }
+}
+
 /// A personal direct-message subscription.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Subscription {
@@ -499,6 +588,7 @@ mod tests {
             },
             group_strategy: GroupStrategy::default(),
             mentions: Mentions::default(),
+            escalation: None,
             priority: 100,
             continue_to_next: false,
             source: RouteSource::Config,

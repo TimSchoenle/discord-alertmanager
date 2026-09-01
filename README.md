@@ -226,7 +226,6 @@ floor, and it comes from `terrace-config`, which declares the highest MSRV in th
 
 | Document | Purpose |
 | --- | --- |
-| [Alertward — Implementation Plan](docs/Design.MD) | A Rust Discord application that is a full operator surface for Prometheus Alertmanager: |
 | [docs/config.json](docs/config.json) | — |
 | [Configuration reference](docs/config.md) | Every key the service reads, and the variables that decide where those keys come from. |
 

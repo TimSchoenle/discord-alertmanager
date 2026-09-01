@@ -1,6 +1,9 @@
 //! The audit log and the retention policy that keeps it while pruning everything else.
 
+use std::str::FromStr;
+
 use chrono::{DateTime, Duration, Utc};
+use dam_core::CoreError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -82,6 +85,22 @@ impl AuditResult {
             Self::Ok => "ok",
             Self::Denied => "denied",
             Self::Error => "error",
+        }
+    }
+}
+
+impl FromStr for AuditResult {
+    type Err = CoreError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "ok" => Ok(Self::Ok),
+            "denied" => Ok(Self::Denied),
+            "error" => Ok(Self::Error),
+            other => Err(CoreError::UnknownVariant {
+                kind: "audit result",
+                value: other.to_owned(),
+            }),
         }
     }
 }

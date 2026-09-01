@@ -19,12 +19,12 @@ default-run = "discord-alertmanager"
 name = "discord-alertmanager"
 path = "src/main.rs"
 
-[features]
-default = ["postgres", "sqlite"]
-postgres = ["dep:dam-store-postgres"]
-sqlite = ["dep:dam-store-sqlite"]
-
 # The composition root, and the only crate allowed to carry `anyhow` (`deny.toml` enforces that).
+#
+# Both backends are linked unconditionally. Which one a process opens is `storage.backend`, and
+# nothing else: one artefact answers every deployment, and a binary that had to be rebuilt to
+# change database would make the choice a property of the build rather than of the environment it
+# runs in.
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
@@ -36,8 +36,9 @@ dam-discord.workspace = true
 dam-engine.workspace = true
 dam-ingest.workspace = true
 dam-store.workspace = true
-dam-store-postgres = { workspace = true, optional = true }
-dam-store-sqlite = { workspace = true, optional = true }
+dam-store-postgres.workspace = true
+dam-store-sqlite.workspace = true
+metrics.workspace = true
 # The recorder is global state, so it is installed here and in no library.
 metrics-exporter-prometheus.workspace = true
 terrace-config = { workspace = true, features = ["explain", "reload"] }

@@ -35,6 +35,7 @@ pub mod conformance;
 pub mod alerts;
 pub mod audit;
 pub mod ids;
+pub mod logic;
 pub mod notifications;
 pub mod outbox;
 pub mod routing;
@@ -51,13 +52,20 @@ pub use ids::{
     AckId, ChannelId, GuildId, IgnoreId, MessageId, NotificationId, OutboxId, RoleId, RouteId,
     Snowflake, SubscriptionId, TagId, UserId, WorkerId,
 };
-pub use notifications::{
-    AckCommand, AckKind, AckOutcome, NewNotification, Notification, ThreadReply,
+pub use logic::{
+    IN_MEMORY_SCAN_LIMIT, Transition, classify, matches_regex_matchers, needs_in_memory_filter,
+    severities_at_or_above, suppression_map,
 };
-pub use outbox::{AppliedEffect, ClaimRequest, Effect, NewOutboxItem, OutboxItem, SilenceEffect};
+pub use notifications::{
+    AckCommand, AckKind, AckOutcome, Acknowledgement, NewNotification, Notification, ThreadReply,
+};
+pub use outbox::{
+    AppliedEffect, ClaimRequest, Effect, LaneAssignment, NewOutboxItem, OUTBOX_LANES, OutboxItem,
+    SilenceEffect,
+};
 pub use routing::{
-    ForumPolicy, ForumTag, GroupStrategy, IgnoreRule, IgnoreScope, Mentions, Route, RouteSource,
-    RouteTarget, StateTags, Subscription, ThreadKind, ThreadPolicy, ThreadTrigger,
+    Escalation, ForumPolicy, ForumTag, GroupStrategy, IgnoreRule, IgnoreScope, Mentions, Route,
+    RouteSource, RouteTarget, StateTags, Subscription, ThreadKind, ThreadPolicy, ThreadTrigger,
 };
 
 use async_trait::async_trait;
@@ -101,11 +109,13 @@ pub trait Store: Send + Sync + 'static {
     /// As [`Store::ingest_batch`].
     async fn query_alerts(&self, query: &AlertQuery) -> Result<Page<AlertRecord>, StoreError>;
 
-    /// Fingerprints the local state calls firing that Alertmanager no longer reports.
+    /// The alerts this database calls firing that Alertmanager no longer reports.
     ///
-    /// The reconciler's half of converging after an outage. Alertmanager forgetting an alert is
-    /// how a lost `resolved` webhook is detected, and requiring two consecutive polls to agree is
-    /// what stops a single failed request from resolving everything at once.
+    /// The reconciler's half of converging after an outage: Alertmanager forgetting an alert is
+    /// how a lost `resolved` webhook is detected. `cutoff` is the age an alert must exceed to
+    /// count as missing, and passing the start of the *previous* poll is what makes it take two
+    /// consecutive polls to agree — which is what stops one failed request from resolving
+    /// everything at once.
     ///
     /// # Errors
     ///
@@ -113,7 +123,7 @@ pub trait Store: Send + Sync + 'static {
     async fn firing_not_in(
         &self,
         present: &[Fingerprint],
-        now: DateTime<Utc>,
+        cutoff: DateTime<Utc>,
     ) -> Result<Vec<AlertRecord>, StoreError>;
 
     /// Records the decision to notify, and enqueues the effects, in one transaction.
@@ -127,6 +137,21 @@ pub trait Store: Send + Sync + 'static {
     /// Returns [`StoreError::Conflict`] when another worker created the same card first, which
     /// the caller resolves by re-reading rather than by retrying.
     async fn apply_decision(&self, decision: &Decision) -> Result<Vec<NotificationId>, StoreError>;
+
+    /// Queues effects that belong to no card.
+    ///
+    /// A silence a person asked for is the case: it changes Alertmanager rather than a message, so
+    /// there is no card to hang it off, and it still has to survive a restart between the command
+    /// being accepted and Alertmanager being reached.
+    ///
+    /// # Errors
+    ///
+    /// As [`Store::ingest_batch`].
+    async fn enqueue_effects(
+        &self,
+        items: &[NewOutboxItem],
+        at: DateTime<Utc>,
+    ) -> Result<(), StoreError>;
 
     /// Takes up to `request.limit` claimable items for this worker.
     ///
@@ -193,6 +218,16 @@ pub trait Store: Send + Sync + 'static {
     /// As [`Store::ingest_batch`].
     async fn acknowledge(&self, command: &AckCommand) -> Result<AckOutcome, StoreError>;
 
+    /// Who currently holds an alert, if anyone.
+    ///
+    /// # Errors
+    ///
+    /// As [`Store::ingest_batch`].
+    async fn acknowledgement(
+        &self,
+        fingerprint: &Fingerprint,
+    ) -> Result<Option<Acknowledgement>, StoreError>;
+
     /// Records a human reply in a card's thread.
     ///
     /// Returns the card when this reply changed it, so the first reply marks it responded and
@@ -232,6 +267,52 @@ pub trait Store: Send + Sync + 'static {
         state: NotificationState,
         now: DateTime<Utc>,
     ) -> Result<(), StoreError>;
+
+    /// Releases a card whose Discord message no longer exists.
+    ///
+    /// Somebody deleted it, or the channel went. The row is kept, because the history it carries
+    /// is the only record that the alert was ever announced, and its dedupe key is released so the
+    /// next change posts a fresh card rather than editing a message that is not there. Retrying
+    /// the edit instead would fail for as long as the alert lasts.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::NotFound`] when the card is gone.
+    async fn orphan_notification(
+        &self,
+        id: NotificationId,
+        now: DateTime<Utc>,
+    ) -> Result<(), StoreError>;
+
+    /// Posted cards that are still firing, still unanswered, and have never been escalated.
+    ///
+    /// `created_before` is the earliest deadline any route sets, which makes the answer a
+    /// superset; each route's own deadline is applied by the caller, because the routing table is
+    /// the caller's and not this one's. A card with no message yet is left out: escalating a
+    /// notification nobody has been shown is a mention about nothing.
+    ///
+    /// # Errors
+    ///
+    /// As [`Store::ingest_batch`].
+    async fn pending_escalations(
+        &self,
+        created_before: DateTime<Utc>,
+        limit: u32,
+    ) -> Result<Vec<Notification>, StoreError>;
+
+    /// Claims one card for escalation, or reports that somebody else already had it.
+    ///
+    /// `false` means the card had already escalated, which is the answer two sweeps racing on one
+    /// card need: the loser sends nothing, and the mention happens once.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::NotFound`] when the card is gone.
+    async fn mark_escalated(
+        &self,
+        id: NotificationId,
+        at: DateTime<Utc>,
+    ) -> Result<bool, StoreError>;
 
     /// Records a silence created through the bot.
     ///
@@ -312,6 +393,39 @@ pub trait Store: Send + Sync + 'static {
     ///
     /// As [`Store::ingest_batch`].
     async fn disable_missing_config_routes(&self, keep: &[String]) -> Result<u64, StoreError>;
+
+    /// Creates or replaces a personal direct-message subscription.
+    ///
+    /// # Errors
+    ///
+    /// As [`Store::ingest_batch`].
+    async fn upsert_subscription(
+        &self,
+        subscription: &Subscription,
+    ) -> Result<SubscriptionId, StoreError>;
+
+    /// Every subscription, for folding into the routing snapshot.
+    ///
+    /// Across every user, because the snapshot is global and a subscription is evaluated on the
+    /// same pass a route is. Reading one user's rows per alert would put a query on the hot path
+    /// for a feature that changes about once a month.
+    ///
+    /// # Errors
+    ///
+    /// As [`Store::ingest_batch`].
+    async fn subscriptions(&self) -> Result<Vec<Subscription>, StoreError>;
+
+    /// Removes one subscription, which must belong to `user`.
+    ///
+    /// The owner is part of the predicate rather than checked first: a check followed by a delete
+    /// is two statements that another request can get between, and nobody should be able to
+    /// unsubscribe somebody else by guessing an id.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::NotFound`] when no such subscription belongs to that user.
+    async fn remove_subscription(&self, id: SubscriptionId, user: UserId)
+    -> Result<(), StoreError>;
 
     /// Replaces the cached tag list of a forum channel.
     ///
@@ -410,6 +524,9 @@ pub struct PlannedCard {
 pub struct CardUpdate {
     /// The card.
     pub id: NotificationId,
+
+    /// The alert that caused the update, which becomes the one the card shows.
+    pub fingerprint: Fingerprint,
 
     /// The state it moves to, when it moves at all.
     ///

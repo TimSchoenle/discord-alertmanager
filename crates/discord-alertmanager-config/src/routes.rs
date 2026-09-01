@@ -44,6 +44,10 @@ pub struct RouteConfig {
     #[cfg_attr(feature = "config-schema", config(nested))]
     pub mentions: Mentions,
 
+    /// When a card nobody has acknowledged is escalated, and to whom.
+    #[cfg_attr(feature = "config-schema", config(nested))]
+    pub escalation: Escalation,
+
     /// Evaluation order. Lower runs first.
     pub priority: i32,
 
@@ -69,6 +73,7 @@ impl Default for RouteConfig {
             target: RouteTarget::default(),
             group_strategy: GroupStrategy::default(),
             mentions: Mentions::default(),
+            escalation: Escalation::default(),
             priority: 100,
             continue_to_next: false,
             enabled: true,
@@ -149,6 +154,35 @@ impl Default for Mentions {
             min_severity: Some(Severity::Critical),
         }
     }
+}
+
+/// When an unanswered card is escalated, and who hears about it.
+///
+/// A firing alert nobody acknowledges is the failure a chat notification is worst at: the message
+/// arrived, it scrolled past, and the channel is quiet precisely because everybody assumes
+/// somebody else has it. An escalation is one further mention in the card's thread, sent once per
+/// card, which is the smallest thing that answers it without becoming noise of its own.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[cfg_attr(
+    feature = "config-schema",
+    derive(serde::Serialize, terrace_config::schema::Describe)
+)]
+#[serde(default, deny_unknown_fields)]
+pub struct Escalation {
+    /// Seconds a card may stay firing and unacknowledged before it escalates.
+    ///
+    /// Unset disables escalation on this route, which is the default: a route that escalates
+    /// without anybody having asked for it is a second mention nobody expected.
+    pub after_secs: Option<u64>,
+
+    /// Role ids the escalation mentions. Falls back to `mentions.roles` when empty.
+    pub roles: Vec<u64>,
+
+    /// User ids the escalation mentions. Falls back to `mentions.users` when empty.
+    ///
+    /// Naming a person here rather than a role is what makes an escalation reach somebody who is
+    /// not watching the channel it fires in.
+    pub users: Vec<u64>,
 }
 
 /// Where a route delivers.
@@ -256,8 +290,12 @@ pub struct TargetPolicy {
     /// Tag applied when nothing else resolves, for a channel with `REQUIRE_TAG` set.
     pub default_tag: String,
 
-    /// Minutes of inactivity before a forum post archives. Discord accepts 60, 1440, 4320, 10080.
-    pub auto_archive_minutes: u32,
+    /// Minutes of inactivity before a resolved post or thread archives.
+    ///
+    /// Discord accepts 60, 1440, 4320 and 10080. Unset takes
+    /// `render.thread_archive_after_minutes`. A card that is still firing holds 10080 whatever
+    /// this says, so that a long incident never archives underneath the people working it.
+    pub auto_archive_minutes: Option<u32>,
 
     /// Archive a forum post when its alert resolves.
     pub archive_on_resolve: bool,
@@ -300,8 +338,7 @@ impl Default for TargetPolicy {
             severity_tags: true,
             label_tags: Vec::new(),
             default_tag: String::new(),
-            // A week, so a long incident never archives underneath the people working it.
-            auto_archive_minutes: 10080,
+            auto_archive_minutes: None,
             archive_on_resolve: true,
             lock_on_resolve: false,
             pin_min_severity: Some(Severity::Critical),

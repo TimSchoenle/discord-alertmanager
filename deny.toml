@@ -1,4 +1,4 @@
-# `cargo deny check` — one of the CI gates in §11 of docs/Design.MD.
+# `cargo deny check` — one of the gates every pull request has to pass.
 
 [graph]
 all-features = true

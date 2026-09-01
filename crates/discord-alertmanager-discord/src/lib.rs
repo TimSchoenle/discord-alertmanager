@@ -28,3 +28,23 @@
 //! `default_member_permissions` is set so Discord hides commands a user cannot run, and it is
 //! treated as a display hint. The capability check happens in `CommandCtx` before any handler
 //! body runs, and every denial writes an audit row.
+
+pub mod bot;
+pub mod capability;
+pub mod custom_id;
+pub mod links;
+pub mod render;
+pub mod sink;
+pub mod template;
+
+mod actions;
+mod commands;
+mod components;
+mod error;
+
+pub use bot::{Bot, BotContext, GatewayError};
+pub use capability::{Capability, CapabilityMap};
+pub use custom_id::{Action, CustomId, CustomIdError, MAX_CUSTOM_ID};
+pub use links::{LinkError, LinkRenderer, RenderedLink};
+pub use render::{RenderedCard, Renderer};
+pub use sink::SerenitySink;

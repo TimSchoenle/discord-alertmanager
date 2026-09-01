@@ -8,9 +8,31 @@ use chrono::{DateTime, Utc};
 use dam_config::{RouteConfig, Severity as ConfigSeverity, TargetKind, TargetPolicy};
 use dam_core::{CoreError, Labels, MatcherSet, Severity};
 use dam_store::{
-    ChannelId, ForumPolicy, ForumTag, GroupStrategy, GuildId, IgnoreRule, Mentions, Route, RouteId,
-    RouteSource, RouteTarget, StateTags, TagId, ThreadKind, ThreadPolicy, ThreadTrigger, UserId,
+    ChannelId, Escalation, ForumPolicy, ForumTag, GroupStrategy, GuildId, IgnoreRule, Mentions,
+    RoleId, Route, RouteId, RouteSource, RouteTarget, StateTags, Subscription, TagId, ThreadKind,
+    ThreadPolicy, ThreadTrigger, UserId,
 };
+
+/// The values a configured route falls back to when it names none of its own.
+///
+/// Passed in rather than read here, because they come from sections of the configuration this
+/// module has no other business with, and a route built from Discord has to resolve them the same
+/// way a route built from the file does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RouteDefaults {
+    /// Minutes of inactivity after which a thread that is no longer firing archives.
+    pub archive_after_minutes: u32,
+}
+
+impl Default for RouteDefaults {
+    fn default() -> Self {
+        // The configuration's own default for `render.thread_archive_after_minutes`, so a caller
+        // that builds a route without one lands where the file would have put it.
+        Self {
+            archive_after_minutes: 1440,
+        }
+    }
+}
 
 /// Everything route resolution needs, built once and read many times.
 ///
@@ -168,6 +190,7 @@ impl SharedRouting {
 pub fn route_from_config(
     config: &RouteConfig,
     id: RouteId,
+    defaults: RouteDefaults,
     now: DateTime<Utc>,
 ) -> Result<Route, CoreError> {
     let matchers = MatcherSet::parse(&config.matchers)?;
@@ -179,7 +202,7 @@ pub fn route_from_config(
         matcher_source: config.matchers.clone(),
         matchers,
         min_severity: config.min_severity.map(severity_from_config),
-        target: target_from_config(config),
+        target: target_from_config(config, defaults),
         group_strategy: group_strategy_from_config(config.group_strategy),
         mentions: Mentions {
             roles: config
@@ -198,6 +221,7 @@ pub fn route_from_config(
                 .collect(),
             min_severity: config.mentions.min_severity.map(severity_from_config),
         },
+        escalation: escalation_from_config(config),
         priority: config.priority,
         continue_to_next: config.continue_to_next,
         source: RouteSource::Config,
@@ -208,18 +232,18 @@ pub fn route_from_config(
 }
 
 /// Reads the target out of a configured route.
-fn target_from_config(config: &RouteConfig) -> RouteTarget {
+fn target_from_config(config: &RouteConfig, defaults: RouteDefaults) -> RouteTarget {
     let channel = ChannelId::new(config.target.id);
     let policy = &config.target.policy;
 
     match config.target.kind {
         TargetKind::Text => RouteTarget::Text {
             channel,
-            thread: thread_policy_from_config(policy),
+            thread: thread_policy_from_config(policy, defaults),
         },
         TargetKind::Forum => RouteTarget::Forum {
             channel,
-            policy: forum_policy_from_config(policy),
+            policy: forum_policy_from_config(policy, defaults),
         },
         TargetKind::Thread => RouteTarget::Thread { thread: channel },
         TargetKind::Dm => RouteTarget::Dm {
@@ -228,8 +252,35 @@ fn target_from_config(config: &RouteConfig) -> RouteTarget {
     }
 }
 
+/// Reads the escalation policy out of the file, or decides the route has none.
+///
+/// A route that sets no deadline does not escalate, and one that sets a deadline without naming
+/// anybody escalates to whoever its ordinary mentions reach. That fallback is what makes the
+/// common case one key: an operator who wants the on-call role chased again writes the deadline
+/// and nothing else.
+fn escalation_from_config(config: &RouteConfig) -> Option<Escalation> {
+    let after_secs = config.escalation.after_secs?;
+
+    let (roles, users) = if config.escalation.roles.is_empty() && config.escalation.users.is_empty()
+    {
+        (&config.mentions.roles, &config.mentions.users)
+    } else {
+        (&config.escalation.roles, &config.escalation.users)
+    };
+
+    let escalation = Escalation {
+        after_secs,
+        roles: roles.iter().copied().map(RoleId::new).collect(),
+        users: users.iter().copied().map(UserId::new).collect(),
+    };
+
+    // A deadline with nobody behind it would post an unaddressed line into a thread the people
+    // who need it are not reading, on a cadence, forever.
+    (!escalation.is_empty()).then_some(escalation)
+}
+
 /// Reads the thread policy out of the flat configuration table.
-fn thread_policy_from_config(policy: &TargetPolicy) -> ThreadPolicy {
+fn thread_policy_from_config(policy: &TargetPolicy, defaults: RouteDefaults) -> ThreadPolicy {
     ThreadPolicy {
         when: match policy.thread_when {
             dam_config::ThreadTrigger::Never => ThreadTrigger::Never,
@@ -241,12 +292,14 @@ fn thread_policy_from_config(policy: &TargetPolicy) -> ThreadPolicy {
             dam_config::ThreadKind::Public => ThreadKind::Public,
             dam_config::ThreadKind::Private => ThreadKind::Private,
         },
-        archive_after_minutes: policy.auto_archive_minutes,
+        archive_after_minutes: policy
+            .auto_archive_minutes
+            .unwrap_or(defaults.archive_after_minutes),
     }
 }
 
 /// Reads the forum policy out of the flat configuration table.
-fn forum_policy_from_config(policy: &TargetPolicy) -> ForumPolicy {
+fn forum_policy_from_config(policy: &TargetPolicy, defaults: RouteDefaults) -> ForumPolicy {
     ForumPolicy {
         title_template: policy.title_template.clone(),
         manage_tags: policy.manage_tags,
@@ -261,7 +314,9 @@ fn forum_policy_from_config(policy: &TargetPolicy) -> ForumPolicy {
         // states and three on severities. A fourth label would leave no room for a new value.
         label_tags: policy.label_tags.iter().take(3).cloned().collect(),
         default_tag: Some(policy.default_tag.clone()).filter(|tag| !tag.is_empty()),
-        auto_archive_minutes: policy.auto_archive_minutes,
+        auto_archive_minutes: policy
+            .auto_archive_minutes
+            .unwrap_or(defaults.archive_after_minutes),
         archive_on_resolve: policy.archive_on_resolve,
         lock_on_resolve: policy.lock_on_resolve,
         pin_min_severity: policy.pin_min_severity.map(severity_from_config),
@@ -290,6 +345,102 @@ pub fn severity_from_config(severity: ConfigSeverity) -> Severity {
         ConfigSeverity::Info => Severity::Info,
         ConfigSeverity::Warning => Severity::Warning,
         ConfigSeverity::Critical => Severity::Critical,
+    }
+}
+
+/// Rebuilds the routing snapshot from the database.
+///
+/// Called at startup and after any change to a route or an ignore rule. The tag cache is folded in
+/// here rather than fetched on use, so applying a tag to a forum post never costs a round trip to
+/// read the channel's tag list.
+///
+/// # Errors
+///
+/// Returns the store's error. A route whose matchers no longer compile is skipped with a warning
+/// rather than failing the whole rebuild: one bad rule should not take the routing table with it.
+pub async fn load_snapshot(
+    store: &dyn dam_store::Store,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<RoutingSnapshot, dam_store::StoreError> {
+    let mut routes = store.routes().await?;
+
+    let mut guilds: Vec<dam_store::GuildId> = routes.iter().map(|route| route.guild_id).collect();
+    guilds.sort_unstable();
+    guilds.dedup();
+
+    let mut ignores = Vec::new();
+    for guild in guilds {
+        ignores.extend(store.active_ignores(guild, now).await?);
+    }
+
+    let mut forums: Vec<ChannelId> = routes
+        .iter()
+        .filter_map(|route| match &route.target {
+            RouteTarget::Forum { channel, .. } => Some(*channel),
+            _ => None,
+        })
+        .collect();
+    forums.sort_unstable();
+    forums.dedup();
+
+    let mut tags = Vec::new();
+    for forum in forums {
+        tags.extend(store.forum_tags(forum).await?);
+    }
+
+    // Folded in last, so a personal subscription is evaluated by the same pass a route is and the
+    // decision needs no second concept. The alternative — a parallel resolution path for direct
+    // messages — would be a second place for dedupe keys, ignore scoping and card reuse to be got
+    // subtly differently.
+    routes.extend(
+        store
+            .subscriptions()
+            .await?
+            .into_iter()
+            .map(subscription_route),
+    );
+
+    Ok(RoutingSnapshot::new(routes, ignores, tags))
+}
+
+/// The pseudo-guild every subscription is resolved under.
+///
+/// Zero is not a snowflake Discord issues, so it collides with no real guild. That matters twice:
+/// resolution settles per guild, so one person's subscription cannot stop another's, and ignore
+/// rules are guild-scoped, so a server-wide mute cannot silently reach into somebody's direct
+/// messages.
+const SUBSCRIPTION_GUILD: u64 = 0;
+
+/// A subscription as the route it behaves like.
+///
+/// The id is negative, which no database sequence issues, so a synthetic route and a real one can
+/// share the snapshot and a card can still name the thing that produced it. `continue_to_next` is
+/// always true: a subscription is an addition to whatever the channel routes decided, never a
+/// replacement for it.
+fn subscription_route(subscription: Subscription) -> Route {
+    Route {
+        id: RouteId::new(-subscription.id.get()),
+        guild_id: GuildId::new(SUBSCRIPTION_GUILD),
+        name: format!("subscription {}", subscription.id),
+        matcher_source: subscription.matcher_source,
+        matchers: subscription.matchers,
+        min_severity: subscription.min_severity,
+        target: RouteTarget::Dm {
+            user: subscription.user_id,
+        },
+        group_strategy: GroupStrategy::PerAlert,
+        // Never. A direct message is already addressed to exactly one person, and a mention on top
+        // of it is a second notification for the same thing.
+        mentions: Mentions::default(),
+        // Nor does it escalate. Escalating to the one person a direct message already reached is
+        // the same notification sent twice.
+        escalation: None,
+        priority: i32::MAX,
+        continue_to_next: true,
+        source: RouteSource::Discord,
+        enabled: true,
+        created_by: Some(subscription.user_id),
+        created_at: subscription.created_at,
     }
 }
 
@@ -326,6 +477,7 @@ mod tests {
             },
             group_strategy: GroupStrategy::PerAlert,
             mentions: Mentions::default(),
+            escalation: None,
             priority,
             continue_to_next,
             source: RouteSource::Config,
@@ -435,7 +587,13 @@ mod tests {
             "d".to_owned(),
         ];
 
-        let route = route_from_config(&config, RouteId::new(1), Utc::now()).expect("route parses");
+        let route = route_from_config(
+            &config,
+            RouteId::new(1),
+            RouteDefaults::default(),
+            Utc::now(),
+        )
+        .expect("route parses");
 
         assert_eq!(route.guild_id, GuildId::new(42));
         assert!(route.target.is_forum());
@@ -458,6 +616,14 @@ mod tests {
             ..RouteConfig::default()
         };
 
-        assert!(route_from_config(&config, RouteId::new(1), Utc::now()).is_err());
+        assert!(
+            route_from_config(
+                &config,
+                RouteId::new(1),
+                RouteDefaults::default(),
+                Utc::now()
+            )
+            .is_err()
+        );
     }
 }

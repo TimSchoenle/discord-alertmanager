@@ -20,17 +20,18 @@
 //! CI regenerates those files and fails on any difference, so a pull request that adds a key
 //! without regenerating cannot merge.
 //!
-//! # Two departures from `docs/Design.MD`
+//! # Why `storage` and `RouteTarget` are structs rather than tagged enums
 //!
-//! The design makes `storage` a `#[serde(tag = "backend")]` enum. `Describe` refuses an enum
-//! whose variants carry data, on the grounds that such a variant is a shape rather than a value a
-//! configuration file could hold, so a tagged enum would leave every storage key out of the
-//! generated reference. [`Storage`] is a struct with a `backend` discriminant instead. The TOML
-//! spelling is unchanged; what changes is that keys belonging to the unselected backend are
-//! ignored rather than refused.
+//! `storage` reads like a tagged enum — one `backend` discriminant selecting one set of keys —
+//! and is not one. `Describe` refuses an enum whose variants carry data, on the grounds that such
+//! a variant is a shape rather than a value a configuration file could hold, so a tagged enum
+//! would leave every storage key out of the generated reference. [`Storage`] is a struct with a
+//! `backend` discriminant instead. The TOML spelling is what a tagged enum would produce anyway;
+//! what changes is that keys belonging to the unselected backend are ignored rather than refused.
 //!
-//! `RouteTarget` is flat for the same reason, which is also the shape the design's own sample
-//! TOML already uses.
+//! [`RouteTarget`] is flat for the same reason. The four delivery targets are a genuine enum in
+//! `dam_store`, where the reference generator never looks, and `dam_engine::route_from_config` is
+//! the single point where the flat table becomes that enum.
 
 mod alertmanager;
 mod discord;
@@ -50,8 +51,8 @@ pub use links::{LinkButton, Links};
 pub use observability::Observability;
 pub use render::Render;
 pub use routes::{
-    ForumStateTags, GroupStrategy, Mentions, RouteConfig, RouteTarget, Severity, TargetKind,
-    TargetPolicy, ThreadKind, ThreadTrigger,
+    Escalation, ForumStateTags, GroupStrategy, Mentions, RouteConfig, RouteTarget, Severity,
+    TargetKind, TargetPolicy, ThreadKind, ThreadTrigger,
 };
 pub use storage::{Backend, PostgresConfig, SqliteConfig, Storage};
 

@@ -59,6 +59,18 @@ pub struct CardData {
     /// Who to mention, on a first post into firing only.
     pub mentions: Vec<Mention>,
 
+    /// Why this card is a digest rather than one card for one alert, when it is.
+    ///
+    /// A digest is a worse card than the one it replaces, and an operator who is not told why is
+    /// left believing the bot has started summarising for no reason.
+    pub digest: Option<DigestNotice>,
+
+    /// The card this one replaced, when a re-fire started a new episode.
+    ///
+    /// The link is the whole point: without it, an alert that comes back a week later produces a
+    /// card with no history and the one carrying that history is buried.
+    pub previous: Option<PreviousCard>,
+
     /// When the card was rendered.
     pub rendered_at: DateTime<Utc>,
 }
@@ -69,6 +81,35 @@ impl CardData {
     pub fn severity(&self) -> Severity {
         self.alert.severity()
     }
+}
+
+/// Why a route is in digest mode, in the numbers that put it there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DigestNotice {
+    /// Cards the route posted inside the window.
+    pub cards: u64,
+
+    /// The threshold it passed.
+    pub threshold: u32,
+
+    /// How long the window is, in seconds.
+    pub window_secs: i64,
+}
+
+/// Where the card a new episode replaced can be found.
+///
+/// Carries the guild as well as the channel, because a Discord message link needs all three parts
+/// and a card knows the guild it lives in while a message reference does not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PreviousCard {
+    /// The guild the old card lives in, or zero for a direct message.
+    pub guild: GuildId,
+
+    /// The channel or thread holding it.
+    pub channel: ChannelId,
+
+    /// The message itself.
+    pub message: MessageId,
 }
 
 /// The silence suppressing an alert, as shown on its card.
@@ -352,12 +393,34 @@ pub trait DiscordSink: Send + Sync {
     /// As [`DiscordSink::post_card`].
     async fn open_thread(&self, message: &MessageRef, name: &str) -> Result<ChannelId, SinkError>;
 
-    /// Posts a note into a thread.
+    /// Posts a note into a thread, or into any other channel.
+    ///
+    /// Notifies nobody: a note is a timeline entry and a way to resurface a forum post, and a
+    /// second ping for a change somebody has already been told about is how a bot gets muted.
+    /// The administrative notices take this path too, which is why it takes a channel rather than
+    /// insisting on a thread.
     ///
     /// # Errors
     ///
     /// As [`DiscordSink::edit_card`].
     async fn post_thread_note(&self, thread: ChannelId, note: &Note) -> Result<(), SinkError>;
+
+    /// Posts a line that deliberately does notify the people it names.
+    ///
+    /// The one call in this trait whose purpose is to interrupt somebody. An escalation exists
+    /// because a firing alert nobody acknowledged has already been scrolled past once, so it
+    /// pings — and only the roles and users it was given, never `@everyone` and never whatever a
+    /// label happened to contain.
+    ///
+    /// # Errors
+    ///
+    /// As [`DiscordSink::edit_card`].
+    async fn post_escalation(
+        &self,
+        channel: ChannelId,
+        mentions: &[Mention],
+        text: &str,
+    ) -> Result<(), SinkError>;
 
     /// Removes or disables a card's components.
     ///

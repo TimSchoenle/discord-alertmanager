@@ -45,8 +45,10 @@ tokio-util = { version = "0.7", default-features = false }
 async-trait = "0.1"
 
 # --- discord ----------------------------------------------------------------------------------
-# `default-features = false` drops serenity's native-tls default; §9 requires one TLS stack, and
-# `rustls_backend` is it. `cache` earns its place for the role lookups authorisation performs.
+# `default-features = false` drops serenity's native-tls default. One TLS stack for the whole
+# workspace, and `rustls_backend` is it: two would mean two certificate stores to keep current and
+# two sets of advisories to watch. `cache` earns its place for the role lookups authorisation
+# performs on every command.
 serenity = { version = "0.12", default-features = false, features = [
     "builder",
     "cache",

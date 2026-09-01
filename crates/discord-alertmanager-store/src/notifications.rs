@@ -1,7 +1,9 @@
 //! The notification rows: which Discord message represents which alert, and who answered it.
 
+use std::str::FromStr;
+
 use chrono::{DateTime, Utc};
-use dam_core::{DedupeKey, Fingerprint, NotificationState};
+use dam_core::{CoreError, DedupeKey, Fingerprint, NotificationState};
 use serde::{Deserialize, Serialize};
 
 use crate::ids::{ChannelId, GuildId, MessageId, NotificationId, RouteId, TagId, UserId};
@@ -18,6 +20,15 @@ pub struct Notification {
 
     /// What this card covers: one alert, one group, or one digest window.
     pub dedupe_key: DedupeKey,
+
+    /// The alert the card last showed.
+    ///
+    /// Equal to the card's own alert under the default per-alert strategy, and the most recent
+    /// member of the group under the other two. Stored rather than derived from `dedupe_key`,
+    /// because a group key names a group and a renderer needs an alert: without this column the
+    /// only way to draw a group card is to reverse a key into a query, and a digest key cannot be
+    /// reversed at all.
+    pub fingerprint: Fingerprint,
 
     /// The route that produced it.
     pub route_id: RouteId,
@@ -68,6 +79,20 @@ pub struct Notification {
     /// When a human first responded, by button, command or thread reply.
     pub responded_at: Option<DateTime<Utc>>,
 
+    /// When the escalation sweep mentioned somebody about this card.
+    ///
+    /// Set once and never cleared. It is the claim that makes escalation idempotent: two sweeps
+    /// racing over one card produce one mention, and a card that has escalated is invisible to
+    /// every sweep after it.
+    pub escalated_at: Option<DateTime<Utc>>,
+
+    /// The card this one replaced, when a re-fire started a new episode.
+    ///
+    /// Nullable and unenforced: the row it names may be pruned long before this one is, and a
+    /// missing predecessor means a card without a back-reference rather than one that cannot be
+    /// drawn.
+    pub supersedes: Option<NotificationId>,
+
     /// Non-bot messages seen in the thread.
     pub reply_count: u32,
 
@@ -104,6 +129,9 @@ pub struct NewNotification {
     /// What the card covers.
     pub dedupe_key: DedupeKey,
 
+    /// The alert it is being created for.
+    pub fingerprint: Fingerprint,
+
     /// The route producing it.
     pub route_id: RouteId,
 
@@ -115,6 +143,9 @@ pub struct NewNotification {
 
     /// The state it starts in.
     pub state: NotificationState,
+
+    /// The card this one replaces, when a re-fire started a new episode.
+    pub supersedes: Option<NotificationId>,
 
     /// When it was created.
     pub created_at: DateTime<Utc>,
@@ -172,6 +203,22 @@ impl AckKind {
     }
 }
 
+impl FromStr for AckKind {
+    type Err = CoreError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "ack" => Ok(Self::Ack),
+            "investigating" => Ok(Self::Investigating),
+            "handover" => Ok(Self::Handover),
+            other => Err(CoreError::UnknownVariant {
+                kind: "acknowledgement kind",
+                value: other.to_owned(),
+            }),
+        }
+    }
+}
+
 /// What acknowledging produced.
 ///
 /// Computed inside the same transaction as the write, so two people pressing the button at once
@@ -190,6 +237,26 @@ pub struct AckOutcome {
 
     /// The cards that now need re-rendering.
     pub cards: Vec<Notification>,
+}
+
+/// Who holds an alert, as the card shows it.
+///
+/// Read separately from the cards rather than folded onto them, because the acknowledgement
+/// belongs to the alert: taking it in one channel answers it in every channel the alert appears
+/// in, and a per-card copy would be one copy per channel to keep in step.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Acknowledgement {
+    /// Who took it.
+    pub user_id: UserId,
+
+    /// What they claimed.
+    pub kind: AckKind,
+
+    /// What they said, if anything.
+    pub note: Option<String>,
+
+    /// When they took it.
+    pub at: DateTime<Utc>,
 }
 
 /// A thread reply attributed to a card.

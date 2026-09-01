@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use dam_core::DedupeKey;
 use serde::{Deserialize, Serialize};
 
-use crate::ids::{ChannelId, MessageId, NotificationId, OutboxId, TagId, WorkerId};
+use crate::ids::{ChannelId, MessageId, NotificationId, OutboxId, RoleId, TagId, UserId, WorkerId};
 
 /// One pending effect on Discord or Alertmanager.
 ///
@@ -164,6 +164,32 @@ pub enum Effect {
         /// The silence to expire.
         am_id: String,
     },
+
+    /// Mention a route's escalation targets about a card nobody has taken.
+    ///
+    /// Carries who to mention rather than the route to read them from, so the note that is sent
+    /// is the policy as it stood when the sweep decided, not as it stands whenever a retry
+    /// happens to run.
+    Escalate {
+        /// The card that has gone unanswered.
+        notification: NotificationId,
+        /// Roles to mention.
+        roles: Vec<RoleId>,
+        /// Users to mention.
+        users: Vec<UserId>,
+    },
+
+    /// Post a line into the administrative channel.
+    ///
+    /// The one effect naming a channel instead of a card. The deadman and the route-health
+    /// notices are about the bot rather than about any alert, and by the time either fires there
+    /// may be no card to hang it off — a route the bot cannot post to being the ordinary case.
+    AdminNotice {
+        /// The channel to write in.
+        channel: ChannelId,
+        /// The line to post.
+        text: String,
+    },
 }
 
 impl Effect {
@@ -178,8 +204,11 @@ impl Effect {
             | Self::SetTags { notification, .. }
             | Self::SetFlags { notification, .. }
             | Self::SetPinned { notification, .. }
-            | Self::DisableComponents { notification } => Some(*notification),
-            Self::CreateSilence { .. } | Self::ExpireSilence { .. } => None,
+            | Self::DisableComponents { notification }
+            | Self::Escalate { notification, .. } => Some(*notification),
+            Self::CreateSilence { .. } | Self::ExpireSilence { .. } | Self::AdminNotice { .. } => {
+                None
+            }
         }
     }
 
@@ -197,6 +226,8 @@ impl Effect {
             Self::DisableComponents { .. } => "disable_components",
             Self::CreateSilence { .. } => "create_silence",
             Self::ExpireSilence { .. } => "expire_silence",
+            Self::Escalate { .. } => "escalate",
+            Self::AdminNotice { .. } => "admin_notice",
         }
     }
 
@@ -234,6 +265,12 @@ pub struct SilenceEffect {
 
     /// Why, including a permalink to the card it came from.
     pub comment: String,
+
+    /// The Discord user behind it, kept so the completed effect can write the link row whole.
+    pub discord_user_id: Option<UserId>,
+
+    /// Permalink to the card the silence was created from.
+    pub origin_message: Option<String>,
 }
 
 /// What a completed effect changed, to be written back in the same transaction that clears the
@@ -269,14 +306,53 @@ pub struct AppliedEffect {
     pub am_silence_id: Option<String>,
 }
 
+/// How many lanes a dedupe key is hashed into.
+///
+/// Fixed rather than set to the worker count, so that changing the number of dispatchers
+/// redistributes the lanes instead of stranding the rows written under the old count. A worker
+/// takes every lane congruent to its index, and any divisor of the space covers all of it.
+pub const OUTBOX_LANES: u16 = 1024;
+
+/// Which slice of the lane space one worker claims from.
+///
+/// Every effect for one alert hashes to one lane, so a lane belongs to exactly one worker and two
+/// workers never edit one card at the same time. Coalescing then happens inside a single worker
+/// rather than across a lock.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LaneAssignment {
+    /// This worker's index, from zero.
+    pub index: u16,
+
+    /// How many workers are sharing the lane space.
+    pub of: u16,
+}
+
+impl LaneAssignment {
+    /// The assignment for worker `index` of `of`.
+    ///
+    /// # Panics
+    ///
+    /// Never. `of` is clamped to at least one, because a zero divisor would take the whole queue
+    /// out of service rather than fail visibly.
+    #[must_use]
+    pub fn new(index: u16, of: u16) -> Self {
+        let of = of.max(1);
+
+        Self {
+            index: index % of,
+            of,
+        }
+    }
+}
+
 /// How long a worker holds a claim, and how many items it takes at once.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClaimRequest {
-    /// The lane this worker owns.
+    /// The slice of the lane space this worker owns.
     ///
     /// `None` claims from any lane, which is what a single-worker deployment and the janitor
     /// both want.
-    pub lane: Option<u16>,
+    pub lane: Option<LaneAssignment>,
 
     /// How long the claim is good for before a janitor may reclaim it.
     pub lease_secs: u32,

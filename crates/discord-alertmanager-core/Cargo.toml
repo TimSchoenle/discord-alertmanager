@@ -13,10 +13,10 @@ publish = false
 name = "dam_core"
 path = "src/lib.rs"
 
-# This list is the architecture rule from §2.1, and the `architecture` CI job asserts it stays
-# exactly this: no tokio, no serenity, no sqlx, no reqwest. That is what keeps the state machine
-# and the matcher semantics testable in milliseconds, and it is the enforcement mechanism for
-# "the domain does not know about Discord".
+# This list is the architecture rule for the domain crate, and the `architecture` CI job asserts
+# it stays exactly this: no tokio, no serenity, no sqlx, no reqwest. That is what keeps the state
+# machine and the matcher semantics testable in milliseconds, and it is the enforcement mechanism
+# for "the domain does not know about Discord".
 [dependencies]
 chrono.workspace = true
 regex.workspace = true

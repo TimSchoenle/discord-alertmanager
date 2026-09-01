@@ -255,6 +255,16 @@ impl TryFrom<String> for Fingerprint {
 pub struct LabelsHash(String);
 
 impl LabelsHash {
+    /// Wraps a hash read back out of the database.
+    ///
+    /// The column exists to be compared against a freshly computed hash. Recomputing it on read
+    /// would make the two agree by construction, and the disagreement it was stored to catch
+    /// would never be visible.
+    #[must_use]
+    pub fn from_stored(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
     /// The hash as a string slice.
     #[must_use]
     pub fn as_str(&self) -> &str {

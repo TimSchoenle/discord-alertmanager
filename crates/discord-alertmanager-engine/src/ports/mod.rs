@@ -16,6 +16,6 @@ pub use alertmanager::{
     suppressed_fingerprints,
 };
 pub use sink::{
-    CardData, CardTarget, DiscordSink, Mention, MessageRef, Note, PostFlags, PostedMessage,
-    SilenceSummary, SinkError, TagSpec,
+    CardData, CardTarget, DigestNotice, DiscordSink, Mention, MessageRef, Note, PostFlags,
+    PostedMessage, PreviousCard, SilenceSummary, SinkError, TagSpec,
 };

@@ -166,7 +166,11 @@ async fn config_docs() -> Result<()> {
     std::fs::create_dir_all(&docs).context("creating the docs directory")?;
 
     let outputs = [
-        ("markdown", docs.join("config.md"), CONFIG_REFERENCE_PREAMBLE),
+        (
+            "markdown",
+            docs.join("config.md"),
+            CONFIG_REFERENCE_PREAMBLE,
+        ),
         ("json-schema", docs.join("config.json"), ""),
         // The TOML renderer writes its own banner, and a JSON document cannot carry one.
         ("toml", root.join("config.example.toml"), ""),

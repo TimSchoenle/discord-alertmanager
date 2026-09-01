@@ -13,14 +13,14 @@ publish = false
 name = "dam_store_sqlite"
 path = "src/lib.rs"
 
-# One dialect per crate, because `sqlx::query!` resolves its driver from a single DATABASE_URL
-# per compilation unit. The split is what lets both dialects be compile-time checked at once, and
-# it is why this crate owns its own `.env`, `migrations/` and `.sqlx/`.
+# One dialect per crate. The split is what lets each backend own its own `migrations/` and its
+# own row mapping without either dialect's quirks leaking into the other.
 [dependencies]
 async-trait.workspace = true
 chrono.workspace = true
 dam-core.workspace = true
 dam-store.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 sqlx = { workspace = true, features = ["sqlite"] }
 thiserror.workspace = true

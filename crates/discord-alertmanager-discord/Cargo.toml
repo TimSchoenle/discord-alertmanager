@@ -21,7 +21,7 @@ dam-core.workspace = true
 dam-engine.workspace = true
 dam-store.workspace = true
 metrics.workspace = true
-minijinja.workspace = true
+minijinja = { workspace = true, features = ["serde"] }
 secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true

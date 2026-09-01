@@ -32,10 +32,18 @@
 pub mod decide;
 pub mod ports;
 pub mod routing;
+pub mod storm;
 
-pub use decide::{DecisionSettings, ExistingCards, decide};
-pub use ports::{
-    AlertFilter, AlertmanagerApi, AmError, AmStatus, CardData, CardTarget, DiscordSink, MessageRef,
-    Note, PostFlags, PostedMessage, Receiver, SilenceRecord, SilenceRequest, SinkError, TagSpec,
+pub use decide::{
+    DecisionSettings, ExistingCards, decide, dedupe_key, dedupe_keys, delivery_channel,
+    desired_tags,
 };
-pub use routing::{RoutingSnapshot, SharedRouting, route_from_config};
+pub use ports::{
+    AlertFilter, AlertmanagerApi, AmError, AmStatus, CardData, CardTarget, DigestNotice,
+    DiscordSink, Mention, MessageRef, Note, PostFlags, PostedMessage, PreviousCard, Receiver,
+    SilenceRecord, SilenceRequest, SilenceSummary, SinkError, TagSpec, suppressed_fingerprints,
+};
+pub use routing::{
+    RouteDefaults, RoutingSnapshot, SharedRouting, load_snapshot, route_from_config,
+};
+pub use storm::{SharedStorm, StormCounter, StormState};
