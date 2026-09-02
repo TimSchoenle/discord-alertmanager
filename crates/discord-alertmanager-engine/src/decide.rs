@@ -366,21 +366,25 @@ fn forum_effects(
                 now,
             ));
         }
-    }
 
-    let wants_pin = effective.wants_pin()
-        && policy
-            .pin_min_severity
-            .is_some_and(|floor| delta.alert.severity() >= floor);
-    if wants_pin != card.pinned {
-        effects.push(immediate(
-            Effect::SetPinned {
-                notification: card.id,
-                pinned: wants_pin,
-            },
-            card,
-            now,
-        ));
+        // Inside the state gate with the tags and the note, because the pin is decoration on the
+        // same transition and an update that changes no state changes no pin. Outside it, a pin
+        // Discord will not grant — its forums hold one pinned post — is asked for again on every
+        // poll and every repeat of an alert that is going nowhere, for as long as the alert lasts.
+        let wants_pin = effective.wants_pin()
+            && policy
+                .pin_min_severity
+                .is_some_and(|floor| delta.alert.severity() >= floor);
+        if wants_pin != card.pinned {
+            effects.push(immediate(
+                Effect::SetPinned {
+                    notification: card.id,
+                    pinned: wants_pin,
+                },
+                card,
+                now,
+            ));
+        }
     }
 
     effects
@@ -1210,6 +1214,38 @@ mod tests {
                 "set_flags"
             ]
         );
+    }
+
+    #[test]
+    fn an_update_that_changes_no_state_asks_for_no_pin() {
+        let route = forum_route();
+        let delta = delta(EventKind::Updated, AlertStatus::Firing, AmState::Active);
+        let key = delta.per_alert_key();
+        let mut existing = ExistingCards::new();
+        existing.insert(
+            (ChannelId::new(200), key.clone()),
+            card(NotificationState::Firing, ChannelId::new(200), &key),
+        );
+        let snapshot = RoutingSnapshot::new(vec![route], Vec::new(), forum_tags());
+
+        let decision = decide(
+            &delta,
+            &snapshot,
+            &quiet(),
+            &existing,
+            false,
+            &DecisionSettings::default(),
+            now(),
+        );
+
+        let update = &decision.updates[0];
+
+        // The card is critical, firing and unpinned, so the pin it wants and the pin it has
+        // differ. Asking for it again on an update that moved nothing is how a channel Discord
+        // will not give another pin to collects one refused request per poll, for as long as the
+        // alert lasts.
+        assert_eq!(update.state, None);
+        assert_eq!(kinds(update), vec!["edit_card"]);
     }
 
     #[test]

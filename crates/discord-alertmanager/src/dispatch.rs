@@ -13,6 +13,7 @@
 //! covers the third case, a worker that dies holding a row: the janitor releases it, and the
 //! worker that comes back finds its claim gone rather than writing over somebody else's work.
 
+use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -48,6 +49,14 @@ const MAX_BACKOFF_SECS: i64 = 300;
 /// A queue that retries forever is a queue whose depth only goes up, and by the tenth attempt the
 /// failure is not transient whatever it claims to be.
 const MAX_ATTEMPTS: u32 = 10;
+
+/// The inactivity window a thread reopened mid-incident is given: Discord's longest, one week.
+///
+/// A thread that has to be reopened to carry a change is one the pipeline is still writing to,
+/// and a shorter window only brings the same refusal back on the next edit. The route's own
+/// window is applied again when the alert resolves, which is the point at which a post is meant
+/// to go quiet.
+const REOPENED_AUTO_ARCHIVE_MINUTES: u32 = 10_080;
 
 /// One dispatcher worker.
 pub(crate) struct Dispatcher {
@@ -219,15 +228,17 @@ impl Dispatcher {
             Effect::ThreadNote { notification, text } => self.note(*notification, text).await,
             Effect::SetTags { notification, tags } => {
                 let thread = self.thread(*notification).await?;
-                self.sink
-                    .set_post_tags(thread, tags)
-                    .await
-                    .map(|()| AppliedEffect {
-                        applied_tags: Some(tags.clone()),
-                        tags_hash: Some(tags_hash(tags)),
-                        ..AppliedEffect::default()
-                    })
-                    .map_err(Failure::from_sink)
+                reopening(self.sink.as_ref(), thread, || {
+                    self.sink.set_post_tags(thread, tags)
+                })
+                .await
+                .map(|((), reopened)| AppliedEffect {
+                    applied_tags: Some(tags.clone()),
+                    tags_hash: Some(tags_hash(tags)),
+                    archived: reopened.then_some(false),
+                    ..AppliedEffect::default()
+                })
+                .map_err(Failure::from_sink)
             }
             Effect::SetFlags {
                 notification,
@@ -255,29 +266,18 @@ impl Dispatcher {
             Effect::SetPinned {
                 notification,
                 pinned,
-            } => {
-                let thread = self.thread(*notification).await?;
-
-                match self.sink.set_post_pinned(thread, *pinned).await {
-                    Ok(()) => Ok(AppliedEffect {
-                        pinned: Some(*pinned),
-                        ..AppliedEffect::default()
-                    }),
-                    // A pin is a convenience — the "needs attention" tray at the top of a forum
-                    // index — and never a reason to hold up or lose a notification.
-                    Err(error) => {
-                        warn!(%error, "cannot change a post's pin; carrying on");
-                        Ok(AppliedEffect::default())
-                    }
-                }
-            }
+            } => self.pin(*notification, *pinned).await,
             Effect::DisableComponents { notification } => {
                 let reference = self.message(*notification).await?;
-                self.sink
-                    .disable_components(&reference)
-                    .await
-                    .map(|()| AppliedEffect::default())
-                    .map_err(Failure::from_sink)
+                reopening(self.sink.as_ref(), reference.channel, || {
+                    self.sink.disable_components(&reference)
+                })
+                .await
+                .map(|((), reopened)| AppliedEffect {
+                    archived: reopened.then_some(false),
+                    ..AppliedEffect::default()
+                })
+                .map_err(Failure::from_sink)
             }
             Effect::Escalate {
                 notification,
@@ -370,9 +370,14 @@ impl Dispatcher {
             message,
         };
 
-        match self.sink.edit_card(&reference, &assembled.data).await {
-            Ok(()) => Ok(AppliedEffect {
+        match reopening(self.sink.as_ref(), reference.channel, || {
+            self.sink.edit_card(&reference, &assembled.data)
+        })
+        .await
+        {
+            Ok(((), reopened)) => Ok(AppliedEffect {
                 render_hash: Some(rendered.hash),
+                archived: reopened.then_some(false),
                 ..AppliedEffect::default()
             }),
             // The card was deleted. Retrying the edit fails for as long as the alert lasts, so the
@@ -417,48 +422,52 @@ impl Dispatcher {
         text: &str,
     ) -> Result<AppliedEffect, Failure> {
         let thread = self.thread(notification).await?;
+        let note = Note {
+            text: text.to_owned(),
+        };
 
-        match self
-            .sink
-            .post_thread_note(
-                thread,
-                &Note {
-                    text: text.to_owned(),
-                },
-            )
-            .await
-        {
-            Ok(()) => Ok(AppliedEffect::default()),
-            // A resolved post is archived and a flap has to reopen one, so this is an ordinary
-            // step rather than a retry after a failure.
-            Err(SinkError::ThreadArchived) => {
-                self.sink
-                    .set_post_flags(
-                        thread,
-                        PostFlags {
-                            archived: false,
-                            locked: false,
-                            auto_archive_minutes: 10_080,
-                        },
-                    )
-                    .await
-                    .map_err(Failure::from_sink)?;
+        // A resolved post is archived and a flap has to reopen one, so the reopen is an ordinary
+        // step here rather than a retry after a failure.
+        reopening(self.sink.as_ref(), thread, || {
+            self.sink.post_thread_note(thread, &note)
+        })
+        .await
+        .map(|((), reopened)| AppliedEffect {
+            archived: reopened.then_some(false),
+            ..AppliedEffect::default()
+        })
+        .map_err(Failure::from_sink)
+    }
 
-                self.sink
-                    .post_thread_note(
-                        thread,
-                        &Note {
-                            text: text.to_owned(),
-                        },
-                    )
-                    .await
-                    .map(|()| AppliedEffect {
-                        archived: Some(false),
-                        ..AppliedEffect::default()
-                    })
-                    .map_err(Failure::from_sink)
+    /// Moves a post in or out of a forum's pinned tray.
+    ///
+    /// A pin is a convenience — the "needs attention" row at the top of a forum index — and never
+    /// a reason to hold up or lose a notification, so every refusal here ends in `Ok` and the card
+    /// carries on with the pin it already had.
+    async fn pin(
+        &self,
+        notification: dam_store::NotificationId,
+        pinned: bool,
+    ) -> Result<AppliedEffect, Failure> {
+        let thread = self.thread(notification).await?;
+
+        match self.sink.set_post_pinned(thread, pinned).await {
+            Ok(()) => Ok(AppliedEffect {
+                pinned: Some(pinned),
+                ..AppliedEffect::default()
+            }),
+            // Discord gives a forum one pinned post, which is fewer than a busy channel asks for,
+            // and a full channel stays full for as long as the post holding the slot is open.
+            // Expected rather than broken, so not a warning: the card keeps its unpinned state,
+            // and the plan asks again the next time the card changes state.
+            Err(SinkError::PinLimitReached) => {
+                debug!(%notification, "the channel has no free pin; carrying on");
+                Ok(AppliedEffect::default())
             }
-            Err(error) => Err(Failure::from_sink(error)),
+            Err(error) => {
+                warn!(%notification, %error, "cannot change a post's pin; carrying on");
+                Ok(AppliedEffect::default())
+            }
         }
     }
 
@@ -501,11 +510,17 @@ impl Dispatcher {
             card.created_at.timestamp()
         );
 
-        self.sink
-            .post_escalation(card.thread_id.unwrap_or(card.channel_id), &mentions, &text)
-            .await
-            .map(|()| AppliedEffect::default())
-            .map_err(Failure::from_sink)
+        let channel = card.thread_id.unwrap_or(card.channel_id);
+
+        reopening(self.sink.as_ref(), channel, || {
+            self.sink.post_escalation(channel, &mentions, &text)
+        })
+        .await
+        .map(|((), reopened)| AppliedEffect {
+            archived: reopened.then_some(false),
+            ..AppliedEffect::default()
+        })
+        .map_err(Failure::from_sink)
     }
 
     /// Tells an administrator that a route has stopped delivering, once per route.
@@ -616,6 +631,46 @@ impl Dispatcher {
     }
 }
 
+/// Runs a call against a thread, reopening the thread once when it turns out to be archived.
+///
+/// Discord archives a thread on its own once its inactivity window passes, and tells nobody:
+/// editing a message is not activity, so a long-lived card's post closes underneath the pipeline
+/// while the stored flag still says open. The plan therefore carries no reopen step, and every
+/// write the card needs is refused. Retrying that refusal cannot help — an archived thread stays
+/// archived until something reopens it — so the reopen happens here, and the `bool` says whether
+/// it did, for the caller to record against the card.
+///
+/// A reopen that is itself refused surfaces as the failure it is: a locked thread, or a missing
+/// `MANAGE_THREADS`, reaches an operator rather than being spent on ten identical attempts.
+async fn reopening<T, F, Fut>(
+    sink: &dyn DiscordSink,
+    thread: dam_store::ChannelId,
+    call: F,
+) -> Result<(T, bool), SinkError>
+where
+    F: Fn() -> Fut,
+    Fut: Future<Output = Result<T, SinkError>>,
+{
+    match call().await {
+        Err(SinkError::ThreadArchived) => {
+            sink.set_post_flags(
+                thread,
+                PostFlags {
+                    archived: false,
+                    locked: false,
+                    auto_archive_minutes: REOPENED_AUTO_ARCHIVE_MINUTES,
+                },
+            )
+            .await?;
+
+            metrics::counter!("dam_thread_reopened_total").increment(1);
+
+            call().await.map(|value| (value, true))
+        }
+        other => other.map(|value| (value, false)),
+    }
+}
+
 /// What to do about an effect that did not succeed.
 enum Failure {
     /// Try again after this many seconds.
@@ -711,7 +766,218 @@ fn backoff_secs(attempts: u32) -> i64 {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
+    use async_trait::async_trait;
+    use dam_engine::{CardData, CardTarget, PostedMessage, TagSpec};
+    use dam_store::{ChannelId, ForumTag};
+
     use super::*;
+
+    /// A sink that records what it was asked to do and refuses notes until the thread is reopened.
+    ///
+    /// Written by hand rather than mocked: the whole point of the test is the order of three
+    /// calls, which a recorded list states more plainly than an expectation does.
+    #[derive(Default)]
+    struct FakeSink {
+        calls: Mutex<Vec<String>>,
+        archived: Mutex<bool>,
+        reopen: Option<SinkError>,
+    }
+
+    impl FakeSink {
+        /// A sink whose thread is archived, and which lets it be reopened.
+        fn archived() -> Self {
+            Self {
+                archived: Mutex::new(true),
+                ..Self::default()
+            }
+        }
+
+        /// A sink whose thread is archived and refuses to reopen, as a locked one does.
+        fn sealed(error: SinkError) -> Self {
+            Self {
+                archived: Mutex::new(true),
+                reopen: Some(error),
+                ..Self::default()
+            }
+        }
+
+        /// What it was asked to do, in order.
+        fn calls(&self) -> Vec<String> {
+            self.calls
+                .lock()
+                .expect("the test holds no poisoned lock")
+                .clone()
+        }
+
+        /// Records one call.
+        fn record(&self, call: &str) {
+            self.calls
+                .lock()
+                .expect("the test holds no poisoned lock")
+                .push(call.to_owned());
+        }
+    }
+
+    #[async_trait]
+    impl DiscordSink for FakeSink {
+        async fn post_thread_note(
+            &self,
+            _thread: ChannelId,
+            _note: &Note,
+        ) -> Result<(), SinkError> {
+            self.record("note");
+
+            if *self
+                .archived
+                .lock()
+                .expect("the test holds no poisoned lock")
+            {
+                return Err(SinkError::ThreadArchived);
+            }
+
+            Ok(())
+        }
+
+        async fn set_post_flags(
+            &self,
+            _thread: ChannelId,
+            flags: PostFlags,
+        ) -> Result<(), SinkError> {
+            self.record("flags");
+
+            if let Some(error) = self.reopen.clone() {
+                return Err(error);
+            }
+
+            *self
+                .archived
+                .lock()
+                .expect("the test holds no poisoned lock") = flags.archived;
+
+            Ok(())
+        }
+
+        async fn post_card(
+            &self,
+            _target: &CardTarget,
+            _card: &CardData,
+        ) -> Result<PostedMessage, SinkError> {
+            unimplemented!("the reopen tests post no cards")
+        }
+
+        async fn create_forum_post(
+            &self,
+            _target: &CardTarget,
+            _card: &CardData,
+        ) -> Result<PostedMessage, SinkError> {
+            unimplemented!("the reopen tests post no cards")
+        }
+
+        async fn edit_card(
+            &self,
+            _message: &MessageRef,
+            _card: &CardData,
+        ) -> Result<(), SinkError> {
+            unimplemented!("the reopen tests edit no cards")
+        }
+
+        async fn open_thread(
+            &self,
+            _message: &MessageRef,
+            _name: &str,
+        ) -> Result<dam_store::ChannelId, SinkError> {
+            unimplemented!("the reopen tests open no threads")
+        }
+
+        async fn post_escalation(
+            &self,
+            _channel: ChannelId,
+            _mentions: &[Mention],
+            _text: &str,
+        ) -> Result<(), SinkError> {
+            unimplemented!("the reopen tests escalate nothing")
+        }
+
+        async fn disable_components(&self, _message: &MessageRef) -> Result<(), SinkError> {
+            unimplemented!("the reopen tests disable nothing")
+        }
+
+        async fn set_post_tags(
+            &self,
+            _thread: ChannelId,
+            _tags: &[dam_store::TagId],
+        ) -> Result<(), SinkError> {
+            unimplemented!("the reopen tests set no tags")
+        }
+
+        async fn set_post_pinned(
+            &self,
+            _thread: ChannelId,
+            _pinned: bool,
+        ) -> Result<(), SinkError> {
+            unimplemented!("the reopen tests pin nothing")
+        }
+
+        async fn forum_tags(&self, _forum: ChannelId) -> Result<Vec<ForumTag>, SinkError> {
+            unimplemented!("the reopen tests read no tags")
+        }
+
+        async fn ensure_forum_tags(
+            &self,
+            _forum: ChannelId,
+            _want: &[TagSpec],
+        ) -> Result<Vec<ForumTag>, SinkError> {
+            unimplemented!("the reopen tests create no tags")
+        }
+    }
+
+    /// The note the reopen tests post.
+    fn note() -> Note {
+        Note {
+            text: "still firing".to_owned(),
+        }
+    }
+
+    #[tokio::test]
+    async fn an_archived_thread_is_reopened_and_the_call_made_again() {
+        let sink = FakeSink::archived();
+        let thread = ChannelId::new(1);
+
+        let note = note();
+
+        let outcome = reopening(&sink, thread, || sink.post_thread_note(thread, &note)).await;
+
+        assert_eq!(outcome, Ok(((), true)));
+        assert_eq!(sink.calls(), vec!["note", "flags", "note"]);
+    }
+
+    #[tokio::test]
+    async fn an_open_thread_is_left_alone() {
+        let sink = FakeSink::default();
+        let thread = ChannelId::new(1);
+
+        let note = note();
+
+        let outcome = reopening(&sink, thread, || sink.post_thread_note(thread, &note)).await;
+
+        assert_eq!(outcome, Ok(((), false)));
+        assert_eq!(sink.calls(), vec!["note"]);
+    }
+
+    #[tokio::test]
+    async fn a_thread_that_will_not_reopen_reports_why_instead_of_trying_again() {
+        let sink = FakeSink::sealed(SinkError::ThreadLocked);
+        let thread = ChannelId::new(1);
+
+        let note = note();
+
+        let outcome = reopening(&sink, thread, || sink.post_thread_note(thread, &note)).await;
+
+        assert_eq!(outcome, Err(SinkError::ThreadLocked));
+        assert_eq!(sink.calls(), vec!["note", "flags"]);
+    }
 
     #[test]
     fn an_unchanged_tag_set_hashes_the_same() {
