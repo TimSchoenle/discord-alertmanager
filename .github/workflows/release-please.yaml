@@ -24,7 +24,7 @@ env:
   DOCKERHUB_REPO: docker.io/timschoenle/discord-alertmanager
   GHCR_REPO: ghcr.io/timschoenle/discord-alertmanager
   HELM_REPO: TimSchoenle/helm-charts
-  CHART_PATH: charts/netcup-offer-bot
+  CHART_PATH: charts/discord-alertmanager
 
 jobs:
   release-please:
