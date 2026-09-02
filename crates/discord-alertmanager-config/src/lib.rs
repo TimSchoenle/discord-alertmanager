@@ -134,5 +134,6 @@ pub struct Config {
     /// that disappears from this list is disabled rather than deleted, so the notifications it
     /// created keep their history. `/route add` writes the other kind, which lives only in the
     /// database.
+    #[cfg_attr(feature = "config-schema", config(element))]
     pub routes: Vec<RouteConfig>,
 }

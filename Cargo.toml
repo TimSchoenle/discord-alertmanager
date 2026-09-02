@@ -37,7 +37,7 @@ dam-ingest = { path = "crates/discord-alertmanager-ingest", package = "discord-a
 # --- configuration ----------------------------------------------------------------------------
 # Pinned by tag, not branch: `cargo update` cannot then move across arbitrary commits, and every
 # bump is a manifest edit that shows up in review.
-terrace-config = { git = "https://github.com/TimSchoenle/terrace-config", tag = "v0.9.2" }
+terrace-config = { git = "https://github.com/TimSchoenle/terrace-config", tag = "v0.10.0" }
 
 # --- runtime ----------------------------------------------------------------------------------
 tokio = { version = "1.53", default-features = false }

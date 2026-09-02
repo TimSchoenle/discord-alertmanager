@@ -311,6 +311,24 @@
         "buttons": {
           "default": [],
           "description": "The buttons themselves, rendered in order.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "label": {
+                "description": "Text on the button. Discord truncates past 80 characters.",
+                "type": "string"
+              },
+              "url": {
+                "description": "URL template, rendered with `minijinja` against `alert`, `labels`, `annotations`, `links`\nand `window`.\n\nEvery substitution in a URL is percent-encoded. A template that interpolates a value\nwithout a filter is refused when the template is compiled, not when it is rendered, so the\nmistake surfaces at boot.",
+                "type": "string"
+              },
+              "when": {
+                "description": "Expression that has to be truthy for the button to appear.\n\nLeave it unset for a button that always appears. `annotations.runbook_url` is the common\ncase: no runbook annotation, no runbook button.",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
           "type": "array"
         },
         "grafana_base": {
@@ -397,6 +415,238 @@
     "routes": {
       "default": [],
       "description": "Routes declared in the file, which cannot be edited or deleted from Discord.\n\nDeclaring a route here is what makes a deployment reproducible from its manifests. A route\nthat disappears from this list is disabled rather than deleted, so the notifications it\ncreated keep their history. `/route add` writes the other kind, which lives only in the\ndatabase.",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "continue_to_next": {
+            "description": "Keep evaluating later routes after this one matches.\n\nThis is Alertmanager's own `continue`, spelled out because `continue` is a Rust keyword.",
+            "type": "boolean"
+          },
+          "enabled": {
+            "description": "Whether the route is live.\n\nA route removed from this file is disabled rather than deleted, so the notifications it\ncreated keep their foreign key and stay renderable.",
+            "type": "boolean"
+          },
+          "escalation": {
+            "additionalProperties": false,
+            "properties": {
+              "after_secs": {
+                "description": "Seconds a card may stay firing and unacknowledged before it escalates.\n\nUnset disables escalation on this route, which is the default: a route that escalates\nwithout anybody having asked for it is a second mention nobody expected.",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "roles": {
+                "description": "Role ids the escalation mentions. Falls back to `mentions.roles` when empty.",
+                "items": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              "users": {
+                "description": "User ids the escalation mentions. Falls back to `mentions.users` when empty.\n\nNaming a person here rather than a role is what makes an escalation reach somebody who is\nnot watching the channel it fires in.",
+                "items": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "group_strategy": {
+            "description": "Whether one card covers one alert or one Alertmanager group.",
+            "enum": [
+              "per_alert",
+              "per_group",
+              "digest"
+            ],
+            "type": "string"
+          },
+          "guild_id": {
+            "description": "Guild this route belongs to.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "matchers": {
+            "description": "Alertmanager matcher expression, such as `severity=critical, namespace=~prod-.*`.\n\nThe operators are Alertmanager's: `=`, `!=`, `=~` and `!~`. A regex is fully anchored and\nmatches the empty string when the label is absent, which is what Alertmanager does. A\npattern longer than 512 bytes is refused, and compiled patterns carry size limits, because\nthese also arrive from `/route add`.",
+            "type": "string"
+          },
+          "mentions": {
+            "additionalProperties": false,
+            "properties": {
+              "min_severity": {
+                "description": "Lowest severity that mentions anyone.",
+                "enum": [
+                  "info",
+                  "warning",
+                  "critical"
+                ],
+                "type": "string"
+              },
+              "roles": {
+                "description": "Role ids mentioned on a new firing alert.",
+                "items": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              "users": {
+                "description": "User ids mentioned on a new firing alert.",
+                "items": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "min_severity": {
+            "description": "Lowest severity this route accepts. Every severity passes when unset.",
+            "enum": [
+              "info",
+              "warning",
+              "critical"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "description": "Name shown in `/route list` and in a card's footer. Unique within a guild.",
+            "type": "string"
+          },
+          "priority": {
+            "description": "Evaluation order. Lower runs first.",
+            "maximum": 2147483647,
+            "minimum": -2147483648,
+            "type": "integer"
+          },
+          "target": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "description": "Snowflake of the channel, thread or user.",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "kind": {
+                "description": "What sort of channel `id` names.\n\n`/route test` checks the channel's actual type against this before the route is accepted,\nbecause posting a plain message to a forum channel fails at delivery time otherwise.",
+                "enum": [
+                  "text",
+                  "forum",
+                  "thread",
+                  "dm"
+                ],
+                "type": "string"
+              },
+              "policy": {
+                "additionalProperties": false,
+                "properties": {
+                  "archive_on_resolve": {
+                    "description": "Archive a forum post when its alert resolves.",
+                    "type": "boolean"
+                  },
+                  "auto_archive_minutes": {
+                    "description": "Minutes of inactivity before a resolved post or thread archives.\n\nDiscord accepts 60, 1440, 4320 and 10080. Unset takes\n`render.thread_archive_after_minutes`. A card that is still firing holds 10080 whatever\nthis says, so that a long incident never archives underneath the people working it.",
+                    "maximum": 4294967295,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "bump_on_state_change": {
+                    "description": "Post a one-line thread note on every state change.\n\nEditing a message does not bump a forum's activity sort; only a new message does. Without\nthis, a state change that only edits the card leaves the post buried where it was. The\nnote also gives the post the readable timeline that an edited-in-place card deliberately\ndoes not keep.",
+                    "type": "boolean"
+                  },
+                  "default_tag": {
+                    "description": "Tag applied when nothing else resolves, for a channel with `REQUIRE_TAG` set.",
+                    "type": "string"
+                  },
+                  "label_tags": {
+                    "description": "Labels whose values become tags, at most three.\n\nUse low-cardinality labels only. A forum channel holds 20 tags and a post holds 5; the bot\nrefuses to create a new tag once the channel reaches 18, so an unbounded label exhausts\nthe budget in an afternoon and later posts lose their tags.",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "lock_on_resolve": {
+                    "description": "Lock a forum post when its alert resolves.\n\nA locked thread needs `MANAGE_THREADS` to reopen, and a flap has to reopen one. Without\nthat permission the notification is marked orphaned and a fresh card is posted, so leave\nthis off unless the permission is held.",
+                    "type": "boolean"
+                  },
+                  "manage_tags": {
+                    "description": "Create missing forum tags, which needs `MANAGE_CHANNELS`.\n\nCreated tags are non-moderated on purpose: a moderated tag can only be applied by a member\nholding `MANAGE_THREADS`, while a non-moderated one can be set by the thread's owner,\nwhich the bot is. Without the permission the bot applies the tags that already resolve and\nreports the gap in `/route test`; a missing tag never fails a notification.",
+                    "type": "boolean"
+                  },
+                  "max_pinned": {
+                    "description": "Most posts pinned at once.",
+                    "maximum": 4294967295,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "pin_min_severity": {
+                    "description": "Lowest severity that pins an unacknowledged post.\n\nPinned posts are a free \"needs attention\" tray at the top of the index. The pin is dropped\non acknowledgement or resolution, and a pin that fails is a warning that never blocks the\nnotification.",
+                    "enum": [
+                      "info",
+                      "warning",
+                      "critical"
+                    ],
+                    "type": "string"
+                  },
+                  "severity_tags": {
+                    "description": "Apply a tag named after the alert's severity.",
+                    "type": "boolean"
+                  },
+                  "state_tags": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "acked": {
+                        "description": "Tag for an alert somebody has taken.",
+                        "type": "string"
+                      },
+                      "firing": {
+                        "description": "Tag for an alert that is firing and unacknowledged.",
+                        "type": "string"
+                      },
+                      "resolved": {
+                        "description": "Tag for an alert that has resolved.",
+                        "type": "string"
+                      },
+                      "silenced": {
+                        "description": "Tag for an alert an Alertmanager silence is suppressing.",
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "thread_kind": {
+                    "description": "Whether that thread is visible to the channel or only to invited members.\n\nA private thread is not anchored to the card, so the card has to carry a link to it and\nthe bot has to invite the mentioned roles' members. Choose it for routes whose labels are\nsensitive, and accept both costs.",
+                    "enum": [
+                      "public",
+                      "private"
+                    ],
+                    "type": "string"
+                  },
+                  "thread_when": {
+                    "description": "When a text-channel route opens a thread for a card.",
+                    "enum": [
+                      "never",
+                      "on_create",
+                      "on_ack",
+                      "on_first_reply"
+                    ],
+                    "type": "string"
+                  },
+                  "title_template": {
+                    "description": "Title template for a forum post, rendered with `minijinja`.\n\nA forum post title is mandatory and 1 to 100 characters, so this falls back to the alert\nname and then to the fingerprint. An empty title fails post creation outright.",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
       "type": "array"
     },
     "storage": {
