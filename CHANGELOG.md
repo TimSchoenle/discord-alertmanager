@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.3.1](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.3.0...v0.3.1) (2026-09-02)
+
+
+### Bug Fixes
+
+* discord forum re-open and pin bug ([#16](https://github.com/TimSchoenle/discord-alertmanager/issues/16)) ([39a14a3](https://github.com/TimSchoenle/discord-alertmanager/commit/39a14a37e25793b1e3cb6feeefc01655f5be0654))
+
+
+### Documentation
+
+* fix readme template ([0ecdd10](https://github.com/TimSchoenle/discord-alertmanager/commit/0ecdd10cdce742009b6a734664a225dd8103ad7e))
+* improve readme discord notices ([d07b506](https://github.com/TimSchoenle/discord-alertmanager/commit/d07b506210c94427bb4eff2de0c0efc2c1f5c5b6))
+
+
+### CI
+
+* add helm auto updater release step ([58353ce](https://github.com/TimSchoenle/discord-alertmanager/commit/58353ceff2ec83401792ac03c17f92fd72d5de85))
+
+
+### Miscellaneous
+
+* **deps:** update timschoenle/actions/actions/common/render-template-and-commit to vactions-common-render-template-and-commit-v1.1.5 ([#13](https://github.com/TimSchoenle/discord-alertmanager/issues/13)) ([fac5474](https://github.com/TimSchoenle/discord-alertmanager/commit/fac5474147b5d4691030504e00803e1d8083b6a3))
+* **deps:** update timschoenle/actions/actions/helm/update-chart-version to vactions-helm-update-chart-version-v1.6.5 ([#14](https://github.com/TimSchoenle/discord-alertmanager/issues/14)) ([0903985](https://github.com/TimSchoenle/discord-alertmanager/commit/09039853c546bdfbffa70f602a3743908738e1de))
+* **deps:** update timschoenle/actions/actions/rust/auto-format to vactions-rust-auto-format-v1.1.13 ([#15](https://github.com/TimSchoenle/discord-alertmanager/issues/15)) ([4e9e77b](https://github.com/TimSchoenle/discord-alertmanager/commit/4e9e77bc18d094b82c12f073d4bde804908579d2))
+
 ## [0.3.0](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.2.0...v0.3.0) (2026-09-01)
 
 
