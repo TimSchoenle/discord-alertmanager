@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.3.1...v0.4.0) (2026-09-02)
+
+
+### Features
+
+* update terrace to 0.10.0 and opt in to new nested feature ([#18](https://github.com/TimSchoenle/discord-alertmanager/issues/18)) ([6125ffc](https://github.com/TimSchoenle/discord-alertmanager/commit/6125ffc452397d0f8838ae05b96eff80751a4ef2))
+
+
+### CI
+
+* fix helm chart path ([772f1a7](https://github.com/TimSchoenle/discord-alertmanager/commit/772f1a7bd1231657133f5e289fa401bd10be0ad3))
+
 ## [0.3.1](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.3.0...v0.3.1) (2026-09-02)
 
 
