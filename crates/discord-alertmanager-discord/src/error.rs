@@ -30,6 +30,9 @@ const THREAD_LOCKED: isize = 50_083;
 /// The request body was rejected, which for this bot is almost always a tag that no longer exists.
 const INVALID_FORM_BODY: isize = 50_035;
 
+/// The forum channel is already holding every pinned post Discord lets it hold.
+const MAX_PINNED_THREADS: isize = 30_047;
+
 /// How long to wait when Discord rate-limits a request without saying for how long.
 ///
 /// `serenity` waits out the limits it is told about, so reaching this means the response carried
@@ -69,6 +72,7 @@ pub(crate) fn sink_error(error: &SerenityError, expected: &'static str) -> SinkE
             SinkError::ThreadArchived
         }
         THREAD_LOCKED => SinkError::ThreadLocked,
+        MAX_PINNED_THREADS => SinkError::PinLimitReached,
         INVALID_FORM_BODY if message.contains("applied_tags") => SinkError::UnknownTag,
         INVALID_FORM_BODY if message.contains("available_tags") => SinkError::TagBudgetExceeded,
         _ => SinkError::Transient {

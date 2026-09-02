@@ -309,6 +309,14 @@ pub enum SinkError {
     #[error("forum tag budget exhausted")]
     TagBudgetExceeded,
 
+    /// The forum channel already holds as many pinned posts as Discord allows.
+    ///
+    /// A condition of the channel rather than of the call: it lasts until whoever holds a pin
+    /// gives it up, and no amount of retrying moves it. The pin is skipped and the notification
+    /// carries on unpinned.
+    #[error("the channel's pinned posts are at Discord's limit")]
+    PinLimitReached,
+
     /// The channel is not the kind this route expects.
     #[error("channel is not a {expected} channel")]
     WrongChannelType {
