@@ -36,6 +36,7 @@ pub struct Links {
     pub window_trail_secs: u64,
 
     /// The buttons themselves, rendered in order.
+    #[cfg_attr(feature = "config-schema", config(element))]
     pub buttons: Vec<LinkButton>,
 }
 
