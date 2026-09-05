@@ -114,8 +114,8 @@ registries. Both receive the same manifests from the same build, so a digest rea
 resolves in the other.
 
 ```bash
-docker pull timschoenle/discord-alertmanager:v0.4.0
-docker pull ghcr.io/timschoenle/discord-alertmanager:v0.4.0
+docker pull timschoenle/discord-alertmanager:v0.4.1
+docker pull ghcr.io/timschoenle/discord-alertmanager:v0.4.1
 ```
 
 Pin the digest in production. Every published index is signed with cosign against a GitHub OIDC
@@ -123,7 +123,7 @@ identity, and the configuration contract is attached to that digest as an OCI re
 alongside it, so an image can be checked without trusting the tag it arrived under:
 
 ```bash
-cosign verify ghcr.io/timschoenle/discord-alertmanager:v0.4.0 \
+cosign verify ghcr.io/timschoenle/discord-alertmanager:v0.4.1 \
     --certificate-identity-regexp '^https://github.com/TimSchoenle/discord-alertmanager/\.github/workflows/' \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
@@ -135,7 +135,7 @@ From source:
 ```bash
 git clone https://github.com/TimSchoenle/discord-alertmanager
 cd discord-alertmanager
-git checkout v0.4.0
+git checkout v0.4.1
 cargo build --release
 ```
 
