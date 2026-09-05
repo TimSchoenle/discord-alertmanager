@@ -289,8 +289,8 @@ fn update_for(
         if let RouteTarget::Forum { policy, .. } = &route.target
             && policy.archive_on_resolve
         {
-            effects.push(immediate(
-                Effect::SetFlags {
+            effects.push(NewOutboxItem {
+                effect: Effect::SetFlags {
                     notification: card.id,
                     archived: true,
                     locked: policy.lock_on_resolve,
@@ -303,9 +303,14 @@ fn update_for(
                         settings,
                     ),
                 },
-                card,
-                now,
-            ));
+                dedupe_key: card.dedupe_key.clone(),
+                // Behind the edit's debounce, and queued after it, so that the claim order —
+                // `not_before` then insertion — re-renders the card before the post is sealed.
+                // Archiving first left the edit fighting the archive it had just caused: a locked
+                // post refuses the edit outright and the card keeps saying "firing" for good,
+                // while an unlocked one is reopened to carry it and stops being archived at all.
+                not_before: now + settings.debounce,
+            });
         }
     }
 
@@ -1213,6 +1218,52 @@ mod tests {
                 "disable_components",
                 "set_flags"
             ]
+        );
+    }
+
+    #[test]
+    fn a_resolved_forum_post_is_re_rendered_before_it_is_archived() {
+        let route = forum_route();
+        let delta = delta(EventKind::Resolved, AlertStatus::Resolved, AmState::Active);
+        let key = delta.per_alert_key();
+        let mut existing = ExistingCards::new();
+        existing.insert(
+            (ChannelId::new(200), key.clone()),
+            card(NotificationState::Firing, ChannelId::new(200), &key),
+        );
+        let snapshot = RoutingSnapshot::new(vec![route], Vec::new(), forum_tags());
+
+        let decision = decide(
+            &delta,
+            &snapshot,
+            &quiet(),
+            &existing,
+            false,
+            &DecisionSettings::default(),
+            now(),
+        );
+
+        let effects = &decision.updates[0].effects;
+        let edit = effects
+            .iter()
+            .position(|item| matches!(item.effect, Effect::EditCard { .. }))
+            .expect("the resolve re-renders the card");
+        let archive = effects
+            .iter()
+            .position(|item| matches!(item.effect, Effect::SetFlags { archived: true, .. }))
+            .expect("the policy archives on resolve");
+
+        // The queue is claimed by `not_before` and then by insertion, so the archive being no
+        // earlier and no sooner is what puts the re-render first. An archive that ran first would
+        // leave the edit to reopen the post it had just closed, or — on a locked one — to be
+        // dropped, and the card would go on saying "firing" after the alert had stopped.
+        assert!(
+            effects[archive].not_before >= effects[edit].not_before,
+            "the archive does not come due before the re-render"
+        );
+        assert!(
+            archive > edit,
+            "the archive is queued behind the re-render, so equal deadlines still order it last"
         );
     }
 

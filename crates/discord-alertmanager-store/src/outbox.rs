@@ -231,11 +231,17 @@ impl Effect {
         }
     }
 
-    /// Whether a later item of this kind for the same key supersedes an earlier one.
+    /// Whether a later item of this kind supersedes an earlier one *for the same card*.
     ///
     /// Two queued edits of one card are one edit of its current state; two queued notes are two
     /// different sentences. Coalescing the first pair is what keeps a storm inside Discord's edit
     /// limits, and coalescing the second would lose a line of the timeline.
+    ///
+    /// The card, and never the dedupe key, is the scope. One alert fans out to every route that
+    /// matches it, and each of those cards is keyed under the same per-alert key in a channel of
+    /// its own; folding on the key alone would let the edit for one card overwrite the queued
+    /// edit for another and leave that card frozen at whatever it last rendered. Every
+    /// coalescable variant therefore names a notification, and the store folds on that.
     #[must_use]
     pub fn is_coalescable(&self) -> bool {
         matches!(self, Self::EditCard { .. } | Self::SetTags { .. })

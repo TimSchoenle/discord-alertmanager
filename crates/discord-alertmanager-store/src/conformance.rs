@@ -59,6 +59,7 @@ pub async fn run(store: &dyn Store) {
     only_the_first_reply_changes_the_card(store).await;
     a_deleted_card_releases_its_key(store).await;
     an_edit_is_coalesced_and_a_note_is_not(store).await;
+    two_cards_sharing_a_key_keep_their_own_edits(store).await;
     ignore_rules_expire_and_revoke(store).await;
     a_config_route_syncs_and_a_discord_route_collides(store).await;
     silences_sync_into_deltas(store).await;
@@ -1336,6 +1337,99 @@ async fn an_edit_is_coalesced_and_a_note_is_not(store: &dyn Store) {
     }
 
     drain(store, "coalesce").await;
+}
+
+/// One alert reaching two routes leaves two cards, and neither swallows the other's effects.
+///
+/// The per-alert dedupe key belongs to the alert, not to the card: every route matching one alert
+/// produces a card under the same key in a channel of its own. Coalescing on the key alone folded
+/// those cards' edits and tag changes into a single row, so all but one card stopped being
+/// updated and went on showing the state it was posted in.
+async fn two_cards_sharing_a_key_keep_their_own_edits(store: &dyn Store) {
+    let key = DedupeKey::from_stored("a:fanout");
+
+    let first_route = route_for(store, "fanout-one", 210).await;
+    let second_route = route_for(store, "fanout-two", 211).await;
+    let first = card_for(store, first_route, 210, &key).await;
+    let second = card_for(store, second_route, 211, &key).await;
+
+    let resolve = |id: crate::NotificationId, tag: u64| CardUpdate {
+        id,
+        fingerprint: Fingerprint::new("aaaa0001").expect("the fingerprint is hexadecimal"),
+        state: Some(NotificationState::Resolved),
+        effects: vec![
+            NewOutboxItem {
+                effect: Effect::EditCard { notification: id },
+                dedupe_key: key.clone(),
+                not_before: at(30),
+            },
+            NewOutboxItem {
+                effect: Effect::SetTags {
+                    notification: id,
+                    tags: vec![crate::TagId::new(tag)],
+                },
+                dedupe_key: key.clone(),
+                not_before: at(30),
+            },
+        ],
+    };
+
+    store
+        .apply_decision(&Decision {
+            new_cards: Vec::new(),
+            updates: vec![resolve(first, 1), resolve(second, 2)],
+            at: at(0),
+        })
+        .await
+        .expect("the decision applies");
+
+    let items = store
+        .claim_outbox(
+            &WorkerId::new("fanout"),
+            ClaimRequest {
+                lane: None,
+                lease_secs: 30,
+                limit: 20,
+            },
+            at(120),
+        )
+        .await
+        .expect("the claim succeeds");
+
+    let edited: Vec<crate::NotificationId> = items
+        .iter()
+        .filter_map(|item| match item.effect {
+            Effect::EditCard { notification } => Some(notification),
+            _ => None,
+        })
+        .collect();
+    let tagged: Vec<crate::NotificationId> = items
+        .iter()
+        .filter_map(|item| match item.effect {
+            Effect::SetTags { notification, .. } => Some(notification),
+            _ => None,
+        })
+        .collect();
+
+    assert!(
+        edited.contains(&first) && edited.contains(&second),
+        "each card keeps its own re-render; folding on the shared key loses one of them"
+    );
+    assert!(
+        tagged.contains(&first) && tagged.contains(&second),
+        "each post keeps its own tag change, so both stop saying they are firing"
+    );
+
+    // Folding within one card is unaffected, and `an_edit_is_coalesced_and_a_note_is_not` is
+    // where that is asserted: the scope narrowed from the alert to the card, and no further.
+    for item in &items {
+        store
+            .fail_outbox(&WorkerId::new("fanout"), item.id, "test", None)
+            .await
+            .expect("the item is abandoned");
+    }
+
+    drain(store, "fanout").await;
 }
 
 async fn ignore_rules_expire_and_revoke(store: &dyn Store) {

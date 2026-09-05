@@ -1528,11 +1528,16 @@ async fn insert_notification(
     ))
 }
 
-/// Queues one effect, folding it into a pending one where that loses nothing.
+/// Queues one effect, folding it into a pending one for the same card where that loses nothing.
 ///
 /// Two queued edits of one card are one edit of its current state; two queued thread notes are two
 /// different sentences. The fold keeps the earlier `not_before`, so a sustained stream of changes
 /// still produces an edit one debounce after the first of them rather than never.
+///
+/// The card is the scope and the dedupe key is not. One alert fans out to every route that matches
+/// it, and those cards share one per-alert key across channels of their own; folding on the key
+/// alone let one card's edit overwrite another's, and left that card showing whatever it had last
+/// rendered — which for a resolved alert is the word "firing".
 async fn enqueue(
     conn: &mut SqliteConnection,
     item: &NewOutboxItem,
@@ -1541,16 +1546,21 @@ async fn enqueue(
     let kind = item.effect.kind();
     let payload = encode_json(&item.effect);
     let key = item.dedupe_key.as_str().to_owned();
+    let notification = item.effect.notification();
 
-    if item.effect.is_coalescable() {
+    // Every coalescable effect names a card, and the binding is what makes that a fact the query
+    // can hold rather than a claim in a comment: one that names none is queued, never folded.
+    if item.effect.is_coalescable()
+        && let Some(notification) = notification
+    {
         let folded = sqlx::query(
             "UPDATE outbox SET payload = ?, not_before = min(not_before, ?) \
-             WHERE claimed_at IS NULL AND kind = ? AND dedupe_key = ?",
+             WHERE claimed_at IS NULL AND kind = ? AND notification_id = ?",
         )
         .bind(payload.clone())
         .bind(encode_time(item.not_before))
         .bind(kind)
-        .bind(key.clone())
+        .bind(notification.get())
         .execute(&mut *conn)
         .await
         .map_err(backend)?
@@ -1562,12 +1572,14 @@ async fn enqueue(
     }
 
     sqlx::query(
-        "INSERT INTO outbox (lane, kind, dedupe_key, payload, not_before, created_at) \
-         VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO outbox \
+         (lane, kind, dedupe_key, notification_id, payload, not_before, created_at) \
+         VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(i64::from(item.dedupe_key.lane(OUTBOX_LANES)))
     .bind(kind)
     .bind(key.clone())
+    .bind(notification.map(NotificationId::get))
     .bind(payload.clone())
     .bind(encode_time(item.not_before))
     .bind(encode_time(at))
