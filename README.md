@@ -271,10 +271,8 @@ before there is a configuration to describe them, so no file can supply one.
 | --- | --- | --- | --- |
 | `DAM_CONFIG` | config | `config.toml` | Names the TOML layer: a file, or a directory whose `*.toml` files are all merged in name order. |
 | `DAM_SECRETS_DIR` | secrets dir | — | Names a directory of key-named files — a mounted Kubernetes `Secret` volume. Each file supplies the key its name spells. |
-| `DAM_LOG_FORMAT` | reserved | — | Read directly from the environment before the layered config exists, so no file may supply it. |
-| `DAM_LOG_LEVEL` | reserved | — | Read directly from the environment before the layered config exists, so no file may supply it. |
 
-Behind them are 63 keys. Each is spelled the same way in every layer: `__`
+Behind them are 79 keys. Each is spelled the same way in every layer: `__`
 separates nesting levels and case is folded, so `discord.token` is `DAM_DISCORD__TOKEN` as a
 variable and `discord__token` as a file name in the secrets directory.
 
@@ -288,7 +286,7 @@ These are the ones with no default, which the process will not start without:
 | `ingest.bind` | `SocketAddr` | `DAM_INGEST__BIND` | `0.0.0.0:9099` | — | Address and port to listen on. |
 | `ingest.webhook_token` | `SecretString` | `DAM_INGEST__WEBHOOK_TOKEN` | unset | secret | Bearer token every webhook request has to carry. |
 
-[docs/config.md](docs/config.md) has all 63 of them with their defaults,
+[docs/config.md](docs/config.md) has all 79 of them with their defaults,
 [docs/config.json](docs/config.json) is the JSON Schema, and
 [config.example.toml](config.example.toml) is the same surface as a commented file. All three are
 written by `cargo xtask config-docs`.
@@ -303,10 +301,23 @@ up. `/readyz` answers only when the bot can do its job, which includes how recen
 was heard from, so a bot that has silently stopped receiving stops claiming to be ready. `/metrics`
 serves the Prometheus registry and is switched off with a single key.
 
-Logging is installed before the configuration is read, from `DAM_LOG_LEVEL` and `DAM_LOG_FORMAT`,
-because a configuration error is the failure most worth seeing and it happens before there is a
-configuration to describe how to report it. `DAM_LOG_FORMAT=json` switches the subscriber to JSON
-for a log aggregator.
+The `telemetry` section holds everything the process says about itself. `telemetry.log_level`
+takes `RUST_LOG` syntax and `telemetry.log_format` switches the subscriber to JSON for a log
+aggregator. Both describe the subscriber, so the subscriber is installed once the configuration
+has been read rather than before it; nothing is lost in that window, because loading reads files
+and environment variables and logs nothing. A configuration that will not load is the one thing
+that has to be reported without one, and a bootstrap subscriber reading `DAM_TELEMETRY__LOG_LEVEL`
+and `DAM_TELEMETRY__LOG_FORMAT` straight from the environment carries that report.
+
+Sentry sits under the same section and is off until `telemetry.sentry.dsn` is set. It is linked
+into every build, so turning it on is a key rather than a rebuild. With a DSN it reports panics
+and, by default, anything logged at `error`, with the preceding `info` records attached as
+breadcrumbs; `event_level` and `breadcrumb_level` move both thresholds, and `telemetry.log_level`
+still gates what either can see. Tracing is separate and starts at zero: raising
+`traces_sample_rate` above `0.0` turns each webhook batch, outbox item, periodic pass and slash
+command into one trace, and only this workspace's own spans are traced. A DSN that does not parse
+stops the process, because reporting that quietly failed to start is discovered during the
+incident it was meant to describe.
 
 Five things run on their own clocks beside the listener: the reconciler, the silence sync, the
 lease janitor, the escalation sweep and the retention pruner. Each has its own interval key, a
