@@ -721,6 +721,126 @@
         }
       },
       "type": "object"
+    },
+    "telemetry": {
+      "additionalProperties": false,
+      "properties": {
+        "log_format": {
+          "default": "plain",
+          "description": "How each log line is written.",
+          "enum": [
+            "plain",
+            "json"
+          ],
+          "type": "string"
+        },
+        "log_level": {
+          "default": "warn,discord_alertmanager=info,dam_=info",
+          "description": "Filter directives for the log stream, in `RUST_LOG` syntax.\n\nA comma-separated list of `target=level` directives with an optional bare level as the\ndefault, so `warn,dam_engine=debug` raises one crate and leaves the rest alone. A directive\nthat does not parse stops the process rather than being ignored: a filter that silently\nreverted to its default would be discovered while reading logs that should have been there.\n\nA bare word is a target name and not a level, so a misspelt `waarn` is read as a directive\nabout a crate that does not exist. It parses, it stops nothing, and it filters nothing —\ncheck a level change took effect rather than assuming it did.",
+          "type": "string"
+        },
+        "sentry": {
+          "additionalProperties": false,
+          "properties": {
+            "attach_stacktrace": {
+              "default": false,
+              "description": "Attach a stack trace to every event, not only to panics.\n\nUseful while a fault is being chased and expensive afterwards: it captures and symbolicates\na backtrace on every capture, including the ones that were only ever going to be counted.",
+              "type": "boolean"
+            },
+            "breadcrumb_level": {
+              "default": "info",
+              "description": "Level at or above which a log record is kept as a breadcrumb behind the next event.\n\nBreadcrumbs never leave the process on their own. They are attached to the event that\nfollows them, which is what turns \"a dispatch failed\" into the sequence that led there.",
+              "enum": [
+                "off",
+                "error",
+                "warn",
+                "info",
+                "debug",
+                "trace"
+              ],
+              "type": "string"
+            },
+            "debug": {
+              "default": false,
+              "description": "Log what the Sentry client itself is doing.\n\nFor diagnosing reporting that is not arriving, and nothing else. It is noisy, and it prints\nthe DSN.",
+              "type": "boolean"
+            },
+            "dsn": {
+              "description": "Project DSN. Reporting is off while this is unset.\n\nIt is a credential: anyone holding it can write events into the project. Supply it through\n`DAM_SENTRY__DSN_FILE` or the secrets directory rather than as a plain environment\nvariable.",
+              "type": "string",
+              "writeOnly": true
+            },
+            "environment": {
+              "default": "production",
+              "description": "Deployment this process belongs to, which every event is tagged with.\n\nSet deliberately rather than left at the default. Sentry groups, alerts and retention are\nall keyed on it, and a staging replica reporting as `production` is worse than one that\nreports nothing.",
+              "type": "string"
+            },
+            "event_level": {
+              "default": "error",
+              "description": "Level at or above which a log record is sent as an event of its own.",
+              "enum": [
+                "off",
+                "error",
+                "warn",
+                "info",
+                "debug",
+                "trace"
+              ],
+              "type": "string"
+            },
+            "max_breadcrumbs": {
+              "default": 100,
+              "description": "How many breadcrumbs are kept behind an event.",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "release": {
+              "description": "Release every event is attributed to. Defaults to the bot's own version.\n\nOverride it only where the image carries a version this binary does not know, such as a\nbuild that appends a commit to the tag.",
+              "type": "string"
+            },
+            "sample_rate": {
+              "default": 1.0,
+              "description": "Fraction of events that are sent, from `0.0` to `1.0`.\n\nA blunt instrument: it drops whole events at random, so an error that fires once is the one\nmost likely to be lost. Leave it at `1.0` and shed volume with `event_level` instead.",
+              "type": "number"
+            },
+            "send_default_pii": {
+              "default": false,
+              "description": "Send the IP addresses, headers and user identifiers Sentry calls default PII.\n\nOff, and worth leaving off. The alerts this bot handles carry infrastructure labels, and\nthe Discord side carries user identifiers; neither needs to reach a third party for an\nerror report to be actionable.",
+              "type": "boolean"
+            },
+            "server_name": {
+              "description": "Host name reported with each event. Defaults to the machine's own.\n\nWorth setting where the machine name is an ephemeral pod hash, which groups nothing.",
+              "type": "string"
+            },
+            "shutdown_timeout_secs": {
+              "default": 2,
+              "description": "Seconds to spend delivering whatever is still queued during shutdown.\n\nSpent on the way out, after the listener has stopped, so it lengthens a restart by at most\nthis much. Zero abandons the queue, which loses exactly the report explaining why the\nprocess is stopping.",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "span_level": {
+              "default": "info",
+              "description": "Level at or above which a span joins the trace.\n\nOnly this bot's own spans are traced, whatever this says, and there is no key to widen\nthat. A dependency instruments its internals for its own logs, and the fields it attaches\nare debug renderings of whatever the call was holding — not something to hand to a third\nparty, and enough of them to bury the trace they surround.",
+              "enum": [
+                "off",
+                "error",
+                "warn",
+                "info",
+                "debug",
+                "trace"
+              ],
+              "type": "string"
+            },
+            "traces_sample_rate": {
+              "default": 0.0,
+              "description": "Fraction of traces that are sent, from `0.0` to `1.0`. Tracing is off at `0.0`.\n\nEvery webhook batch, every outbox item, every periodic pass and every slash command is one\ntrace, so the rate multiplies the busiest path in the process rather than the rarest. Start\nlow.",
+              "type": "number"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
     }
   },
   "title": "discord-alertmanager configuration",

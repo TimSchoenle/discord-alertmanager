@@ -271,10 +271,29 @@ impl EventHandler for Handler {
         self.bot.connected.store(connected, Ordering::Relaxed);
     }
 
+    /// Runs one interaction inside a span of its own.
+    ///
+    /// The span is the root of everything the interaction causes, so a trace collector sees one
+    /// unit of work per command or button press. The name of the command is a bounded set and is
+    /// recorded; who ran it is not recorded here, because that belongs in the audit trail rather
+    /// than in a telemetry export.
+    #[tracing::instrument(
+        name = "interaction",
+        skip_all,
+        fields(kind = tracing::field::Empty, name = tracing::field::Empty)
+    )]
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
+        let span = tracing::Span::current();
+
         match interaction {
-            Interaction::Command(command) => commands::dispatch(&self.bot, &ctx, &command).await,
+            Interaction::Command(command) => {
+                span.record("kind", "command");
+                span.record("name", command.data.name.as_str());
+                commands::dispatch(&self.bot, &ctx, &command).await;
+            }
             Interaction::Component(component) => {
+                span.record("kind", "component");
+                span.record("name", component.data.custom_id.as_str());
                 components::dispatch(&self.bot, &ctx, &component).await;
             }
             _ => {}

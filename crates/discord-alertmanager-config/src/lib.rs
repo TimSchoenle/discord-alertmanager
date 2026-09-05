@@ -42,6 +42,7 @@ mod observability;
 mod render;
 mod routes;
 mod storage;
+mod telemetry;
 
 pub use alertmanager::{Alertmanager, Retry};
 pub use discord::{Capabilities, Discord};
@@ -55,6 +56,7 @@ pub use routes::{
     TargetKind, TargetPolicy, ThreadKind, ThreadTrigger,
 };
 pub use storage::{Backend, PostgresConfig, SqliteConfig, Storage};
+pub use telemetry::{CaptureLevel, LogFormat, Sentry, Telemetry};
 
 use serde::Deserialize;
 use terrace_config::Terrace;
@@ -62,17 +64,17 @@ use terrace_config::Terrace;
 /// Prefix every environment variable, secret file name and `_FILE` indirection derives from.
 pub const ENV_PREFIX: &str = "DAM_";
 
-/// Log format, read straight from the environment before the layers exist.
-pub const LOG_FORMAT_VAR: &str = "DAM_LOG_FORMAT";
+/// Environment spelling of `telemetry.log_format`.
+///
+/// Nothing reserves it, because it is an ordinary key like any other and the loader derives this
+/// name for it. It is named here so the bootstrap subscriber can read it directly on the one path
+/// where there is no configuration to read it from: a configuration that would not load.
+pub const LOG_FORMAT_VAR: &str = "DAM_TELEMETRY__LOG_FORMAT";
 
-/// Log filter, read straight from the environment before the layers exist.
-pub const LOG_LEVEL_VAR: &str = "DAM_LOG_LEVEL";
+/// Environment spelling of `telemetry.log_level`, read directly on the same path.
+pub const LOG_LEVEL_VAR: &str = "DAM_TELEMETRY__LOG_LEVEL";
 
 /// Builds the layer stack every load and every reload goes through.
-///
-/// Both reserved variables are read by the tracing subscriber, which is installed before the
-/// configuration is loaded and is not rebuilt on reload. Reserving them turns an attempt to
-/// supply either through a secrets file into an error instead of a silent no-op.
 ///
 /// # Examples
 ///
@@ -84,8 +86,6 @@ pub const LOG_LEVEL_VAR: &str = "DAM_LOG_LEVEL";
 #[must_use]
 pub fn layers() -> Terrace {
     Terrace::new(ENV_PREFIX)
-        .reserve(LOG_FORMAT_VAR)
-        .reserve(LOG_LEVEL_VAR)
 }
 
 /// Everything the bot reads at boot.
@@ -127,6 +127,10 @@ pub struct Config {
     /// Metrics and the channel the deadman posts to.
     #[cfg_attr(feature = "config-schema", config(nested))]
     pub observability: Observability,
+
+    /// The log stream, and where crashes and traces are reported.
+    #[cfg_attr(feature = "config-schema", config(nested))]
+    pub telemetry: Telemetry,
 
     /// Routes declared in the file, which cannot be edited or deleted from Discord.
     ///

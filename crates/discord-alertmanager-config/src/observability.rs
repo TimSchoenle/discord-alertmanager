@@ -4,10 +4,10 @@ use serde::Deserialize;
 
 /// What the bot exposes about itself, and who hears when it goes quiet.
 ///
-/// The log format and filter are not here. Both are read straight from `DAM_LOG_FORMAT` and
-/// `DAM_LOG_LEVEL` before the configuration exists, because the subscriber is installed first and
-/// is not rebuilt on reload. Both names are reserved, so supplying either through a secrets file
-/// is an error rather than a value that never takes effect.
+/// The log stream is not here. It lives under `telemetry`, next to the error reporter that reads
+/// from it, because a Sentry threshold only ever narrows what `telemetry.log_level` already
+/// allows. What stays here is the pull surface a scrape reads and the channel the bot posts to,
+/// neither of which the subscriber is involved in.
 #[derive(Debug, Clone, Deserialize)]
 #[cfg_attr(
     feature = "config-schema",

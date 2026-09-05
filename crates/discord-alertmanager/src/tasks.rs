@@ -52,6 +52,10 @@ impl Job {
     }
 
     /// Runs one pass.
+    ///
+    /// The span is the root of that pass, so a trace collector sees the reconciler's Alertmanager
+    /// poll and the pruner's deletes as separate units of work rather than as one long-lived task.
+    #[tracing::instrument(name = "periodic task", skip_all, fields(job = self.name()))]
     async fn run(self, service: &PipelineService) -> Result<u64, String> {
         match self {
             Self::Reconcile => service

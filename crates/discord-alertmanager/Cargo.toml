@@ -41,6 +41,11 @@ dam-store-sqlite.workspace = true
 metrics.workspace = true
 # The recorder is global state, so it is installed here and in no library.
 metrics-exporter-prometheus.workspace = true
+secrecy.workspace = true
+# The Sentry hub is global state for the same reason the recorder is, and the client is linked
+# unconditionally for the same reason both store backends are: whether a deployment reports is a
+# key in its configuration, not a property of the image it was given.
+sentry.workspace = true
 terrace-config = { workspace = true, features = ["explain", "reload"] }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }

@@ -18,14 +18,6 @@
 #   DAM_SECRETS_DIR — secrets dir
 #     Names a directory of key-named files — a mounted Kubernetes `Secret` volume. Each file
 #     supplies the key its name spells.
-#
-#   DAM_LOG_FORMAT — reserved
-#     Read directly from the environment before the layered config exists, so no file may supply
-#     it.
-#
-#   DAM_LOG_LEVEL — reserved
-#     Read directly from the environment before the layered config exists, so no file may supply
-#     it.
 
 # Routes declared in the file, which cannot be edited or deleted from Discord.
 #
@@ -532,3 +524,166 @@
 #   secrets directory
 # Unset by default: the value below is only the shape.
 # admin_channel_id = 0
+
+[telemetry]
+# Filter directives for the log stream, in `RUST_LOG` syntax.
+#
+# A comma-separated list of `target=level` directives with an optional bare level as the
+# default, so `warn,dam_engine=debug` raises one crate and leaves the rest alone. A directive
+# that does not parse stops the process rather than being ignored: a filter that silently
+# reverted to its default would be discovered while reading logs that should have been there.
+#
+# A bare word is a target name and not a level, so a misspelt `waarn` is read as a directive
+# about a crate that does not exist. It parses, it stops nothing, and it filters nothing —
+# check a level change took effect rather than assuming it did.
+# Type: String
+# Also from: DAM_TELEMETRY__LOG_LEVEL, DAM_TELEMETRY__LOG_LEVEL_FILE=/path/to/file,
+#   telemetry__log_level in the secrets directory
+# log_level = "warn,discord_alertmanager=info,dam_=info"
+
+# How each log line is written.
+# Type: LogFormat — one of: plain, json
+# Also from: DAM_TELEMETRY__LOG_FORMAT, DAM_TELEMETRY__LOG_FORMAT_FILE=/path/to/file,
+#   telemetry__log_format in the secrets directory
+# log_format = "plain"
+
+[telemetry.sentry]
+# Project DSN. Reporting is off while this is unset.
+#
+# It is a credential: anyone holding it can write events into the project. Supply it through
+# `DAM_SENTRY__DSN_FILE` or the secrets directory rather than as a plain environment
+# variable.
+# Type: SecretString
+# Also from: DAM_TELEMETRY__SENTRY__DSN, DAM_TELEMETRY__SENTRY__DSN_FILE=/path/to/file,
+#   telemetry__sentry__dsn in the secrets directory
+# Secret: the value below is a placeholder.
+# dsn = "<secret>"
+
+# Deployment this process belongs to, which every event is tagged with.
+#
+# Set deliberately rather than left at the default. Sentry groups, alerts and retention are
+# all keyed on it, and a staging replica reporting as `production` is worse than one that
+# reports nothing.
+# Type: String
+# Also from: DAM_TELEMETRY__SENTRY__ENVIRONMENT,
+#   DAM_TELEMETRY__SENTRY__ENVIRONMENT_FILE=/path/to/file, telemetry__sentry__environment in the
+#   secrets directory
+# environment = "production"
+
+# Release every event is attributed to. Defaults to the bot's own version.
+#
+# Override it only where the image carries a version this binary does not know, such as a
+# build that appends a commit to the tag.
+# Type: String
+# Also from: DAM_TELEMETRY__SENTRY__RELEASE, DAM_TELEMETRY__SENTRY__RELEASE_FILE=/path/to/file,
+#   telemetry__sentry__release in the secrets directory
+# Unset by default: the value below is only the shape.
+# release = "<value>"
+
+# Host name reported with each event. Defaults to the machine's own.
+#
+# Worth setting where the machine name is an ephemeral pod hash, which groups nothing.
+# Type: String
+# Also from: DAM_TELEMETRY__SENTRY__SERVER_NAME,
+#   DAM_TELEMETRY__SENTRY__SERVER_NAME_FILE=/path/to/file, telemetry__sentry__server_name in the
+#   secrets directory
+# Unset by default: the value below is only the shape.
+# server_name = "<value>"
+
+# Fraction of events that are sent, from `0.0` to `1.0`.
+#
+# A blunt instrument: it drops whole events at random, so an error that fires once is the one
+# most likely to be lost. Leave it at `1.0` and shed volume with `event_level` instead.
+# Type: f32
+# Also from: DAM_TELEMETRY__SENTRY__SAMPLE_RATE,
+#   DAM_TELEMETRY__SENTRY__SAMPLE_RATE_FILE=/path/to/file, telemetry__sentry__sample_rate in the
+#   secrets directory
+# sample_rate = 1.0
+
+# Fraction of traces that are sent, from `0.0` to `1.0`. Tracing is off at `0.0`.
+#
+# Every webhook batch, every outbox item, every periodic pass and every slash command is one
+# trace, so the rate multiplies the busiest path in the process rather than the rarest. Start
+# low.
+# Type: f32
+# Also from: DAM_TELEMETRY__SENTRY__TRACES_SAMPLE_RATE,
+#   DAM_TELEMETRY__SENTRY__TRACES_SAMPLE_RATE_FILE=/path/to/file,
+#   telemetry__sentry__traces_sample_rate in the secrets directory
+# traces_sample_rate = 0.0
+
+# Level at or above which a log record is sent as an event of its own.
+# Type: CaptureLevel — one of: off, error, warn, info, debug, trace
+# Also from: DAM_TELEMETRY__SENTRY__EVENT_LEVEL,
+#   DAM_TELEMETRY__SENTRY__EVENT_LEVEL_FILE=/path/to/file, telemetry__sentry__event_level in the
+#   secrets directory
+# event_level = "error"
+
+# Level at or above which a log record is kept as a breadcrumb behind the next event.
+#
+# Breadcrumbs never leave the process on their own. They are attached to the event that
+# follows them, which is what turns "a dispatch failed" into the sequence that led there.
+# Type: CaptureLevel — one of: off, error, warn, info, debug, trace
+# Also from: DAM_TELEMETRY__SENTRY__BREADCRUMB_LEVEL,
+#   DAM_TELEMETRY__SENTRY__BREADCRUMB_LEVEL_FILE=/path/to/file,
+#   telemetry__sentry__breadcrumb_level in the secrets directory
+# breadcrumb_level = "info"
+
+# Level at or above which a span joins the trace.
+#
+# Only this bot's own spans are traced, whatever this says, and there is no key to widen
+# that. A dependency instruments its internals for its own logs, and the fields it attaches
+# are debug renderings of whatever the call was holding — not something to hand to a third
+# party, and enough of them to bury the trace they surround.
+# Type: CaptureLevel — one of: off, error, warn, info, debug, trace
+# Also from: DAM_TELEMETRY__SENTRY__SPAN_LEVEL,
+#   DAM_TELEMETRY__SENTRY__SPAN_LEVEL_FILE=/path/to/file, telemetry__sentry__span_level in the
+#   secrets directory
+# span_level = "info"
+
+# Attach a stack trace to every event, not only to panics.
+#
+# Useful while a fault is being chased and expensive afterwards: it captures and symbolicates
+# a backtrace on every capture, including the ones that were only ever going to be counted.
+# Type: bool
+# Also from: DAM_TELEMETRY__SENTRY__ATTACH_STACKTRACE,
+#   DAM_TELEMETRY__SENTRY__ATTACH_STACKTRACE_FILE=/path/to/file,
+#   telemetry__sentry__attach_stacktrace in the secrets directory
+# attach_stacktrace = false
+
+# Send the IP addresses, headers and user identifiers Sentry calls default PII.
+#
+# Off, and worth leaving off. The alerts this bot handles carry infrastructure labels, and
+# the Discord side carries user identifiers; neither needs to reach a third party for an
+# error report to be actionable.
+# Type: bool
+# Also from: DAM_TELEMETRY__SENTRY__SEND_DEFAULT_PII,
+#   DAM_TELEMETRY__SENTRY__SEND_DEFAULT_PII_FILE=/path/to/file,
+#   telemetry__sentry__send_default_pii in the secrets directory
+# send_default_pii = false
+
+# How many breadcrumbs are kept behind an event.
+# Type: usize
+# Also from: DAM_TELEMETRY__SENTRY__MAX_BREADCRUMBS,
+#   DAM_TELEMETRY__SENTRY__MAX_BREADCRUMBS_FILE=/path/to/file, telemetry__sentry__max_breadcrumbs
+#   in the secrets directory
+# max_breadcrumbs = 100
+
+# Seconds to spend delivering whatever is still queued during shutdown.
+#
+# Spent on the way out, after the listener has stopped, so it lengthens a restart by at most
+# this much. Zero abandons the queue, which loses exactly the report explaining why the
+# process is stopping.
+# Type: u64
+# Also from: DAM_TELEMETRY__SENTRY__SHUTDOWN_TIMEOUT_SECS,
+#   DAM_TELEMETRY__SENTRY__SHUTDOWN_TIMEOUT_SECS_FILE=/path/to/file,
+#   telemetry__sentry__shutdown_timeout_secs in the secrets directory
+# shutdown_timeout_secs = 2
+
+# Log what the Sentry client itself is doing.
+#
+# For diagnosing reporting that is not arriving, and nothing else. It is noisy, and it prints
+# the DSN.
+# Type: bool
+# Also from: DAM_TELEMETRY__SENTRY__DEBUG, DAM_TELEMETRY__SENTRY__DEBUG_FILE=/path/to/file,
+#   telemetry__sentry__debug in the secrets directory
+# debug = false
