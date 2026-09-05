@@ -159,6 +159,22 @@ impl Dispatcher {
     }
 
     /// Runs one item and records what it did.
+    ///
+    /// The span is the root of everything one effect does, so a trace collector sees one unit of
+    /// work per outbox row rather than a flat stream of calls with nothing tying them together.
+    /// `kind` and `lane` are bounded sets; the identifiers are not, and are fields rather than part
+    /// of the name so the spans still group.
+    #[tracing::instrument(
+        name = "outbox item",
+        skip_all,
+        fields(
+            worker = %self.worker,
+            item = %item.id,
+            kind = item.effect.kind(),
+            lane = item.lane,
+            attempts = item.attempts,
+        )
+    )]
     async fn handle(&self, item: &OutboxItem) {
         let outcome = self.apply(item).await;
 

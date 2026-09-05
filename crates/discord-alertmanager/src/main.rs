@@ -1,9 +1,10 @@
 //! The composition root: the one place that knows what everything else is made of.
 //!
 //! Every other crate is written against a trait. This binary chooses the implementations, wires
-//! them together and owns the process lifecycle — configuration, logging, metrics, signals and
-//! shutdown. It is also the only crate permitted to use `anyhow`, because it is the only one
-//! whose errors are read by a person looking at a log rather than matched on by a caller.
+//! them together and owns the process lifecycle — configuration, logging, metrics, error
+//! reporting, signals and shutdown. It is also the only crate permitted to use `anyhow`, because
+//! it is the only one whose errors are read by a person looking at a log rather than matched on by
+//! a caller.
 //!
 //! # What runs, and how it stops
 //!
@@ -15,10 +16,11 @@
 //!
 //! # Order matters at startup
 //!
-//! The store opens before anything else that could accept work, the configured routes are
-//! synchronised into it before the snapshot is built, and the snapshot is published before the
-//! gateway connects. A webhook arriving one millisecond after the listener binds has to find a
-//! routing table, not an empty one.
+//! The subscriber and the error reporter go up first, before anything that could fail in a way
+//! worth reading about. The store opens before anything else that could accept work, the
+//! configured routes are synchronised into it before the snapshot is built, and the snapshot is
+//! published before the gateway connects. A webhook arriving one millisecond after the listener
+//! binds has to find a routing table, not an empty one.
 
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -34,29 +36,17 @@ use tokio::signal;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
-use tracing_subscriber::EnvFilter;
-use tracing_subscriber::prelude::*;
 
 mod admin;
 mod cards;
 mod dispatch;
 mod service;
 mod tasks;
-
-/// Environment variable naming the log format, read before the configuration exists.
-const LOG_FORMAT_VAR: &str = dam_config::LOG_FORMAT_VAR;
-
-/// Environment variable naming the log filter, read before the configuration exists.
-const LOG_LEVEL_VAR: &str = dam_config::LOG_LEVEL_VAR;
+mod telemetry;
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    // Logging is installed before anything else, and from the environment rather than from the
-    // configuration: a configuration error is the failure most worth seeing, and it happens
-    // before there is a configuration to describe how to report it.
-    install_tracing();
-
-    match run().await {
+    let code = match run().await {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             // `{error:#}` rather than `{error}`, so the chain of contexts is printed and not just
@@ -64,7 +54,13 @@ async fn main() -> ExitCode {
             error!("{error:#}");
             ExitCode::FAILURE
         }
-    }
+    };
+
+    // After the report above rather than inside `run`, so the failure that stopped the process is
+    // in the flush rather than one event behind it. A no-op when no DSN was configured.
+    telemetry::flush_sentry();
+
+    code
 }
 
 /// Loads the configuration, builds the process, and runs it until it is asked to stop.
@@ -75,15 +71,36 @@ async fn main() -> ExitCode {
               it"
 )]
 async fn run() -> Result<()> {
-    let config: Config = dam_config::layers()
-        .load()
-        .context("loading configuration")?;
+    // The configuration is read before there is a subscriber, because the subscriber is one of
+    // the things it describes. Nothing is lost: loading reads files and environment variables and
+    // logs nothing. A configuration that will not load is the exception, and the bootstrap
+    // subscriber exists to carry that one report.
+    let config: Config = match dam_config::layers().load() {
+        Ok(config) => config,
+        Err(error) => {
+            telemetry::install_bootstrap();
+            return Err(error).context("loading configuration");
+        }
+    };
+
+    telemetry::install(&config.telemetry).context("installing the log subscriber")?;
 
     info!(
         version = env!("CARGO_PKG_VERSION"),
         backend = ?config.storage.backend,
         "starting"
     );
+
+    // Before anything is spawned. A Sentry client binds to the hub of the thread that binds it and
+    // is inherited by threads that come after, so a worker that had already logged would keep a
+    // hub with no client and report nothing for the life of the process.
+    if telemetry::install_sentry(&config.telemetry.sentry).context("starting error reporting")? {
+        info!(
+            environment = config.telemetry.sentry.environment,
+            traces_sample_rate = config.telemetry.sentry.traces_sample_rate,
+            "reporting errors to Sentry"
+        );
+    }
 
     let metrics = install_metrics(&config)?;
 
@@ -355,29 +372,6 @@ fn retention(config: &Config) -> RetentionPolicy {
         resolved: chrono::Duration::days(i64::from(config.engine.retention.resolved_days)),
         audit: chrono::Duration::days(i64::from(config.engine.retention.audit_days)),
         ..RetentionPolicy::default()
-    }
-}
-
-/// Installs the tracing subscriber.
-///
-/// JSON when asked for, because a log aggregator parses it and a person does not. The filter
-/// falls back to `info` for this workspace and `warn` for everything else, so a dependency's
-/// debug logging cannot bury the bot's own.
-fn install_tracing() {
-    let filter = EnvFilter::try_from_env(LOG_LEVEL_VAR)
-        .unwrap_or_else(|_| EnvFilter::new("warn,discord_alertmanager=info,dam_=info"));
-
-    let json =
-        std::env::var(LOG_FORMAT_VAR).is_ok_and(|format| format.eq_ignore_ascii_case("json"));
-
-    let registry = tracing_subscriber::registry().with(filter);
-
-    if json {
-        registry
-            .with(tracing_subscriber::fmt::layer().json())
-            .init();
-    } else {
-        registry.with(tracing_subscriber::fmt::layer()).init();
     }
 }
 

@@ -23,18 +23,6 @@
         "role": "secrets_dir",
         "docs": "Names a directory of key-named files — a mounted Kubernetes `Secret` volume. Each file supplies the key its name spells.",
         "default": null
-      },
-      {
-        "env": "DAM_LOG_FORMAT",
-        "role": "reserved",
-        "docs": "Read directly from the environment before the layered config exists, so no file may supply it.",
-        "default": null
-      },
-      {
-        "env": "DAM_LOG_LEVEL",
-        "role": "reserved",
-        "docs": "Read directly from the environment before the layered config exists, so no file may supply it.",
-        "default": null
       }
     ],
     "keys": [
@@ -1761,6 +1749,464 @@
         "reserved": false
       },
       {
+        "path": "telemetry.log_level",
+        "env": "DAM_TELEMETRY__LOG_LEVEL",
+        "env_file": "DAM_TELEMETRY__LOG_LEVEL_FILE",
+        "secrets_file": "telemetry__log_level",
+        "docs": "Filter directives for the log stream, in `RUST_LOG` syntax.\n\nA comma-separated list of `target=level` directives with an optional bare level as the\ndefault, so `warn,dam_engine=debug` raises one crate and leaves the rest alone. A directive\nthat does not parse stops the process rather than being ignored: a filter that silently\nreverted to its default would be discovered while reading logs that should have been there.\n\nA bare word is a target name and not a level, so a misspelt `waarn` is read as a directive\nabout a crate that does not exist. It parses, it stops nothing, and it filters nothing —\ncheck a level change took effect rather than assuming it did.",
+        "ty": "String",
+        "values": [],
+        "constraint": {
+          "type": "string"
+        },
+        "text_form": "text",
+        "aliases": [],
+        "env_aliases": [],
+        "env_file_aliases": [],
+        "secrets_file_aliases": [],
+        "default": "warn,discord_alertmanager=info,dam_=info",
+        "default_value": "warn,discord_alertmanager=info,dam_=info",
+        "note": null,
+        "required": false,
+        "secret": false,
+        "reserved": false
+      },
+      {
+        "path": "telemetry.log_format",
+        "env": "DAM_TELEMETRY__LOG_FORMAT",
+        "env_file": "DAM_TELEMETRY__LOG_FORMAT_FILE",
+        "secrets_file": "telemetry__log_format",
+        "docs": "How each log line is written.",
+        "ty": "LogFormat",
+        "values": [
+          "plain",
+          "json"
+        ],
+        "constraint": {
+          "enum": [
+            "plain",
+            "json"
+          ],
+          "type": "string"
+        },
+        "text_constraint": {
+          "pattern": "^\\s*(plain|json)\\s*$",
+          "type": "string"
+        },
+        "text_form": "choice",
+        "aliases": [],
+        "env_aliases": [],
+        "env_file_aliases": [],
+        "secrets_file_aliases": [],
+        "default": "plain",
+        "default_value": "plain",
+        "note": null,
+        "required": false,
+        "secret": false,
+        "reserved": false
+      },
+      {
+        "path": "telemetry.sentry.dsn",
+        "env": "DAM_TELEMETRY__SENTRY__DSN",
+        "env_file": "DAM_TELEMETRY__SENTRY__DSN_FILE",
+        "secrets_file": "telemetry__sentry__dsn",
+        "docs": "Project DSN. Reporting is off while this is unset.\n\nIt is a credential: anyone holding it can write events into the project. Supply it through\n`DAM_SENTRY__DSN_FILE` or the secrets directory rather than as a plain environment\nvariable.",
+        "ty": "SecretString",
+        "values": [],
+        "constraint": {
+          "type": "string"
+        },
+        "text_form": "text",
+        "aliases": [],
+        "env_aliases": [],
+        "env_file_aliases": [],
+        "secrets_file_aliases": [],
+        "default": null,
+        "default_value": null,
+        "note": null,
+        "required": false,
+        "secret": true,
+        "reserved": false
+      },
+      {
+        "path": "telemetry.sentry.environment",
+        "env": "DAM_TELEMETRY__SENTRY__ENVIRONMENT",
+        "env_file": "DAM_TELEMETRY__SENTRY__ENVIRONMENT_FILE",
+        "secrets_file": "telemetry__sentry__environment",
+        "docs": "Deployment this process belongs to, which every event is tagged with.\n\nSet deliberately rather than left at the default. Sentry groups, alerts and retention are\nall keyed on it, and a staging replica reporting as `production` is worse than one that\nreports nothing.",
+        "ty": "String",
+        "values": [],
+        "constraint": {
+          "type": "string"
+        },
+        "text_form": "text",
+        "aliases": [],
+        "env_aliases": [],
+        "env_file_aliases": [],
+        "secrets_file_aliases": [],
+        "default": "production",
+        "default_value": "production",
+        "note": null,
+        "required": false,
+        "secret": false,
+        "reserved": false
+      },
+      {
+        "path": "telemetry.sentry.release",
+        "env": "DAM_TELEMETRY__SENTRY__RELEASE",
+        "env_file": "DAM_TELEMETRY__SENTRY__RELEASE_FILE",
+        "secrets_file": "telemetry__sentry__release",
+        "docs": "Release every event is attributed to. Defaults to the bot's own version.\n\nOverride it only where the image carries a version this binary does not know, such as a\nbuild that appends a commit to the tag.",
+        "ty": "String",
+        "values": [],
+        "constraint": {
+          "type": "string"
+        },
+        "text_form": "text",
+        "aliases": [],
+        "env_aliases": [],
+        "env_file_aliases": [],
+        "secrets_file_aliases": [],
+        "default": null,
+        "default_value": null,
+        "note": null,
+        "required": false,
+        "secret": false,
+        "reserved": false
+      },
+      {
+        "path": "telemetry.sentry.server_name",
+        "env": "DAM_TELEMETRY__SENTRY__SERVER_NAME",
+        "env_file": "DAM_TELEMETRY__SENTRY__SERVER_NAME_FILE",
+        "secrets_file": "telemetry__sentry__server_name",
+        "docs": "Host name reported with each event. Defaults to the machine's own.\n\nWorth setting where the machine name is an ephemeral pod hash, which groups nothing.",
+        "ty": "String",
+        "values": [],
+        "constraint": {
+          "type": "string"
+        },
+        "text_form": "text",
+        "aliases": [],
+        "env_aliases": [],
+        "env_file_aliases": [],
+        "secrets_file_aliases": [],
+        "default": null,
+        "default_value": null,
+        "note": null,
+        "required": false,
+        "secret": false,
+        "reserved": false
+      },
+      {
+        "path": "telemetry.sentry.sample_rate",
+        "env": "DAM_TELEMETRY__SENTRY__SAMPLE_RATE",
+        "env_file": "DAM_TELEMETRY__SENTRY__SAMPLE_RATE_FILE",
+        "secrets_file": "telemetry__sentry__sample_rate",
+        "docs": "Fraction of events that are sent, from `0.0` to `1.0`.\n\nA blunt instrument: it drops whole events at random, so an error that fires once is the one\nmost likely to be lost. Leave it at `1.0` and shed volume with `event_level` instead.",
+        "ty": "f32",
+        "values": [],
+        "constraint": {
+          "type": "number"
+        },
+        "text_form": "unknown",
+        "aliases": [],
+        "env_aliases": [],
+        "env_file_aliases": [],
+        "secrets_file_aliases": [],
+        "default": "1",
+        "default_value": 1.0,
+        "note": null,
+        "required": false,
+        "secret": false,
+        "reserved": false
+      },
+      {
+        "path": "telemetry.sentry.traces_sample_rate",
+        "env": "DAM_TELEMETRY__SENTRY__TRACES_SAMPLE_RATE",
+        "env_file": "DAM_TELEMETRY__SENTRY__TRACES_SAMPLE_RATE_FILE",
+        "secrets_file": "telemetry__sentry__traces_sample_rate",
+        "docs": "Fraction of traces that are sent, from `0.0` to `1.0`. Tracing is off at `0.0`.\n\nEvery webhook batch, every outbox item, every periodic pass and every slash command is one\ntrace, so the rate multiplies the busiest path in the process rather than the rarest. Start\nlow.",
+        "ty": "f32",
+        "values": [],
+        "constraint": {
+          "type": "number"
+        },
+        "text_form": "unknown",
+        "aliases": [],
+        "env_aliases": [],
+        "env_file_aliases": [],
+        "secrets_file_aliases": [],
+        "default": "0",
+        "default_value": 0.0,
+        "note": null,
+        "required": false,
+        "secret": false,
+        "reserved": false
+      },
+      {
+        "path": "telemetry.sentry.event_level",
+        "env": "DAM_TELEMETRY__SENTRY__EVENT_LEVEL",
+        "env_file": "DAM_TELEMETRY__SENTRY__EVENT_LEVEL_FILE",
+        "secrets_file": "telemetry__sentry__event_level",
+        "docs": "Level at or above which a log record is sent as an event of its own.",
+        "ty": "CaptureLevel",
+        "values": [
+          "off",
+          "error",
+          "warn",
+          "info",
+          "debug",
+          "trace"
+        ],
+        "constraint": {
+          "enum": [
+            "off",
+            "error",
+            "warn",
+            "info",
+            "debug",
+            "trace"
+          ],
+          "type": "string"
+        },
+        "text_constraint": {
+          "pattern": "^\\s*(off|error|warn|info|debug|trace)\\s*$",
+          "type": "string"
+        },
+        "text_form": "choice",
+        "aliases": [],
+        "env_aliases": [],
+        "env_file_aliases": [],
+        "secrets_file_aliases": [],
+        "default": "error",
+        "default_value": "error",
+        "note": null,
+        "required": false,
+        "secret": false,
+        "reserved": false
+      },
+      {
+        "path": "telemetry.sentry.breadcrumb_level",
+        "env": "DAM_TELEMETRY__SENTRY__BREADCRUMB_LEVEL",
+        "env_file": "DAM_TELEMETRY__SENTRY__BREADCRUMB_LEVEL_FILE",
+        "secrets_file": "telemetry__sentry__breadcrumb_level",
+        "docs": "Level at or above which a log record is kept as a breadcrumb behind the next event.\n\nBreadcrumbs never leave the process on their own. They are attached to the event that\nfollows them, which is what turns \"a dispatch failed\" into the sequence that led there.",
+        "ty": "CaptureLevel",
+        "values": [
+          "off",
+          "error",
+          "warn",
+          "info",
+          "debug",
+          "trace"
+        ],
+        "constraint": {
+          "enum": [
+            "off",
+            "error",
+            "warn",
+            "info",
+            "debug",
+            "trace"
+          ],
+          "type": "string"
+        },
+        "text_constraint": {
+          "pattern": "^\\s*(off|error|warn|info|debug|trace)\\s*$",
+          "type": "string"
+        },
+        "text_form": "choice",
+        "aliases": [],
+        "env_aliases": [],
+        "env_file_aliases": [],
+        "secrets_file_aliases": [],
+        "default": "info",
+        "default_value": "info",
+        "note": null,
+        "required": false,
+        "secret": false,
+        "reserved": false
+      },
+      {
+        "path": "telemetry.sentry.span_level",
+        "env": "DAM_TELEMETRY__SENTRY__SPAN_LEVEL",
+        "env_file": "DAM_TELEMETRY__SENTRY__SPAN_LEVEL_FILE",
+        "secrets_file": "telemetry__sentry__span_level",
+        "docs": "Level at or above which a span joins the trace.\n\nOnly this bot's own spans are traced, whatever this says, and there is no key to widen\nthat. A dependency instruments its internals for its own logs, and the fields it attaches\nare debug renderings of whatever the call was holding — not something to hand to a third\nparty, and enough of them to bury the trace they surround.",
+        "ty": "CaptureLevel",
+        "values": [
+          "off",
+          "error",
+          "warn",
+          "info",
+          "debug",
+          "trace"
+        ],
+        "constraint": {
+          "enum": [
+            "off",
+            "error",
+            "warn",
+            "info",
+            "debug",
+            "trace"
+          ],
+          "type": "string"
+        },
+        "text_constraint": {
+          "pattern": "^\\s*(off|error|warn|info|debug|trace)\\s*$",
+          "type": "string"
+        },
+        "text_form": "choice",
+        "aliases": [],
+        "env_aliases": [],
+        "env_file_aliases": [],
+        "secrets_file_aliases": [],
+        "default": "info",
+        "default_value": "info",
+        "note": null,
+        "required": false,
+        "secret": false,
+        "reserved": false
+      },
+      {
+        "path": "telemetry.sentry.attach_stacktrace",
+        "env": "DAM_TELEMETRY__SENTRY__ATTACH_STACKTRACE",
+        "env_file": "DAM_TELEMETRY__SENTRY__ATTACH_STACKTRACE_FILE",
+        "secrets_file": "telemetry__sentry__attach_stacktrace",
+        "docs": "Attach a stack trace to every event, not only to panics.\n\nUseful while a fault is being chased and expensive afterwards: it captures and symbolicates\na backtrace on every capture, including the ones that were only ever going to be counted.",
+        "ty": "bool",
+        "values": [],
+        "constraint": {
+          "type": "boolean"
+        },
+        "text_constraint": {
+          "pattern": "^\\s*(true|false)\\s*$",
+          "type": "string"
+        },
+        "text_form": "boolean",
+        "aliases": [],
+        "env_aliases": [],
+        "env_file_aliases": [],
+        "secrets_file_aliases": [],
+        "default": "false",
+        "default_value": false,
+        "note": null,
+        "required": false,
+        "secret": false,
+        "reserved": false
+      },
+      {
+        "path": "telemetry.sentry.send_default_pii",
+        "env": "DAM_TELEMETRY__SENTRY__SEND_DEFAULT_PII",
+        "env_file": "DAM_TELEMETRY__SENTRY__SEND_DEFAULT_PII_FILE",
+        "secrets_file": "telemetry__sentry__send_default_pii",
+        "docs": "Send the IP addresses, headers and user identifiers Sentry calls default PII.\n\nOff, and worth leaving off. The alerts this bot handles carry infrastructure labels, and\nthe Discord side carries user identifiers; neither needs to reach a third party for an\nerror report to be actionable.",
+        "ty": "bool",
+        "values": [],
+        "constraint": {
+          "type": "boolean"
+        },
+        "text_constraint": {
+          "pattern": "^\\s*(true|false)\\s*$",
+          "type": "string"
+        },
+        "text_form": "boolean",
+        "aliases": [],
+        "env_aliases": [],
+        "env_file_aliases": [],
+        "secrets_file_aliases": [],
+        "default": "false",
+        "default_value": false,
+        "note": null,
+        "required": false,
+        "secret": false,
+        "reserved": false
+      },
+      {
+        "path": "telemetry.sentry.max_breadcrumbs",
+        "env": "DAM_TELEMETRY__SENTRY__MAX_BREADCRUMBS",
+        "env_file": "DAM_TELEMETRY__SENTRY__MAX_BREADCRUMBS_FILE",
+        "secrets_file": "telemetry__sentry__max_breadcrumbs",
+        "docs": "How many breadcrumbs are kept behind an event.",
+        "ty": "usize",
+        "values": [],
+        "constraint": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "text_constraint": {
+          "pattern": "^\\s*\\+?[0-9]+\\s*$",
+          "type": "string"
+        },
+        "text_form": "integer",
+        "aliases": [],
+        "env_aliases": [],
+        "env_file_aliases": [],
+        "secrets_file_aliases": [],
+        "default": "100",
+        "default_value": 100,
+        "note": null,
+        "required": false,
+        "secret": false,
+        "reserved": false
+      },
+      {
+        "path": "telemetry.sentry.shutdown_timeout_secs",
+        "env": "DAM_TELEMETRY__SENTRY__SHUTDOWN_TIMEOUT_SECS",
+        "env_file": "DAM_TELEMETRY__SENTRY__SHUTDOWN_TIMEOUT_SECS_FILE",
+        "secrets_file": "telemetry__sentry__shutdown_timeout_secs",
+        "docs": "Seconds to spend delivering whatever is still queued during shutdown.\n\nSpent on the way out, after the listener has stopped, so it lengthens a restart by at most\nthis much. Zero abandons the queue, which loses exactly the report explaining why the\nprocess is stopping.",
+        "ty": "u64",
+        "values": [],
+        "constraint": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "text_constraint": {
+          "pattern": "^\\s*\\+?[0-9]+\\s*$",
+          "type": "string"
+        },
+        "text_form": "integer",
+        "aliases": [],
+        "env_aliases": [],
+        "env_file_aliases": [],
+        "secrets_file_aliases": [],
+        "default": "2",
+        "default_value": 2,
+        "note": null,
+        "required": false,
+        "secret": false,
+        "reserved": false
+      },
+      {
+        "path": "telemetry.sentry.debug",
+        "env": "DAM_TELEMETRY__SENTRY__DEBUG",
+        "env_file": "DAM_TELEMETRY__SENTRY__DEBUG_FILE",
+        "secrets_file": "telemetry__sentry__debug",
+        "docs": "Log what the Sentry client itself is doing.\n\nFor diagnosing reporting that is not arriving, and nothing else. It is noisy, and it prints\nthe DSN.",
+        "ty": "bool",
+        "values": [],
+        "constraint": {
+          "type": "boolean"
+        },
+        "text_constraint": {
+          "pattern": "^\\s*(true|false)\\s*$",
+          "type": "string"
+        },
+        "text_form": "boolean",
+        "aliases": [],
+        "env_aliases": [],
+        "env_file_aliases": [],
+        "secrets_file_aliases": [],
+        "default": "false",
+        "default_value": false,
+        "note": null,
+        "required": false,
+        "secret": false,
+        "reserved": false
+      },
+      {
         "path": "routes",
         "env": "DAM_ROUTES",
         "env_file": "DAM_ROUTES_FILE",
@@ -2731,6 +3177,126 @@
                 "default": "discord-alertmanager.db",
                 "description": "Path to the database file, created on first start if it does not exist.",
                 "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "telemetry": {
+        "additionalProperties": false,
+        "properties": {
+          "log_format": {
+            "default": "plain",
+            "description": "How each log line is written.",
+            "enum": [
+              "plain",
+              "json"
+            ],
+            "type": "string"
+          },
+          "log_level": {
+            "default": "warn,discord_alertmanager=info,dam_=info",
+            "description": "Filter directives for the log stream, in `RUST_LOG` syntax.\n\nA comma-separated list of `target=level` directives with an optional bare level as the\ndefault, so `warn,dam_engine=debug` raises one crate and leaves the rest alone. A directive\nthat does not parse stops the process rather than being ignored: a filter that silently\nreverted to its default would be discovered while reading logs that should have been there.\n\nA bare word is a target name and not a level, so a misspelt `waarn` is read as a directive\nabout a crate that does not exist. It parses, it stops nothing, and it filters nothing —\ncheck a level change took effect rather than assuming it did.",
+            "type": "string"
+          },
+          "sentry": {
+            "additionalProperties": false,
+            "properties": {
+              "attach_stacktrace": {
+                "default": false,
+                "description": "Attach a stack trace to every event, not only to panics.\n\nUseful while a fault is being chased and expensive afterwards: it captures and symbolicates\na backtrace on every capture, including the ones that were only ever going to be counted.",
+                "type": "boolean"
+              },
+              "breadcrumb_level": {
+                "default": "info",
+                "description": "Level at or above which a log record is kept as a breadcrumb behind the next event.\n\nBreadcrumbs never leave the process on their own. They are attached to the event that\nfollows them, which is what turns \"a dispatch failed\" into the sequence that led there.",
+                "enum": [
+                  "off",
+                  "error",
+                  "warn",
+                  "info",
+                  "debug",
+                  "trace"
+                ],
+                "type": "string"
+              },
+              "debug": {
+                "default": false,
+                "description": "Log what the Sentry client itself is doing.\n\nFor diagnosing reporting that is not arriving, and nothing else. It is noisy, and it prints\nthe DSN.",
+                "type": "boolean"
+              },
+              "dsn": {
+                "description": "Project DSN. Reporting is off while this is unset.\n\nIt is a credential: anyone holding it can write events into the project. Supply it through\n`DAM_SENTRY__DSN_FILE` or the secrets directory rather than as a plain environment\nvariable.",
+                "type": "string",
+                "writeOnly": true
+              },
+              "environment": {
+                "default": "production",
+                "description": "Deployment this process belongs to, which every event is tagged with.\n\nSet deliberately rather than left at the default. Sentry groups, alerts and retention are\nall keyed on it, and a staging replica reporting as `production` is worse than one that\nreports nothing.",
+                "type": "string"
+              },
+              "event_level": {
+                "default": "error",
+                "description": "Level at or above which a log record is sent as an event of its own.",
+                "enum": [
+                  "off",
+                  "error",
+                  "warn",
+                  "info",
+                  "debug",
+                  "trace"
+                ],
+                "type": "string"
+              },
+              "max_breadcrumbs": {
+                "default": 100,
+                "description": "How many breadcrumbs are kept behind an event.",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "release": {
+                "description": "Release every event is attributed to. Defaults to the bot's own version.\n\nOverride it only where the image carries a version this binary does not know, such as a\nbuild that appends a commit to the tag.",
+                "type": "string"
+              },
+              "sample_rate": {
+                "default": 1.0,
+                "description": "Fraction of events that are sent, from `0.0` to `1.0`.\n\nA blunt instrument: it drops whole events at random, so an error that fires once is the one\nmost likely to be lost. Leave it at `1.0` and shed volume with `event_level` instead.",
+                "type": "number"
+              },
+              "send_default_pii": {
+                "default": false,
+                "description": "Send the IP addresses, headers and user identifiers Sentry calls default PII.\n\nOff, and worth leaving off. The alerts this bot handles carry infrastructure labels, and\nthe Discord side carries user identifiers; neither needs to reach a third party for an\nerror report to be actionable.",
+                "type": "boolean"
+              },
+              "server_name": {
+                "description": "Host name reported with each event. Defaults to the machine's own.\n\nWorth setting where the machine name is an ephemeral pod hash, which groups nothing.",
+                "type": "string"
+              },
+              "shutdown_timeout_secs": {
+                "default": 2,
+                "description": "Seconds to spend delivering whatever is still queued during shutdown.\n\nSpent on the way out, after the listener has stopped, so it lengthens a restart by at most\nthis much. Zero abandons the queue, which loses exactly the report explaining why the\nprocess is stopping.",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "span_level": {
+                "default": "info",
+                "description": "Level at or above which a span joins the trace.\n\nOnly this bot's own spans are traced, whatever this says, and there is no key to widen\nthat. A dependency instruments its internals for its own logs, and the fields it attaches\nare debug renderings of whatever the call was holding — not something to hand to a third\nparty, and enough of them to bury the trace they surround.",
+                "enum": [
+                  "off",
+                  "error",
+                  "warn",
+                  "info",
+                  "debug",
+                  "trace"
+                ],
+                "type": "string"
+              },
+              "traces_sample_rate": {
+                "default": 0.0,
+                "description": "Fraction of traces that are sent, from `0.0` to `1.0`. Tracing is off at `0.0`.\n\nEvery webhook batch, every outbox item, every periodic pass and every slash command is one\ntrace, so the rate multiplies the busiest path in the process rather than the rarest. Start\nlow.",
+                "type": "number"
               }
             },
             "type": "object"

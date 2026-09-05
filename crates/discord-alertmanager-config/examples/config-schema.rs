@@ -18,18 +18,16 @@
 
 use std::process::ExitCode;
 
-use dam_config::{Config, ENV_PREFIX, LOG_FORMAT_VAR, LOG_LEVEL_VAR};
+use dam_config::{Config, ENV_PREFIX};
 use terrace_config::Terrace;
 use terrace_config::schema::cli::Cli;
 use terrace_config::schema::{App, Docs, JsonSchema, TomlExample};
 
 fn main() -> ExitCode {
-    // Not `dam_config::layers()`: that one is shared with the loader, and reserving a variable
-    // there for the sake of this generator would put it in the running service's dialect too.
-    // The two reserved names below are the same ones, listed here so they reach the loader table.
+    // Not `dam_config::layers()`, though the two now agree: the loader's builder is shared with
+    // the running service, and anything added here for the generator's sake would land in that
+    // service's dialect too. The dialect this renders is the prefix and nothing else.
     let schema = Terrace::new(ENV_PREFIX)
-        .reserve(LOG_FORMAT_VAR)
-        .reserve(LOG_LEVEL_VAR)
         .schema::<Config>()
         .with_defaults_from(&Config::default())
         .expect("the default configuration serialises");

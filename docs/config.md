@@ -16,8 +16,6 @@ indirection, in that order of precedence.
 |---|---|---|---|
 | `DAM_CONFIG` | config | `config.toml` | Names the TOML layer: a file, or a directory whose `*.toml` files are all merged in name order. |
 | `DAM_SECRETS_DIR` | secrets dir | — | Names a directory of key-named files — a mounted Kubernetes `Secret` volume. Each file supplies the key its name spells. |
-| `DAM_LOG_FORMAT` | reserved | — | Read directly from the environment before the layered config exists, so no file may supply it. |
-| `DAM_LOG_LEVEL` | reserved | — | Read directly from the environment before the layered config exists, so no file may supply it. |
 
 | TOML | Type | Environment | Default | Flags | Purpose |
 |---|---|---|---|---|---|
@@ -83,4 +81,20 @@ indirection, in that order of precedence.
 | `links.buttons` | `Vec<LinkButton>` | `DAM_LINKS__BUTTONS` | `[]` | — | The buttons themselves, rendered in order. |
 | `observability.metrics_enabled` | `bool` | `DAM_OBSERVABILITY__METRICS_ENABLED` | `true` | — | Serve Prometheus metrics at `/metrics` on the ingest listener. |
 | `observability.admin_channel_id` | `u64` | `DAM_OBSERVABILITY__ADMIN_CHANNEL_ID` | unset | — | Channel the deadman and route-health notices post to. |
+| `telemetry.log_level` | `String` | `DAM_TELEMETRY__LOG_LEVEL` | `warn,discord_alertmanager=info,dam_=info` | — | Filter directives for the log stream, in `RUST_LOG` syntax. |
+| `telemetry.log_format` | `LogFormat`: `plain` \| `json` | `DAM_TELEMETRY__LOG_FORMAT` | `plain` | — | How each log line is written. |
+| `telemetry.sentry.dsn` | `SecretString` | `DAM_TELEMETRY__SENTRY__DSN` | unset | secret | Project DSN. Reporting is off while this is unset. |
+| `telemetry.sentry.environment` | `String` | `DAM_TELEMETRY__SENTRY__ENVIRONMENT` | `production` | — | Deployment this process belongs to, which every event is tagged with. |
+| `telemetry.sentry.release` | `String` | `DAM_TELEMETRY__SENTRY__RELEASE` | unset | — | Release every event is attributed to. Defaults to the bot's own version. |
+| `telemetry.sentry.server_name` | `String` | `DAM_TELEMETRY__SENTRY__SERVER_NAME` | unset | — | Host name reported with each event. Defaults to the machine's own. |
+| `telemetry.sentry.sample_rate` | `f32` | `DAM_TELEMETRY__SENTRY__SAMPLE_RATE` | `1` | — | Fraction of events that are sent, from `0.0` to `1.0`. |
+| `telemetry.sentry.traces_sample_rate` | `f32` | `DAM_TELEMETRY__SENTRY__TRACES_SAMPLE_RATE` | `0` | — | Fraction of traces that are sent, from `0.0` to `1.0`. Tracing is off at `0.0`. |
+| `telemetry.sentry.event_level` | `CaptureLevel`: `off` \| `error` \| `warn` \| `info` \| `debug` \| `trace` | `DAM_TELEMETRY__SENTRY__EVENT_LEVEL` | `error` | — | Level at or above which a log record is sent as an event of its own. |
+| `telemetry.sentry.breadcrumb_level` | `CaptureLevel`: `off` \| `error` \| `warn` \| `info` \| `debug` \| `trace` | `DAM_TELEMETRY__SENTRY__BREADCRUMB_LEVEL` | `info` | — | Level at or above which a log record is kept as a breadcrumb behind the next event. |
+| `telemetry.sentry.span_level` | `CaptureLevel`: `off` \| `error` \| `warn` \| `info` \| `debug` \| `trace` | `DAM_TELEMETRY__SENTRY__SPAN_LEVEL` | `info` | — | Level at or above which a span joins the trace. |
+| `telemetry.sentry.attach_stacktrace` | `bool` | `DAM_TELEMETRY__SENTRY__ATTACH_STACKTRACE` | `false` | — | Attach a stack trace to every event, not only to panics. |
+| `telemetry.sentry.send_default_pii` | `bool` | `DAM_TELEMETRY__SENTRY__SEND_DEFAULT_PII` | `false` | — | Send the IP addresses, headers and user identifiers Sentry calls default PII. |
+| `telemetry.sentry.max_breadcrumbs` | `usize` | `DAM_TELEMETRY__SENTRY__MAX_BREADCRUMBS` | `100` | — | How many breadcrumbs are kept behind an event. |
+| `telemetry.sentry.shutdown_timeout_secs` | `u64` | `DAM_TELEMETRY__SENTRY__SHUTDOWN_TIMEOUT_SECS` | `2` | — | Seconds to spend delivering whatever is still queued during shutdown. |
+| `telemetry.sentry.debug` | `bool` | `DAM_TELEMETRY__SENTRY__DEBUG` | `false` | — | Log what the Sentry client itself is doing. |
 | `routes` | `Vec<RouteConfig>` | `DAM_ROUTES` | `[]` | — | Routes declared in the file, which cannot be edited or deleted from Discord. |

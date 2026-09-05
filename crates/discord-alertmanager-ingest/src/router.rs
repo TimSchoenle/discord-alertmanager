@@ -142,6 +142,19 @@ struct ReadinessBody {
 }
 
 /// Accepts one version-4 envelope.
+///
+/// The span is the root of everything one delivery causes, so a trace collector sees one unit of
+/// work per batch. `TraceLayer` above it makes its own span at `debug`, which is below what the
+/// exporters this process is wired to record, so this one is the root rather than a child of it.
+#[tracing::instrument(
+    name = "webhook",
+    skip_all,
+    fields(
+        bytes = body.len(),
+        group_key = tracing::field::Empty,
+        alerts = tracing::field::Empty,
+    )
+)]
 async fn ingest_webhook(State(state): State<AppState>, body: Bytes) -> Response {
     let payload = match serde_json::from_slice::<WebhookPayload>(&body) {
         Ok(payload) => payload,
@@ -175,6 +188,12 @@ async fn ingest_webhook(State(state): State<AppState>, body: Bytes) -> Response 
     // Kept at the batch level as well as on every alert: a route that posts one card per group
     // has nothing else to key on, and the envelope is the only place Alertmanager reveals it.
     let group_key = Some(GroupKey::new(payload.group_key.clone()));
+
+    // Recorded rather than declared, because neither is known until the body has parsed, and a
+    // span opened after the parse would not cover the rejection when it does not.
+    let span = tracing::Span::current();
+    span.record("group_key", payload.group_key.as_str());
+    span.record("alerts", payload.alerts.len());
 
     let alerts = match payload.into_alerts() {
         Ok(alerts) => alerts,
