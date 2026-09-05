@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.4.1](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.4.0...v0.4.1) (2026-09-05)
+
+
+### Bug Fixes
+
+* forum cards going out of sync ([#25](https://github.com/TimSchoenle/discord-alertmanager/issues/25)) ([2e5b6d3](https://github.com/TimSchoenle/discord-alertmanager/commit/2e5b6d3ccb0062778f70e77e56b1fcec8b4b18b4))
+
+
+### Miscellaneous
+
+* **deps:** update rust crate tower-http to 0.7 ([#7](https://github.com/TimSchoenle/discord-alertmanager/issues/7)) ([1a77cfa](https://github.com/TimSchoenle/discord-alertmanager/commit/1a77cfa1b143a9083c561f6ee06411f93ff32d84))
+* **deps:** update step-security/harden-runner action to v2.21.1 ([#19](https://github.com/TimSchoenle/discord-alertmanager/issues/19)) ([92263f9](https://github.com/TimSchoenle/discord-alertmanager/commit/92263f942c3bb0309170403c72f9028249a8db0c))
+* **deps:** update timschoenle/actions/.github/workflows/maintenance-auto-approve-renovate.yaml to vworkflows-maintenance-auto-approve-renovate-v1.4.22 ([#21](https://github.com/TimSchoenle/discord-alertmanager/issues/21)) ([fb0bcbc](https://github.com/TimSchoenle/discord-alertmanager/commit/fb0bcbcf684db96a0e6a92ac1602f9f707fc769f))
+* **deps:** update timschoenle/actions/.github/workflows/maintenance-timed-auto-pr-approve.yaml to vworkflows-maintenance-timed-auto-pr-approve-v1.2.34 ([#22](https://github.com/TimSchoenle/discord-alertmanager/issues/22)) ([104d72c](https://github.com/TimSchoenle/discord-alertmanager/commit/104d72c15995a497174e542b691036d7975624f1))
+* **deps:** update timschoenle/actions/actions/common/readme-variables to vactions-common-readme-variables-v1.1.2 ([#23](https://github.com/TimSchoenle/discord-alertmanager/issues/23)) ([aa531e0](https://github.com/TimSchoenle/discord-alertmanager/commit/aa531e0758607a5fc2d45a289d200ea61896336d))
+* **deps:** update timschoenle/actions/actions/common/render-template to vactions-common-render-template-v1.1.3 ([#24](https://github.com/TimSchoenle/discord-alertmanager/issues/24)) ([42332cd](https://github.com/TimSchoenle/discord-alertmanager/commit/42332cda94bd7e1336bce581bde8784f5f1a9f40))
+
 ## [0.4.0](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.3.1...v0.4.0) (2026-09-02)
 
 
