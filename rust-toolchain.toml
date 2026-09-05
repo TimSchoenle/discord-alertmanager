@@ -2,6 +2,6 @@
 # The MSRV the crates declare (1.94, inherited from terrace-config) is checked separately by the
 # `msrv` CI job against that older toolchain; this file is about reproducibility, not the floor.
 [toolchain]
-channel = "1.97.1"
+channel = "1.98.0"
 components = ["rustfmt", "clippy"]
 profile = "minimal"

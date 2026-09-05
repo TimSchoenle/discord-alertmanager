@@ -336,7 +336,7 @@ leaving a claimed row for its lease to release.
 | | Supported |
 | --- | --- |
 | Rust | 1.94 or newer, edition 2024 |
-| Toolchain | 1.97.1, pinned in [rust-toolchain.toml](rust-toolchain.toml) |
+| Toolchain | 1.98.0, pinned in [rust-toolchain.toml](rust-toolchain.toml) |
 | Alertmanager | API v2, which is the only one Alertmanager 0.27 and newer serves |
 | Storage | PostgreSQL and SQLite, one conformance suite between them |
 
