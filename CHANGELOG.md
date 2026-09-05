@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.0](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.4.1...v0.5.0) (2026-09-05)
+
+
+### Features
+
+* add optional sentry support and move log level into telemetry c… ([#29](https://github.com/TimSchoenle/discord-alertmanager/issues/29)) ([bd8dcc5](https://github.com/TimSchoenle/discord-alertmanager/commit/bd8dcc5f90691875a343732a3190dd5c0f0ec733))
+
+
+### Miscellaneous
+
+* **deps:** update timschoenle/actions/actions/helm/update-chart-version to vactions-helm-update-chart-version-v1.6.6 ([#26](https://github.com/TimSchoenle/discord-alertmanager/issues/26)) ([6947f92](https://github.com/TimSchoenle/discord-alertmanager/commit/6947f9213c0aa9194bb2afcf0eebf62f9f7d91df))
+* **deps:** update timschoenle/actions/actions/rust/config-contract to vactions-rust-config-contract-v1.2.1 ([#27](https://github.com/TimSchoenle/discord-alertmanager/issues/27)) ([aea63c1](https://github.com/TimSchoenle/discord-alertmanager/commit/aea63c1cf5953dfacebae12e3a2bbc885669489d))
+
 ## [0.4.1](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.4.0...v0.4.1) (2026-09-05)
 
 
