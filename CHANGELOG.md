@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.6.0...v0.7.0) (2026-09-06)
+
+
+### Features
+
+* update terrace to 0.11.0 ([#33](https://github.com/TimSchoenle/discord-alertmanager/issues/33)) ([f4de7e5](https://github.com/TimSchoenle/discord-alertmanager/commit/f4de7e50aafcbec92f81def7f08b5b1dde0a5e6d))
+
 ## [0.6.0](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.5.0...v0.6.0) (2026-09-06)
 
 
