@@ -711,6 +711,50 @@ impl Store for SqliteStore {
         Ok(())
     }
 
+    async fn live_cards(
+        &self,
+        routes: &[RouteId],
+        limit: u32,
+    ) -> Result<Vec<Notification>, StoreError> {
+        // An empty `IN ()` is a syntax error in both dialects, and the answer is knowable without
+        // asking: no route owns no card.
+        if routes.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let sql = const_format(&[
+            "SELECT ",
+            NOTIFICATION_COLUMNS,
+            " FROM notifications WHERE message_id IS NOT NULL AND state NOT IN (",
+        ]);
+
+        let mut builder = QueryBuilder::<Sqlite>::new(sql);
+        builder.push_bind(NotificationState::Resolved.as_str());
+        builder.push(", ");
+        builder.push_bind(NotificationState::Orphaned.as_str());
+        builder.push(") AND route_id IN (");
+
+        for (index, route) in routes.iter().enumerate() {
+            if index > 0 {
+                builder.push(", ");
+            }
+            builder.push_bind(route.get());
+        }
+
+        // Oldest first, so a run that hits its ceiling repairs the cards that have been wrong
+        // longest rather than an arbitrary slice of them.
+        builder
+            .push(") ORDER BY created_at, id LIMIT ")
+            .push_bind(i64::from(limit))
+            .build()
+            .fetch_all(&self.pool)
+            .await
+            .map_err(backend)?
+            .iter()
+            .map(notification)
+            .collect()
+    }
+
     async fn pending_escalations(
         &self,
         created_before: DateTime<Utc>,
