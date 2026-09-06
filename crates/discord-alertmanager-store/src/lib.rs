@@ -284,6 +284,25 @@ pub trait Store: Send + Sync + 'static {
         now: DateTime<Utc>,
     ) -> Result<(), StoreError>;
 
+    /// Posted cards belonging to any of `routes` that still describe something happening.
+    ///
+    /// What `/cards resync` enumerates. "Still describing something" is posted, not resolved and
+    /// not orphaned: a resolved forum post is history and its thread is usually archived, and
+    /// re-rendering one would reopen it to say nothing that was not already there, while an
+    /// orphaned row names a message somebody has deleted. Neither is worth a request.
+    ///
+    /// Oldest first and bounded by `limit`, so a run that hits its ceiling repairs the cards that
+    /// have been wrong longest. An empty `routes` is an empty answer rather than every card.
+    ///
+    /// # Errors
+    ///
+    /// As [`Store::ingest_batch`].
+    async fn live_cards(
+        &self,
+        routes: &[RouteId],
+        limit: u32,
+    ) -> Result<Vec<Notification>, StoreError>;
+
     /// Posted cards that are still firing, still unanswered, and have never been escalated.
     ///
     /// `created_before` is the earliest deadline any route sets, which makes the answer a

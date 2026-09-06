@@ -77,9 +77,10 @@ impl NewOutboxItem {
 
 /// Everything the dispatcher can be asked to do.
 ///
-/// Each variant is one API call. Unarchiving before an edit is its own variant rather than a
-/// retry after the failure, because an archived thread rejecting an edit is the normal path for a
-/// resolved alert that re-fires, not an exceptional one.
+/// Each variant is one API call, with [`Effect::ResyncCard`] as the stated exception. Unarchiving
+/// before an edit is its own variant rather than a retry after the failure, because an archived
+/// thread rejecting an edit is the normal path for a resolved alert that re-fires, not an
+/// exceptional one.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Effect {
@@ -97,6 +98,22 @@ pub enum Effect {
     /// Re-render an existing card.
     EditCard {
         /// The card to edit.
+        notification: NotificationId,
+    },
+
+    /// Re-render a card and re-apply its forum tags, whatever the stored hashes say.
+    ///
+    /// The repair path, and the only effect that makes two calls. An edit and a tag change each
+    /// skip when the hash on the row matches what they would send, and that hash is precisely
+    /// what a deployment whose cards have drifted out of line cannot trust: the row says the post
+    /// is current and the post is not. Both are therefore sent unconditionally.
+    ///
+    /// Splitting it into a forced [`Effect::EditCard`] and an [`Effect::SetTags`] would need the
+    /// desired tag set worked out by whoever enqueues it, and the join that produces one — route,
+    /// policy, card state, alert severity and labels — is the dispatcher's. A command holding a
+    /// notification id has none of it.
+    ResyncCard {
+        /// The card to bring back into line.
         notification: NotificationId,
     },
 
@@ -199,6 +216,7 @@ impl Effect {
         match self {
             Self::PostCard { notification, .. }
             | Self::EditCard { notification }
+            | Self::ResyncCard { notification }
             | Self::OpenThread { notification, .. }
             | Self::ThreadNote { notification, .. }
             | Self::SetTags { notification, .. }
@@ -218,6 +236,7 @@ impl Effect {
         match self {
             Self::PostCard { .. } => "post_card",
             Self::EditCard { .. } => "edit_card",
+            Self::ResyncCard { .. } => "resync_card",
             Self::OpenThread { .. } => "open_thread",
             Self::ThreadNote { .. } => "thread_note",
             Self::SetTags { .. } => "set_tags",
@@ -237,6 +256,10 @@ impl Effect {
     /// different sentences. Coalescing the first pair is what keeps a storm inside Discord's edit
     /// limits, and coalescing the second would lose a line of the timeline.
     ///
+    /// The fold is per kind as well as per card, which is what keeps a resync intact: an ordinary
+    /// edit queued behind one cannot replace it and hand the card back to the hash check the
+    /// resync was run to escape.
+    ///
     /// The card, and never the dedupe key, is the scope. One alert fans out to every route that
     /// matches it, and each of those cards is keyed under the same per-alert key in a channel of
     /// its own; folding on the key alone would let the edit for one card overwrite the queued
@@ -244,7 +267,10 @@ impl Effect {
     /// coalescable variant therefore names a notification, and the store folds on that.
     #[must_use]
     pub fn is_coalescable(&self) -> bool {
-        matches!(self, Self::EditCard { .. } | Self::SetTags { .. })
+        matches!(
+            self,
+            Self::EditCard { .. } | Self::ResyncCard { .. } | Self::SetTags { .. }
+        )
     }
 }
 

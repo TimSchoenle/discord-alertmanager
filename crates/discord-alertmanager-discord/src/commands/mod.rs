@@ -16,6 +16,7 @@
 //! failed" during exactly the Alertmanager slowness it was called to investigate.
 
 mod alerts;
+mod cards;
 mod ignores;
 mod routes;
 mod silences;
@@ -250,6 +251,7 @@ pub(crate) fn registry() -> Vec<Arc<dyn SlashCommand>> {
         Arc::new(routes::Routes),
         Arc::new(subscriptions::Subscriptions),
         Arc::new(status::Status),
+        Arc::new(cards::Cards),
     ]
 }
 

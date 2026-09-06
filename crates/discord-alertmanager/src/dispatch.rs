@@ -238,6 +238,7 @@ impl Dispatcher {
                 mention,
             } => self.post(*notification, *mention).await,
             Effect::EditCard { notification } => self.edit(*notification).await,
+            Effect::ResyncCard { notification } => self.resync(*notification).await,
             Effect::OpenThread { notification, name } => {
                 self.open_thread(*notification, name).await
             }
@@ -411,6 +412,96 @@ impl Dispatcher {
             }
             Err(error) => Err(Failure::from_sink(error)),
         }
+    }
+
+    /// Re-renders a card and re-applies its tags, whatever the stored hashes say.
+    ///
+    /// The repair path. Everything an edit or a tag change normally skips on is a hash written by
+    /// the last worker that thought it had succeeded, and a deployment whose cards drifted out of
+    /// line — a queue emptied by hand, a restore from a backup taken behind Discord, a channel
+    /// somebody rebuilt — is one where those hashes describe posts that no longer exist in that
+    /// shape. So both calls go out unconditionally.
+    ///
+    /// Two calls in one effect, which is the exception the [`Effect`] documentation names: the
+    /// desired tag set falls out of the same join that produces the card, and there is nowhere
+    /// else in the system holding both.
+    async fn resync(
+        &self,
+        notification: dam_store::NotificationId,
+    ) -> Result<AppliedEffect, Failure> {
+        let Some(assembled) = self.assemble(notification, false).await? else {
+            return Err(Failure::Drop("the card can no longer be drawn".to_owned()));
+        };
+
+        let Some(message) = assembled.card.message_id else {
+            return Err(Failure::Drop("the card has not been posted yet".to_owned()));
+        };
+
+        let rendered = self.renderer.render(&assembled.data);
+        let reference = MessageRef {
+            channel: assembled
+                .card
+                .thread_id
+                .unwrap_or(assembled.card.channel_id),
+            message,
+        };
+
+        let reopened = match reopening(self.sink.as_ref(), reference.channel, || {
+            self.sink.edit_card(&reference, &assembled.data)
+        })
+        .await
+        {
+            Ok(((), reopened)) => reopened,
+            // As for an ordinary edit: the message is gone, so the row is released and the next
+            // change posts a fresh card rather than chasing one nobody can see.
+            Err(SinkError::UnknownMessage) => {
+                if let Err(error) = self
+                    .store
+                    .orphan_notification(notification, Utc::now())
+                    .await
+                {
+                    warn!(%error, "cannot release a deleted card");
+                }
+
+                return Err(Failure::Drop("the message was deleted".to_owned()));
+            }
+            Err(error) => return Err(Failure::from_sink(error)),
+        };
+
+        let mut applied = AppliedEffect {
+            render_hash: Some(rendered.hash),
+            archived: reopened.then_some(false),
+            ..AppliedEffect::default()
+        };
+
+        // Only a forum post has tags, and only a forum post has a thread to set them on. A text
+        // card is finished at the edit above.
+        if assembled.target.target.is_forum() {
+            // Discord makes a post's id its thread's id, so a posted forum card always carries
+            // one. A card that does not is a broken invariant rather than a state to handle: it
+            // is logged, and the re-render is still recorded rather than the whole repair being
+            // thrown away over the half of it that cannot run.
+            let Some(post) = assembled.card.thread_id else {
+                warn!(notification = %notification, "a posted forum card has no thread to tag");
+                return Ok(applied);
+            };
+
+            let tags = assembled.target.tags.clone();
+
+            // The edit above is idempotent, so a tag call that fails costs one redundant edit on
+            // the retry rather than a card left half repaired.
+            let ((), retagged) = reopening(self.sink.as_ref(), post, || {
+                self.sink.set_post_tags(post, &tags)
+            })
+            .await
+            .map_err(Failure::from_sink)?;
+
+            applied.tags_hash = Some(tags_hash(&tags));
+            applied.applied_tags = Some(tags);
+            applied.archived = (reopened || retagged).then_some(false);
+        }
+
+        Ok(applied)
     }
 
     /// Opens the thread a route's policy asks for.

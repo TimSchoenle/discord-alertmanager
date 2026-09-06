@@ -69,6 +69,83 @@ pub async fn run(store: &dyn Store) {
     pruning_is_bounded_and_says_so(store).await;
     a_subscription_belongs_to_its_owner(store).await;
     the_audit_log_accepts_every_result(store).await;
+
+    // Last, because it finishes by emptying the queue: the case has to leave a card unposted to
+    // prove the read skips one, and abandoning the queue is cheaper than reaching into it for the
+    // single row that leaves behind.
+    a_resync_reads_the_live_cards_of_its_own_routes(store).await;
+}
+
+/// A resync sees the cards that still describe something, on the routes it was given and no
+/// others.
+async fn a_resync_reads_the_live_cards_of_its_own_routes(store: &dyn Store) {
+    let route = route_for(store, "resync", 130).await;
+    let other = route_for(store, "resync-other", 131).await;
+
+    let live = DedupeKey::from_stored("a:resync-live");
+    let queued = DedupeKey::from_stored("a:resync-queued");
+    let settled = DedupeKey::from_stored("a:resync-settled");
+    let foreign = DedupeKey::from_stored("a:resync-foreign");
+
+    let live_id = card_for(store, route, 130, &live).await;
+    let queued_id = card_for(store, route, 130, &queued).await;
+    let settled_id = card_for(store, route, 130, &settled).await;
+    let foreign_id = card_for(store, other, 131, &foreign).await;
+
+    record_post(store, "resync-setup", &live, MessageId::new(9_130)).await;
+    record_post(store, "resync-setup", &settled, MessageId::new(9_131)).await;
+    record_post(store, "resync-setup", &foreign, MessageId::new(9_132)).await;
+
+    store
+        .set_notification_state(settled_id, NotificationState::Resolved, at(10))
+        .await
+        .expect("the card resolves");
+
+    let seen: Vec<crate::NotificationId> = store
+        .live_cards(&[route], 10)
+        .await
+        .expect("the read succeeds")
+        .iter()
+        .map(|card| card.id)
+        .collect();
+
+    assert!(
+        seen.contains(&live_id),
+        "a posted card that is still open is what a resync exists to repair"
+    );
+    assert!(
+        !seen.contains(&queued_id),
+        "a card with no message is not out of step with anything yet"
+    );
+    assert!(
+        !seen.contains(&settled_id),
+        "a resolved post is history, and reopening it to redraw it would say nothing new"
+    );
+    assert!(
+        !seen.contains(&foreign_id),
+        "another route's cards are not this run's to repair"
+    );
+
+    assert_eq!(
+        store
+            .live_cards(&[route], 10)
+            .await
+            .expect("the read succeeds")
+            .len(),
+        1,
+        "the answer is the live set and nothing beside it"
+    );
+
+    assert!(
+        store
+            .live_cards(&[], 10)
+            .await
+            .expect("the read succeeds")
+            .is_empty(),
+        "no route owns no card, rather than every card"
+    );
+
+    drain(store, "resync-cleanup").await;
 }
 
 /// A subscription belongs to the person who made it, in the predicate rather than in a check.
