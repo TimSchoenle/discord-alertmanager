@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.0](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.5.0...v0.6.0) (2026-09-06)
+
+
+### Features
+
+* add `/cards resync` to force a redraw of forum cards ([#32](https://github.com/TimSchoenle/discord-alertmanager/issues/32)) ([b46927c](https://github.com/TimSchoenle/discord-alertmanager/commit/b46927c37819413dab0d1e642aef88c3cb3f757c))
+
+
+### Miscellaneous
+
+* **deps:** update docker/dockerfile docker tag to v1.27 ([#30](https://github.com/TimSchoenle/discord-alertmanager/issues/30)) ([14dd1df](https://github.com/TimSchoenle/discord-alertmanager/commit/14dd1df976751e07b7112bf94a452f92ff6f9310))
+
 ## [0.5.0](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.4.1...v0.5.0) (2026-09-05)
 
 
