@@ -15,15 +15,23 @@ pub struct Engine {
     /// Work is hashed into one lane per worker by its dedupe key, so every effect for one alert
     /// lands on one worker. Raising this widens the fan-out across alerts and never splits an
     /// alert across two workers.
+    // A lane is a `u16`, so the worker index is one too: `main` raises a zero to one and saturates
+    // at `u16::MAX`, and a count above that names workers the lane space has no room for.
+    #[cfg_attr(feature = "config-schema", config(range(min = 1, max = 65535)))]
     pub dispatchers: u32,
 
     /// Seconds a claimed outbox row stays claimed before a janitor may reclaim it.
     ///
     /// The janitor reclaims at three times this, which is the margin for a worker that is slow
     /// rather than dead.
+    // Raised to one where the lease is built. A zero-second lease would be expired the instant it
+    // was taken, so every row a worker claimed would be reclaimed underneath it.
+    #[cfg_attr(feature = "config-schema", config(range(min = 1)))]
     pub outbox_lease_secs: u64,
 
     /// Outbox rows one worker claims per pass.
+    // Raised to one where the dispatcher is built: a pass that claims nothing never drains.
+    #[cfg_attr(feature = "config-schema", config(range(min = 1)))]
     pub outbox_batch_size: u32,
 
     /// Seconds between reconciler polls of the Alertmanager alert set.
@@ -103,6 +111,9 @@ pub struct Storm {
     pub threshold: u32,
 
     /// Length of the window, in seconds.
+    // Raised to one where the window is built, because a zero-length window holds no arrival and
+    // so never reaches any threshold.
+    #[cfg_attr(feature = "config-schema", config(range(min = 1)))]
     pub window_secs: u64,
 
     /// Threshold for forum routes, which is lower.

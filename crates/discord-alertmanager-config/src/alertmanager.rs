@@ -40,11 +40,15 @@ pub struct Alertmanager {
     pub ca_bundle: Option<PathBuf>,
 
     /// Seconds to wait for a whole request before giving up.
+    #[cfg_attr(feature = "config-schema", config(range(min = 1)))]
     pub timeout_secs: u64,
 
     /// Seconds to wait for a connection before trying the next endpoint.
     ///
     /// Short on purpose. This is how quickly a dead peer is abandoned for a live one.
+    // The floor on both is `AlertmanagerClient::new`, which refuses a zero outright rather than
+    // handing `reqwest` a timeout meaning "immediately" and failing every request.
+    #[cfg_attr(feature = "config-schema", config(range(min = 1)))]
     pub connect_timeout_secs: u64,
 
     /// Backoff applied to connection errors, timeouts and 5xx responses.

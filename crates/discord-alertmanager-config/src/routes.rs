@@ -295,6 +295,9 @@ pub struct TargetPolicy {
     /// Discord accepts 60, 1440, 4320 and 10080. Unset takes
     /// `render.thread_archive_after_minutes`. A card that is still firing holds 10080 whatever
     /// this says, so that a long incident never archives underneath the people working it.
+    // The bound lands on the `u32` inside the `Option`, and is the outer envelope of those four
+    // rather than the set itself, which a numeric interval cannot express.
+    #[cfg_attr(feature = "config-schema", config(range(min = 60, max = 10080)))]
     pub auto_archive_minutes: Option<u32>,
 
     /// Archive a forum post when its alert resolves.

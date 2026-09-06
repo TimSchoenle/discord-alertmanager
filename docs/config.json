@@ -27,7 +27,7 @@
         "connect_timeout_secs": {
           "default": 2,
           "description": "Seconds to wait for a connection before trying the next endpoint.\n\nShort on purpose. This is how quickly a dead peer is abandoned for a live one.",
-          "minimum": 0,
+          "minimum": 1,
           "type": "integer"
         },
         "endpoints": {
@@ -65,7 +65,7 @@
         "timeout_secs": {
           "default": 10,
           "description": "Seconds to wait for a whole request before giving up.",
-          "minimum": 0,
+          "minimum": 1,
           "type": "integer"
         }
       },
@@ -144,8 +144,8 @@
         "dispatchers": {
           "default": 4,
           "description": "Outbox dispatcher workers.\n\nWork is hashed into one lane per worker by its dedupe key, so every effect for one alert\nlands on one worker. Raising this widens the fan-out across alerts and never splits an\nalert across two workers.",
-          "maximum": 4294967295,
-          "minimum": 0,
+          "maximum": 65535,
+          "minimum": 1,
           "type": "integer"
         },
         "escalation_interval_secs": {
@@ -158,13 +158,13 @@
           "default": 16,
           "description": "Outbox rows one worker claims per pass.",
           "maximum": 4294967295,
-          "minimum": 0,
+          "minimum": 1,
           "type": "integer"
         },
         "outbox_lease_secs": {
           "default": 30,
           "description": "Seconds a claimed outbox row stays claimed before a janitor may reclaim it.\n\nThe janitor reclaims at three times this, which is the margin for a worker that is slow\nrather than dead.",
-          "minimum": 0,
+          "minimum": 1,
           "type": "integer"
         },
         "persist_events": {
@@ -243,7 +243,7 @@
             "window_secs": {
               "default": 60,
               "description": "Length of the window, in seconds.",
-              "minimum": 0,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -382,6 +382,7 @@
         "description_budget": {
           "default": 1500,
           "description": "Characters of annotation text a card may carry before it is truncated.\n\nDiscord caps an embed at 6000 characters across every field, and a single alert can carry\na five-thousand-character annotation. The truncation marker links to `/alerts show`, which\nhas the full text.",
+          "maximum": 4096,
           "minimum": 0,
           "type": "integer"
         },
@@ -405,8 +406,8 @@
         "thread_archive_after_minutes": {
           "default": 1440,
           "description": "Minutes of inactivity after which an alert thread archives.\n\nDiscord accepts only 60, 1440, 4320 and 10080. A firing alert holds 10080 regardless, so\nthat a week-long incident never archives underneath the people working it.",
-          "maximum": 4294967295,
-          "minimum": 0,
+          "maximum": 10080,
+          "minimum": 60,
           "type": "integer"
         }
       },
@@ -548,8 +549,8 @@
                   },
                   "auto_archive_minutes": {
                     "description": "Minutes of inactivity before a resolved post or thread archives.\n\nDiscord accepts 60, 1440, 4320 and 10080. Unset takes\n`render.thread_archive_after_minutes`. A card that is still firing holds 10080 whatever\nthis says, so that a long incident never archives underneath the people working it.",
-                    "maximum": 4294967295,
-                    "minimum": 0,
+                    "maximum": 10080,
+                    "minimum": 60,
                     "type": "integer"
                   },
                   "bump_on_state_change": {
@@ -667,14 +668,14 @@
             "acquire_timeout_secs": {
               "default": 5,
               "description": "Seconds to wait for a connection from the pool before failing the operation.",
-              "minimum": 0,
+              "minimum": 1,
               "type": "integer"
             },
             "max_connections": {
               "default": 16,
               "description": "Maximum pooled connections.",
               "maximum": 4294967295,
-              "minimum": 0,
+              "minimum": 1,
               "type": "integer"
             },
             "migrate_on_start": {
@@ -696,14 +697,14 @@
             "acquire_timeout_secs": {
               "default": 5,
               "description": "Seconds to wait for a connection from the pool before failing the operation.",
-              "minimum": 0,
+              "minimum": 1,
               "type": "integer"
             },
             "max_connections": {
               "default": 4,
               "description": "Size of the read pool. The writer is always one connection.",
               "maximum": 4294967295,
-              "minimum": 0,
+              "minimum": 1,
               "type": "integer"
             },
             "migrate_on_start": {
@@ -801,6 +802,8 @@
             "sample_rate": {
               "default": 1.0,
               "description": "Fraction of events that are sent, from `0.0` to `1.0`.\n\nA blunt instrument: it drops whole events at random, so an error that fires once is the one\nmost likely to be lost. Leave it at `1.0` and shed volume with `event_level` instead.",
+              "maximum": 1.0,
+              "minimum": 0.0,
               "type": "number"
             },
             "send_default_pii": {
@@ -834,6 +837,8 @@
             "traces_sample_rate": {
               "default": 0.0,
               "description": "Fraction of traces that are sent, from `0.0` to `1.0`. Tracing is off at `0.0`.\n\nEvery webhook batch, every outbox item, every periodic pass and every slash command is one\ntrace, so the rate multiplies the busiest path in the process rather than the rarest. Start\nlow.",
+              "maximum": 1.0,
+              "minimum": 0.0,
               "type": "number"
             }
           },

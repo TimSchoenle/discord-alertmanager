@@ -61,9 +61,15 @@ pub struct SqliteConfig {
     pub path: PathBuf,
 
     /// Size of the read pool. The writer is always one connection.
+    // `SqliteStore::connect` raises a zero to one, because a pool that can open no connection
+    // serves no read.
+    #[cfg_attr(feature = "config-schema", config(range(min = 1)))]
     pub max_connections: u32,
 
     /// Seconds to wait for a connection from the pool before failing the operation.
+    // Raised to one where the settings are built, so a zero is a floor rather than a timeout that
+    // expires before the pool is asked.
+    #[cfg_attr(feature = "config-schema", config(range(min = 1)))]
     pub acquire_timeout_secs: u64,
 
     /// Run pending migrations during startup.
@@ -100,9 +106,12 @@ pub struct PostgresConfig {
     pub url: SecretString,
 
     /// Maximum pooled connections.
+    // `PostgresStore::connect` raises a zero to one, as the `SQLite` side does.
+    #[cfg_attr(feature = "config-schema", config(range(min = 1)))]
     pub max_connections: u32,
 
     /// Seconds to wait for a connection from the pool before failing the operation.
+    #[cfg_attr(feature = "config-schema", config(range(min = 1)))]
     pub acquire_timeout_secs: u64,
 
     /// Run pending migrations during startup.
