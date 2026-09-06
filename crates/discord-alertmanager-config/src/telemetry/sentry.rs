@@ -56,6 +56,9 @@ pub struct Sentry {
     ///
     /// A blunt instrument: it drops whole events at random, so an error that fires once is the one
     /// most likely to be lost. Leave it at `1.0` and shed volume with `event_level` instead.
+    // `telemetry::install_sentry` refuses anything outside the unit interval, including a NaN,
+    // rather than letting the client's own builder panic on it.
+    #[cfg_attr(feature = "config-schema", config(range(min = 0.0, max = 1.0)))]
     pub sample_rate: f32,
 
     /// Fraction of traces that are sent, from `0.0` to `1.0`. Tracing is off at `0.0`.
@@ -63,6 +66,7 @@ pub struct Sentry {
     /// Every webhook batch, every outbox item, every periodic pass and every slash command is one
     /// trace, so the rate multiplies the busiest path in the process rather than the rarest. Start
     /// low.
+    #[cfg_attr(feature = "config-schema", config(range(min = 0.0, max = 1.0)))]
     pub traces_sample_rate: f32,
 
     /// Level at or above which a log record is sent as an event of its own.

@@ -21,6 +21,9 @@ pub struct Render {
     /// Discord caps an embed at 6000 characters across every field, and a single alert can carry
     /// a five-thousand-character annotation. The truncation marker links to `/alerts show`, which
     /// has the full text.
+    // The renderer takes the smaller of this and Discord's own 4096-character description limit,
+    // so anything above that buys nothing.
+    #[cfg_attr(feature = "config-schema", config(range(max = 4096)))]
     pub description_budget: usize,
 
     /// Labels promoted to their own inline field on the card, in order.
@@ -33,6 +36,9 @@ pub struct Render {
     ///
     /// Discord accepts only 60, 1440, 4320 and 10080. A firing alert holds 10080 regardless, so
     /// that a week-long incident never archives underneath the people working it.
+    // The bound is the outer envelope of those four rather than the set itself: a schema can say
+    // "an integer in this interval" and cannot say "one of these four numbers".
+    #[cfg_attr(feature = "config-schema", config(range(min = 60, max = 10080)))]
     pub thread_archive_after_minutes: u32,
 
     /// Show a short fingerprint in the card footer.
