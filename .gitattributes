@@ -1,22 +1,42 @@
-# `core.autocrlf = true` is the usual setting on the machine this repository is authored from,
-# which would hand a Linux runner a script whose every line ends in a carriage return. `bash`
-# reports that as `$'\r': command not found` on the first line, several steps away from the cause.
-*.sh text eol=lf
+# Default: normalize everything Git considers text to LF. Authored on `core.autocrlf = true`
+# machines but built and byte-compared by Linux runners, so this is the baseline every rule
+# below only needs to add diff/linguist behaviour to, not line endings.
+* text=auto eol=lf
 
-# Rendered by TimSchoenle/actions/actions/common/render-template, which normalizes to LF and
-# writes LF. Left to autocrlf, the working copy would differ from what the drift gate renders and
-# `check: true` would fail on line endings alone.
-*.hbs text eol=lf
-README.md text eol=lf
+# Diff drivers: anchor hunks on the enclosing item instead of the nearest blank line. Git ships
+# no built-in driver for TOML/SQL/Dockerfile, so those stay on the default hunk header.
+*.rs text diff=rust
+*.sh text diff=bash
+*.md text diff=markdown
+*.json text diff=json
 
-# Written by `cargo xtask config-docs` and compared byte for byte by the `config-docs` and
-# `config-contract` jobs. Left to autocrlf the committed blob would depend on which platform last
-# ran the generator, and both gates would fail on line endings alone.
-docs/config.md text eol=lf
-docs/config.json text eol=lf
-docs/config.contract.json text eol=lf
-config.example.toml text eol=lf
+# Rendered/generated text still needs `text=auto eol=lf` above; these add linguist markers only.
+Cargo.lock linguist-generated
+CHANGELOG.md linguist-generated
+README.md linguist-generated
+config.example.toml linguist-generated
+docs/config.md linguist-generated
+docs/config.json linguist-generated
+docs/config.contract.json linguist-generated
+
+# Captured API payloads, not hand-authored fixtures; keep them out of language stats and diffs.
+crates/discord-alertmanager-am/tests/fixtures/*.json linguist-generated
+
+# Prose that should count as documentation, not as a language sample.
+CONTRIBUTING.md linguist-documentation
+SECURITY.md linguist-documentation
 
 # Read as a text region rather than as a build input: the `config-contract` action cuts the
 # `terrace-config:labels` block out of it and compares it against the generator's output.
-Dockerfile text eol=lf
+Dockerfile text
+
+# Binary safety net, in case one ever lands in the tree.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.zip binary
+*.gz binary
