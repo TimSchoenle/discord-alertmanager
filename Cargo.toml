@@ -138,7 +138,7 @@ sentry = { version = "0.49", default-features = false, features = [
 clap = { version = "4", features = ["derive"] }
 insta = "1"
 proptest = "1"
-rstest = "0.26"
+rstest = "0.27"
 testcontainers = "0.27"
 testcontainers-modules = "0.15"
 wiremock = "0.6"
