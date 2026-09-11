@@ -493,7 +493,7 @@ jobs:
         with:
           egress-policy: audit
 
-      - uses: TimSchoenle/actions/actions/helm/update-chart-version@30bc73a560c7aac65f449b23378b9fd7782f8d39 # tag=actions-helm-update-chart-version-v1.6.7
+      - uses: TimSchoenle/actions/actions/helm/update-chart-version@8097180ae2cd49922941c28c53e17c636ba5b8f2 # tag=actions-helm-update-chart-version-v1.6.9
         with:
           app-id: ${{ secrets.RELEASE_BOT_APP_ID }}
           private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
