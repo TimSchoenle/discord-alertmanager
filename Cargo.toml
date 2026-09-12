@@ -67,7 +67,7 @@ tower = "0.5"
 tower-http = { version = "0.7", default-features = false }
 # `>=0.11.22` in serenity's manifest unifies onto whatever this asks for; 0.12 is the newest line
 # serenity 0.12.5 was released against, so it stays here until serenity itself moves.
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-tls"] }
 
 # --- storage ----------------------------------------------------------------------------------
 sqlx = { version = "0.9", default-features = false, features = [
