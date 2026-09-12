@@ -141,7 +141,7 @@ jobs:
           persist-credentials: false
 
       - name: Install pinned toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
 
       # `config-schema` gates the `Describe` derives and the generator example, and the module
       # documentation in `discord-alertmanager-config` links items that exist only under it.
@@ -181,7 +181,7 @@ jobs:
           persist-credentials: false
 
       - name: Install the declared MSRV toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
         with:
           toolchain: '1.94'
 
@@ -207,7 +207,7 @@ jobs:
           persist-credentials: false
 
       - name: Install pinned toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
 
       # Invoked through `bash` rather than executed: the repository is authored on Windows, where
       # git does not record the executable bit.
@@ -235,7 +235,7 @@ jobs:
           persist-credentials: false
 
       - name: Install pinned toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
 
       # `db-prepare` is the other half of `xtask` and is deliberately not run here: no query in
       # this workspace goes through the `query!` macro, so there is no offline cache to compare.
@@ -278,7 +278,7 @@ jobs:
       # The action checks out nothing and installs nothing — it runs after a build, where a fresh
       # checkout would discard what the build produced — so the toolchain is this job's business.
       - name: Install pinned toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
 
       # `image` is empty, so the two checks needing one are skipped and this job stays the
       # cheap half.
@@ -370,7 +370,7 @@ jobs:
       # cache-poisoning path zizmor flags. Only the generator is compiled, so there is nearly
       # nothing to save.
       - name: Install pinned toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
         with:
           cache: false
 
