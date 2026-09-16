@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.2](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.7.1...v0.7.2) (2026-09-16)
+
+
+### Miscellaneous
+
+* **deps:** update timschoenle/actions/.github/workflows/maintenance-auto-approve-renovate.yaml to vworkflows-maintenance-auto-approve-renovate-v1.4.24 ([#65](https://github.com/TimSchoenle/discord-alertmanager/issues/65)) ([1d42f27](https://github.com/TimSchoenle/discord-alertmanager/commit/1d42f2761ef7a7730b9e213f9a032cb0973599a8))
+* **deps:** update timschoenle/actions/actions/common/render-template to vactions-common-render-template-v1.2.2 ([#68](https://github.com/TimSchoenle/discord-alertmanager/issues/68)) ([3fa8455](https://github.com/TimSchoenle/discord-alertmanager/commit/3fa84551d06f7704cc7f1a638c9cc4cce9a9ec63))
+
 ## [0.7.1](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.7.0...v0.7.1) (2026-09-14)
 
 
