@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.7.2](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.7.1...v0.7.2) (2026-09-19)
+
+
+### Miscellaneous
+
+* **deps:** update dependency rust to 1.98 ([#72](https://github.com/TimSchoenle/discord-alertmanager/issues/72)) ([ff3c1a5](https://github.com/TimSchoenle/discord-alertmanager/commit/ff3c1a55f66899c4d5563cfc7d76f493c418b34b))
+* **deps:** update docker/build-push-action digest to c3c9e26 ([#78](https://github.com/TimSchoenle/discord-alertmanager/issues/78)) ([5907c43](https://github.com/TimSchoenle/discord-alertmanager/commit/5907c43eb71116a6126bdc5807938a70d6603096))
+* **deps:** update docker/setup-buildx-action digest to f87e599 ([#79](https://github.com/TimSchoenle/discord-alertmanager/issues/79)) ([315d737](https://github.com/TimSchoenle/discord-alertmanager/commit/315d737eacfef1ac12f6412f11f79cee3a466d08))
+* **deps:** update timschoenle/actions/.github/workflows/maintenance-auto-approve-renovate.yaml to vworkflows-maintenance-auto-approve-renovate-v1.4.24 ([#65](https://github.com/TimSchoenle/discord-alertmanager/issues/65)) ([1d42f27](https://github.com/TimSchoenle/discord-alertmanager/commit/1d42f2761ef7a7730b9e213f9a032cb0973599a8))
+* **deps:** update timschoenle/actions/.github/workflows/maintenance-auto-approve-renovate.yaml to vworkflows-maintenance-auto-approve-renovate-v1.4.25 ([#73](https://github.com/TimSchoenle/discord-alertmanager/issues/73)) ([f4f204b](https://github.com/TimSchoenle/discord-alertmanager/commit/f4f204bfa25a57c67fd48aba700c4c0df21a03f0))
+* **deps:** update timschoenle/actions/actions/common/render-template to vactions-common-render-template-v1.2.2 ([#68](https://github.com/TimSchoenle/discord-alertmanager/issues/68)) ([3fa8455](https://github.com/TimSchoenle/discord-alertmanager/commit/3fa84551d06f7704cc7f1a638c9cc4cce9a9ec63))
+* **deps:** update timschoenle/actions/actions/helm/update-chart-version to vactions-helm-update-chart-version-v1.6.11 ([#70](https://github.com/TimSchoenle/discord-alertmanager/issues/70)) ([7def872](https://github.com/TimSchoenle/discord-alertmanager/commit/7def872b10db4fce366638d8b5ac2db12284a461))
+* **deps:** update timschoenle/actions/actions/helm/update-chart-version to vactions-helm-update-chart-version-v1.6.12 ([#76](https://github.com/TimSchoenle/discord-alertmanager/issues/76)) ([d3a69da](https://github.com/TimSchoenle/discord-alertmanager/commit/d3a69dadd20ed38a09f2b4e0a7d9eb0dc34c231e))
+* **deps:** update timschoenle/actions/actions/rust/auto-format to vactions-rust-auto-format-v1.1.18 ([#77](https://github.com/TimSchoenle/discord-alertmanager/issues/77)) ([036b1bd](https://github.com/TimSchoenle/discord-alertmanager/commit/036b1bd1db2cac9a3fbb34723df3c94ac2cf9a14))
+
 ## [0.7.1](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.7.0...v0.7.1) (2026-09-14)
 
 
