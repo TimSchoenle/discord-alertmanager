@@ -33,6 +33,7 @@ Nothing in this comment may contain a mustache that is not a real reference.
 {{ repo.description }}
 
 [![Release](https://img.shields.io/github/v/release/{{ repo.slug }}?sort=semver)]({{ repo.url }}/releases)
+[![Build](https://img.shields.io/github/actions/workflow/status/{{ repo.slug }}/build.yaml?branch={{ repo.branch }})]({{ repo.url }}/actions/workflows/build.yaml)
 [![Licence](https://img.shields.io/github/license/{{ repo.slug }})](LICENSE)
 [![MSRV](https://img.shields.io/badge/MSRV-{{ toolchain.msrv }}-blue)](Cargo.toml)
 
