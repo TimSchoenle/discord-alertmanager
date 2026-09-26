@@ -22,6 +22,7 @@ Nothing in this comment may contain a mustache that is not a real reference.
 A Discord operator surface for Prometheus Alertmanager.
 
 [![Release](https://img.shields.io/github/v/release/TimSchoenle/discord-alertmanager?sort=semver)](https://github.com/TimSchoenle/discord-alertmanager/releases)
+[![Build](https://img.shields.io/github/actions/workflow/status/TimSchoenle/discord-alertmanager/build.yaml?branch=main)](https://github.com/TimSchoenle/discord-alertmanager/actions/workflows/build.yaml)
 [![Licence](https://img.shields.io/github/license/TimSchoenle/discord-alertmanager)](LICENSE)
 [![MSRV](https://img.shields.io/badge/MSRV-1.94-blue)](Cargo.toml)
 
