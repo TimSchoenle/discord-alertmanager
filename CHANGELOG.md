@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.7.3](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.7.2...v0.7.3) (2026-09-26)
+
+
+### Documentation
+
+* add the build badge to the README ([#84](https://github.com/TimSchoenle/discord-alertmanager/issues/84)) ([d94c48b](https://github.com/TimSchoenle/discord-alertmanager/commit/d94c48b084380b0f4b0e334fa54f092a9b66dbb4))
+
+
+### Miscellaneous
+
+* **deps:** update rust crate terrace-config to v0.13.0 ([#82](https://github.com/TimSchoenle/discord-alertmanager/issues/82)) ([e72fed1](https://github.com/TimSchoenle/discord-alertmanager/commit/e72fed1b1539b1dd3122b5aee824b1ae2f34f22f))
+* **deps:** update rust crate terrace-config to v0.14.0 ([#85](https://github.com/TimSchoenle/discord-alertmanager/issues/85)) ([f6c30ec](https://github.com/TimSchoenle/discord-alertmanager/commit/f6c30ec1c00f1b62c5c516fbb743a1fbc7b46b03))
+
 ## [0.7.2](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.7.1...v0.7.2) (2026-09-21)
 
 
