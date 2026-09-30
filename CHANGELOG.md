@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.8.0](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.7.2...v0.8.0) (2026-09-30)
+
+
+### Features
+
+* key cards by alert identity and re-arm them in place ([#87](https://github.com/TimSchoenle/discord-alertmanager/issues/87)) ([941a1dc](https://github.com/TimSchoenle/discord-alertmanager/commit/941a1dcb439da55338577dc479dcff5265f2952c))
+
+
+### Documentation
+
+* add the build badge to the README ([#84](https://github.com/TimSchoenle/discord-alertmanager/issues/84)) ([d94c48b](https://github.com/TimSchoenle/discord-alertmanager/commit/d94c48b084380b0f4b0e334fa54f092a9b66dbb4))
+
+
+### Miscellaneous
+
+* **deps:** update github/codeql-action action to v4.38.2 ([#86](https://github.com/TimSchoenle/discord-alertmanager/issues/86)) ([2864b60](https://github.com/TimSchoenle/discord-alertmanager/commit/2864b6027531f5be656fce3956c5dcdc72c463a6))
+* **deps:** update rust crate clap to v4.6.7 ([#88](https://github.com/TimSchoenle/discord-alertmanager/issues/88)) ([9cb2b31](https://github.com/TimSchoenle/discord-alertmanager/commit/9cb2b3108ff920a9783ff82805455eae6b814ac3))
+* **deps:** update rust crate sentry to v0.49.3 ([#89](https://github.com/TimSchoenle/discord-alertmanager/issues/89)) ([3d2454b](https://github.com/TimSchoenle/discord-alertmanager/commit/3d2454b7d85d52cd69ff6bd2374886b53bc1c821))
+* **deps:** update rust crate terrace-config to v0.13.0 ([#82](https://github.com/TimSchoenle/discord-alertmanager/issues/82)) ([e72fed1](https://github.com/TimSchoenle/discord-alertmanager/commit/e72fed1b1539b1dd3122b5aee824b1ae2f34f22f))
+* **deps:** update rust crate terrace-config to v0.14.0 ([#85](https://github.com/TimSchoenle/discord-alertmanager/issues/85)) ([f6c30ec](https://github.com/TimSchoenle/discord-alertmanager/commit/f6c30ec1c00f1b62c5c516fbb743a1fbc7b46b03))
+
+
+### Dependencies
+
+* **deps:** lock file maintenance ([#35](https://github.com/TimSchoenle/discord-alertmanager/issues/35)) ([46ebb20](https://github.com/TimSchoenle/discord-alertmanager/commit/46ebb20bac7f23156cdb8513586d0a5bb23ac1d2))
+
 ## [0.7.2](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.7.1...v0.7.2) (2026-09-21)
 
 
