@@ -152,8 +152,10 @@ impl BotContext {
 #[derive(Debug, thiserror::Error)]
 pub enum GatewayError {
     /// The client could not be built, or the session ended in a way it could not recover from.
+    // Boxed because serenity's error is over a hundred bytes, and every `Result` carrying this
+    // one would otherwise be that size on the happy path too.
     #[error("the Discord gateway failed: {0}")]
-    Gateway(#[source] serenity::Error),
+    Gateway(#[source] Box<serenity::Error>),
 }
 
 /// The gateway client, before it is started.
@@ -221,7 +223,7 @@ impl Bot {
         let mut client = Client::builder(self.token.expose_secret(), self.intents)
             .event_handler(Handler { bot: context })
             .await
-            .map_err(GatewayError::Gateway)?;
+            .map_err(|error| GatewayError::Gateway(Box::new(error)))?;
 
         // The shard manager rather than an abort: a dropped task leaves Discord holding a session
         // until it times out, and the next start then contends with the one this process left.
@@ -231,7 +233,10 @@ impl Bot {
             shards.shutdown_all().await;
         });
 
-        let outcome = client.start().await.map_err(GatewayError::Gateway);
+        let outcome = client
+            .start()
+            .await
+            .map_err(|error| GatewayError::Gateway(Box::new(error)));
 
         watcher.abort();
         self.context.connected.store(false, Ordering::Relaxed);
