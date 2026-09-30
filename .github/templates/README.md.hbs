@@ -101,9 +101,14 @@ The same generator writes `docs/config.md`, `docs/config.json` and `config.examp
   instead, saying on the card why it did. Discord's per-channel limits are strict enough that an
   unthrottled storm produces rate-limit responses rather than notifications, and a worse card in a
   readable channel beats a better one nobody receives.
-- An alert that resolves and fires again minutes later reuses its card and counts the flap. One
-  that comes back a week later gets a new card carrying a link to the old one, because reviving a
-  card that scrolled away days ago tells nobody anything.
+- An alert that resolves and fires again re-arms its card: the post reopens, turns red and counts
+  the flap. Only one whose card has been resolved for longer than the regroup window gets a new
+  card, carrying a link to the old one, because reviving a card that scrolled away days ago tells
+  nobody anything.
+- Labels whose values churn can be left out of an alert's identity with
+  `engine.dedupe_ignore_labels`. A rollout that replaces the pod behind an alert then lands on the
+  card already showing it instead of posting a duplicate, and the card resolves when the last
+  alert behind it does.
 - A route can escalate. A card that stays firing and unacknowledged past its deadline mentions the
   people the route names, once. The failure this exists for is the quiet one: the message arrived,
   it scrolled past, and the channel is silent precisely because everybody assumes somebody else

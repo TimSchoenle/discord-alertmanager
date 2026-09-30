@@ -43,8 +43,12 @@ pub async fn run(store: &dyn Store) {
     ingest_records_what_changed(store).await;
     ingest_discards_a_redelivery(store).await;
     a_re_fire_reuses_the_row_and_counts_the_flap(store).await;
-    a_re_fire_after_the_regroup_window_starts_an_episode(store).await;
-    a_replacement_card_remembers_what_it_replaced(store).await;
+    a_re_fire_after_the_regroup_window_restarts_the_flap_count(store).await;
+    a_poll_keeps_the_group_key_a_webhook_delivered(store).await;
+    firing_alerts_are_found_by_name(store).await;
+    a_replacement_card_takes_the_key_of_the_card_it_replaced(store).await;
+    a_resolved_card_remembers_when_until_it_re_arms(store).await;
+    an_acknowledgement_reaches_every_card_showing_the_alert(store).await;
     an_escalation_is_claimed_once(store).await;
     a_route_keeps_its_escalation_policy(store).await;
     a_decision_writes_the_card_and_its_post_together(store).await;
@@ -435,12 +439,12 @@ async fn a_re_fire_reuses_the_row_and_counts_the_flap(store: &dyn Store) {
     assert_eq!(record.resolved_at, None, "a firing alert has not resolved");
 }
 
-/// A re-fire long after the resolution is a new episode, and the episode reaches the caller.
+/// A re-fire long after the resolution is a new occurrence, and its flap count starts again.
 ///
 /// The window is the store's own setting rather than a per-call one, so this asserts the
 /// behaviour a deployment sees rather than one a test could dial in: the conformance store takes
 /// the configuration's default of half an hour, and these timestamps are a day apart.
-async fn a_re_fire_after_the_regroup_window_starts_an_episode(store: &dyn Store) {
+async fn a_re_fire_after_the_regroup_window_restarts_the_flap_count(store: &dyn Store) {
     const DAY: i64 = 86_400;
 
     ingest(
@@ -463,12 +467,8 @@ async fn a_re_fire_after_the_regroup_window_starts_an_episode(store: &dyn Store)
 
     assert_eq!(refire.deltas[0].kind, EventKind::Fired);
     assert_eq!(
-        refire.deltas[0].episode, 1,
-        "a day of quiet is a new card, not a flap on the old one"
-    );
-    assert_eq!(
         refire.deltas[0].flap_count, 0,
-        "the flap count belongs to the episode it counts within"
+        "a day of quiet is a new occurrence, not a flap on the last one"
     );
 
     let record = store
@@ -477,31 +477,252 @@ async fn a_re_fire_after_the_regroup_window_starts_an_episode(store: &dyn Store)
         .expect("the read succeeds")
         .expect("the row exists");
 
-    assert_eq!(record.episode, 1, "the episode is persisted, not derived");
+    assert_eq!(record.flap_count, 0, "the count is persisted, not derived");
+    assert_eq!(record.resolved_at, None, "a firing alert has not resolved");
+}
+
+/// A reconciler pass does not erase the group key the webhook delivered.
+///
+/// Alertmanager's alert list carries no group key. Reading its absence as a change would record
+/// an update on every poll and move the alert off its group's card on a per-group route.
+async fn a_poll_keeps_the_group_key_a_webhook_delivered(store: &dyn Store) {
+    let group = dam_core::GroupKey::new("{}:{alertname=\"TestAlert\"}");
+
+    let mut delivered = IngestBatch::new(
+        EventSource::Webhook,
+        vec![alert("aaaa0030", AlertStatus::Firing, "critical")],
+        at(0),
+    );
+    delivered.group_key = Some(group.clone());
+    store
+        .ingest_batch(&delivered)
+        .await
+        .expect("the webhook batch is accepted");
+
+    let polled = store
+        .ingest_batch(&IngestBatch::new(
+            EventSource::Reconciler,
+            vec![alert("aaaa0030", AlertStatus::Firing, "critical")],
+            at(60),
+        ))
+        .await
+        .expect("the reconciler batch is accepted");
+
+    assert!(
+        polled.deltas.is_empty(),
+        "a poll that learns nothing new is a redelivery: {:?}",
+        polled.deltas
+    );
+    assert_eq!(polled.duplicates, 1);
+
+    let record = store
+        .alert(&Fingerprint::new("aaaa0030").expect("the fingerprint is hexadecimal"))
+        .await
+        .expect("the read succeeds")
+        .expect("the row exists");
+
+    assert_eq!(record.alert.group_key, Some(group));
+}
+
+/// The firing alerts under one name are one read, and nothing resolved or differently named is in
+/// it.
+async fn firing_alerts_are_found_by_name(store: &dyn Store) {
+    let named = |fingerprint: &str, name: Option<&str>, status: AlertStatus| {
+        let mut alert = alert(fingerprint, status, "warning");
+        let mut pairs = vec![("namespace", "payments"), ("pod", fingerprint)];
+        if let Some(name) = name {
+            pairs.push(("alertname", name));
+        }
+        alert.labels = labels(&pairs);
+        alert
+    };
+
+    for alert in [
+        named("aaaa0040", Some("SiblingAlert"), AlertStatus::Firing),
+        named("aaaa0041", Some("SiblingAlert"), AlertStatus::Firing),
+        named("aaaa0042", Some("SiblingAlert"), AlertStatus::Resolved),
+        named("aaaa0043", Some("OtherAlert"), AlertStatus::Firing),
+        named("aaaa0044", None, AlertStatus::Firing),
+    ] {
+        ingest(store, alert, at(0)).await;
+    }
+
+    let fingerprints = |records: Vec<crate::AlertRecord>| -> Vec<String> {
+        records
+            .iter()
+            .map(|record| record.fingerprint().as_str().to_owned())
+            .collect()
+    };
+
     assert_eq!(
-        refire.deltas[0].per_alert_key(),
-        DedupeKey::per_alert(record.fingerprint(), 1),
-        "the key carries the episode, which is what posts a second card"
+        fingerprints(
+            store
+                .firing_alerts_named(Some("SiblingAlert"))
+                .await
+                .expect("the read succeeds")
+        ),
+        vec!["aaaa0040".to_owned(), "aaaa0041".to_owned()],
+        "firing, under this name, in fingerprint order"
+    );
+
+    assert!(
+        fingerprints(
+            store
+                .firing_alerts_named(None)
+                .await
+                .expect("the read succeeds")
+        )
+        .contains(&"aaaa0044".to_owned()),
+        "an alert with no name is found by having none"
     );
 }
 
-/// The card a new episode posts keeps a reference to the one it replaced.
-async fn a_replacement_card_remembers_what_it_replaced(store: &dyn Store) {
+/// A card that replaces another takes its key, and the replaced card keeps its row and history.
+async fn a_replacement_card_takes_the_key_of_the_card_it_replaced(store: &dyn Store) {
     let route = route_for(store, "supersedes", 120).await;
-    let first = card_for(store, route, 120, &DedupeKey::from_stored("a:super")).await;
+    let key = DedupeKey::from_stored("a:super");
+    let first = card_for(store, route, 120, &key).await;
 
+    store
+        .set_notification_state(first, NotificationState::Resolved, at(5))
+        .await
+        .expect("the first card resolves");
+
+    let planned = |supersedes| Decision {
+        new_cards: vec![PlannedCard {
+            card: NewNotification {
+                dedupe_key: key.clone(),
+                fingerprint: Fingerprint::new("aaaa0001").expect("the fingerprint is hexadecimal"),
+                route_id: route,
+                guild_id: GuildId::new(1),
+                channel_id: ChannelId::new(120),
+                state: NotificationState::Firing,
+                supersedes,
+                created_at: at(10),
+            },
+            mention: true,
+            not_before: at(10),
+        }],
+        updates: Vec::new(),
+        at: at(10),
+    };
+
+    let created = store
+        .apply_decision(&planned(Some(first)))
+        .await
+        .expect("the key is handed over rather than refused");
+    let second = *created.first().expect("one card was created");
+
+    let current = store
+        .notification_for(&key, ChannelId::new(120))
+        .await
+        .expect("the read succeeds")
+        .expect("the key names a card");
+
+    assert_eq!(current.id, second, "the key names the replacement now");
+    assert_eq!(
+        current.supersedes,
+        Some(first),
+        "without this the new card has no history and the card that holds it is buried"
+    );
+
+    let retired = store
+        .notification(first)
+        .await
+        .expect("the read succeeds")
+        .expect("the replaced card keeps its row");
+
+    assert_ne!(retired.dedupe_key, key, "the replaced card gave its key up");
+    assert_eq!(retired.state, NotificationState::Resolved);
+
+    // A second replacement racing the first names a card that no longer holds the key. It must
+    // meet the unique index rather than retire the winner.
+    assert!(
+        matches!(
+            store.apply_decision(&planned(Some(first))).await,
+            Err(StoreError::Conflict { .. })
+        ),
+        "the loser of a race is told so and re-reads"
+    );
+
+    drain(store, "supersedes").await;
+}
+
+/// Resolving a card records when, and re-arming it forgets.
+async fn a_resolved_card_remembers_when_until_it_re_arms(store: &dyn Store) {
+    let route = route_for(store, "resolved-at", 122).await;
+    let key = DedupeKey::from_stored("a:resolved-at");
+    let id = card_for(store, route, 122, &key).await;
+
+    let read = || async {
+        store
+            .notification(id)
+            .await
+            .expect("the read succeeds")
+            .expect("the row exists")
+    };
+
+    assert_eq!(
+        read().await.resolved_at,
+        None,
+        "a firing card has not resolved"
+    );
+
+    store
+        .apply_decision(&Decision {
+            new_cards: Vec::new(),
+            updates: vec![CardUpdate {
+                id,
+                fingerprint: Fingerprint::new("aaaa0001").expect("the fingerprint is hexadecimal"),
+                state: Some(NotificationState::Resolved),
+                effects: Vec::new(),
+            }],
+            at: at(20),
+        })
+        .await
+        .expect("the update applies");
+
+    assert_eq!(read().await.resolved_at, Some(at(20)));
+
+    store
+        .set_notification_state(id, NotificationState::Firing, at(30))
+        .await
+        .expect("the card re-arms");
+
+    assert_eq!(
+        read().await.resolved_at,
+        None,
+        "a re-armed card is not resolved since anything"
+    );
+
+    drain(store, "resolved-at").await;
+}
+
+/// Acknowledging reaches a card by the alert it shows, whatever the card is keyed by.
+///
+/// A card whose identity merges fingerprints is keyed by none of them, so a lookup by key alone
+/// would acknowledge the alert and leave its card saying nobody had.
+async fn an_acknowledgement_reaches_every_card_showing_the_alert(store: &dyn Store) {
+    let fingerprint = Fingerprint::new("aaaa0050").expect("the fingerprint is hexadecimal");
+    ingest(
+        store,
+        alert("aaaa0050", AlertStatus::Firing, "critical"),
+        at(0),
+    )
+    .await;
+
+    let route = route_for(store, "ack-identity", 123).await;
     let created = store
         .apply_decision(&Decision {
             new_cards: vec![PlannedCard {
                 card: NewNotification {
-                    dedupe_key: DedupeKey::from_stored("a:super#1"),
-                    fingerprint: Fingerprint::new("aaaa0001")
-                        .expect("the fingerprint is hexadecimal"),
+                    dedupe_key: DedupeKey::from_stored("a:0123456789abcdef"),
+                    fingerprint: fingerprint.clone(),
                     route_id: route,
                     guild_id: GuildId::new(1),
-                    channel_id: ChannelId::new(120),
+                    channel_id: ChannelId::new(123),
                     state: NotificationState::Firing,
-                    supersedes: Some(first),
+                    supersedes: None,
                     created_at: at(0),
                 },
                 mention: false,
@@ -512,18 +733,51 @@ async fn a_replacement_card_remembers_what_it_replaced(store: &dyn Store) {
         })
         .await
         .expect("the decision applies");
+    let id = *created.first().expect("one card was created");
 
-    let second = store
-        .notification(*created.first().expect("one card was created"))
+    let outcome = store
+        .acknowledge(&AckCommand {
+            fingerprint,
+            user_id: UserId::new(1),
+            kind: AckKind::Ack,
+            note: None,
+            revoke: false,
+            at: at(10),
+        })
         .await
-        .expect("the read succeeds")
-        .expect("the row exists");
+        .expect("the acknowledgement is recorded");
 
-    assert_eq!(
-        second.supersedes,
-        Some(first),
-        "without this the new card has no history and the card that holds it is buried"
+    let card = outcome
+        .cards
+        .iter()
+        .find(|card| card.id == id)
+        .expect("the card showing the alert is among the ones to re-render");
+
+    assert_eq!(card.state, NotificationState::Acked);
+
+    store
+        .orphan_notification(id, at(20))
+        .await
+        .expect("the card is released");
+
+    let revoked = store
+        .acknowledge(&AckCommand {
+            fingerprint: Fingerprint::new("aaaa0050").expect("the fingerprint is hexadecimal"),
+            user_id: UserId::new(1),
+            kind: AckKind::Ack,
+            note: None,
+            revoke: true,
+            at: at(30),
+        })
+        .await
+        .expect("the revocation is recorded");
+
+    assert!(
+        !revoked.cards.iter().any(|card| card.id == id),
+        "an orphaned card names a message that is gone, and is not handed back to re-render"
     );
+
+    drain(store, "ack-identity").await;
 }
 
 /// Escalation is claimed, not merely read: two sweeps over one card produce one mention.
@@ -1117,7 +1371,7 @@ async fn two_acknowledgements_produce_one(store: &dyn Store) {
     .await;
 
     let route = route_for(store, "ack", 108).await;
-    let key = DedupeKey::per_alert(&fingerprint, 0);
+    let key = DedupeKey::per_alert(&fingerprint);
     let id = card_for(store, route, 108, &key).await;
 
     let command = |user: u64| AckCommand {

@@ -141,6 +141,14 @@
           "minimum": 0,
           "type": "integer"
         },
+        "dedupe_ignore_labels": {
+          "default": [],
+          "description": "Labels that do not decide which card an alert is shown on.\n\nAlertmanager's fingerprint covers every label, so a label whose value churns gives one\ncondition a new fingerprint, and a new card, each time it changes. Naming such a label here\nputs every alert that differs only in it onto one card: the card follows whichever of them\nis firing and resolves when the last one does. `pod` and `instance` are the usual\ncandidates on Kubernetes, where a rollout replaces both. Per-alert routes only; a group\nroute is already keyed by Alertmanager's group.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "dispatchers": {
           "default": 4,
           "description": "Outbox dispatcher workers.\n\nWork is hashed into one lane per worker by its dedupe key, so every effect for one alert\nlands on one worker. Raising this widens the fan-out across alerts and never splits an\nalert across two workers.",
@@ -186,7 +194,7 @@
         },
         "regroup_window_secs": {
           "default": 1800,
-          "description": "Seconds within which a re-fire reuses the existing card and thread.\n\nInside the window the card is reused and its flap count goes up. Outside it, a new card is\nposted carrying a link to the previous one.",
+          "description": "Seconds a resolved card stays re-armable.\n\nAn alert that fires again inside the window, measured from when its card resolved, turns\nthat card back to firing, reopens its thread and counts a flap. Past the window a new card\nis posted carrying a link to the previous one, which keeps its history.",
           "minimum": 0,
           "type": "integer"
         },

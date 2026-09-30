@@ -86,12 +86,19 @@ pub struct Notification {
     /// every sweep after it.
     pub escalated_at: Option<DateTime<Utc>>,
 
-    /// The card this one replaced, when a re-fire started a new episode.
+    /// The card this one replaced, when the alert came back after that card had been resolved
+    /// for longer than the regroup window.
     ///
     /// Nullable and unenforced: the row it names may be pruned long before this one is, and a
     /// missing predecessor means a card without a back-reference rather than one that cannot be
     /// drawn.
     pub supersedes: Option<NotificationId>,
+
+    /// When the card last moved to resolved, while it still is.
+    ///
+    /// Cleared when the card re-arms. It is what a re-fire is measured against: inside the
+    /// regroup window the card is re-armed, past it a new card replaces this one.
+    pub resolved_at: Option<DateTime<Utc>>,
 
     /// Non-bot messages seen in the thread.
     pub reply_count: u32,
@@ -144,7 +151,10 @@ pub struct NewNotification {
     /// The state it starts in.
     pub state: NotificationState,
 
-    /// The card this one replaces, when a re-fire started a new episode.
+    /// The card this one replaces, when a re-fire came long after that card resolved.
+    ///
+    /// The replaced card gives up its dedupe key in the same transaction that inserts this one,
+    /// so the key goes on naming exactly one card: the current one.
     pub supersedes: Option<NotificationId>,
 
     /// When it was created.

@@ -92,14 +92,8 @@ pub struct AlertRecord {
     /// When it last resolved.
     pub resolved_at: Option<DateTime<Utc>>,
 
-    /// How many times it has re-fired after resolving, inside the current episode.
+    /// How many times it has re-fired after resolving inside the regroup window.
     pub flap_count: u32,
-
-    /// Which firing episode the alert is in.
-    ///
-    /// Incremented by a re-fire that arrives after a whole regroup window of quiet, and by
-    /// nothing else. The card for one episode is a different card from the card for the last.
-    pub episode: u32,
 
     /// When the row was last written.
     pub updated_at: DateTime<Utc>,

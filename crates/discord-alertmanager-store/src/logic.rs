@@ -24,11 +24,8 @@ pub struct Transition {
     /// What changed.
     pub kind: EventKind,
 
-    /// Consecutive firing periods this fingerprint has now seen inside the current episode.
+    /// Re-fires this fingerprint has now had inside the regroup window.
     pub flap_count: u32,
-
-    /// Which firing episode the alert is now in.
-    pub episode: u32,
 
     /// When the fingerprint was first seen, ever.
     pub first_seen_at: DateTime<Utc>,
@@ -44,9 +41,9 @@ pub struct Transition {
 /// successive annotation edits apart from one edit delivered twice — both carry the same
 /// fingerprint, kind and timings — so it makes a poor duplicate detector and a good backstop.
 ///
-/// `regroup` is how long a resolved alert may stay quiet and still count as the same episode when
-/// it fires again. A re-fire inside it reuses the card and counts a flap; one after it starts a
-/// new episode, and the episode is what gives the replacement card a key of its own.
+/// `regroup` is how long a resolved alert may stay quiet and still count its re-fire as a flap.
+/// Which card the re-fire lands on is not decided here: that belongs to the card, and the
+/// decision reads it off the card's own resolution time.
 #[must_use]
 pub fn classify(
     previous: Option<&AlertRecord>,
@@ -62,7 +59,6 @@ pub fn classify(
                 EventKind::Resolved
             },
             flap_count: 0,
-            episode: 0,
             first_seen_at: received_at,
             resolved_at: resolved_at(incoming, received_at),
         });
@@ -71,7 +67,6 @@ pub fn classify(
     let base = Transition {
         kind: EventKind::Updated,
         flap_count: previous.flap_count,
-        episode: previous.episode,
         first_seen_at: previous.first_seen_at,
         resolved_at: previous.resolved_at,
     };
@@ -84,13 +79,11 @@ pub fn classify(
                 ..base
             }
         } else if regrouped(previous, received_at, regroup) {
-            // Long enough after the last resolution that nobody is still watching that card. The
-            // episode moves, which moves the dedupe key, so this posts a new card carrying a link
-            // back to the old one rather than turning a week-old resolved card red again.
+            // Long enough after the last resolution that this is a new occurrence rather than the
+            // same one wavering, so the count starts again.
             Transition {
                 kind: EventKind::Fired,
                 flap_count: 0,
-                episode: previous.episode.saturating_add(1),
                 resolved_at: None,
                 ..base
             }
@@ -98,7 +91,7 @@ pub fn classify(
             Transition {
                 kind: EventKind::Fired,
                 // A fingerprint that resolved and fired again inside the window is the flap the
-                // window exists for: the card is reused and the count is what it shows.
+                // window exists for, and the count is what the card shows.
                 flap_count: previous.flap_count.saturating_add(1),
                 resolved_at: None,
                 ..base
@@ -127,12 +120,10 @@ pub fn classify(
     None
 }
 
-/// Whether a re-fire is far enough from the last resolution to belong to a new episode.
+/// Whether a re-fire is far enough from the last resolution to restart the flap count.
 ///
 /// An alert with no recorded resolution is one this bot never saw resolve — a row written before
-/// the reconciler caught up, or one whose resolution was lost — and it stays in its episode.
-/// Starting a new one on a resolution nobody observed would post a second card for an alert whose
-/// first card is still live.
+/// the reconciler caught up, or one whose resolution was lost — and it keeps counting.
 fn regrouped(previous: &AlertRecord, received_at: DateTime<Utc>, regroup: Duration) -> bool {
     previous
         .resolved_at
@@ -149,6 +140,21 @@ fn resolved_at(incoming: &Alert, received_at: DateTime<Utc>) -> Option<DateTime<
         None
     } else {
         Some(incoming.ends_at.unwrap_or(received_at))
+    }
+}
+
+/// Fills in what this delivery could not know from the row already stored for the alert.
+///
+/// Alertmanager's alert list carries no group key; only the webhook, which is invoked per group,
+/// knows it. Without this, every reconciler pass over an alert a webhook had already delivered
+/// would read as a change of group, erase the stored key, and move the alert on a per-group route
+/// from its group's card onto a card of its own: a duplicate posted by nothing more than a poll.
+/// Both backends call this before [`classify`], so the comparison never sees the gap.
+pub fn carry_over(previous: Option<&AlertRecord>, incoming: &mut Alert) {
+    if incoming.group_key.is_none()
+        && let Some(previous) = previous
+    {
+        incoming.group_key.clone_from(&previous.alert.group_key);
     }
 }
 
@@ -274,7 +280,7 @@ pub fn severities_at_or_above(floor: Severity) -> Vec<&'static str> {
 #[cfg(test)]
 mod tests {
     use chrono::TimeZone;
-    use dam_core::{AlertStatus, AmState, Annotations, LabelName};
+    use dam_core::{AlertStatus, AmState, Annotations, GroupKey, LabelName};
 
     use super::*;
 
@@ -318,7 +324,6 @@ mod tests {
             last_seen_at: at(0),
             resolved_at,
             flap_count,
-            episode: 0,
             updated_at: at(0),
         }
     }
@@ -351,7 +356,7 @@ mod tests {
     }
 
     #[test]
-    fn a_re_fire_after_the_window_starts_a_new_episode() {
+    fn a_re_fire_after_the_window_restarts_the_flap_count() {
         let mut previous = alert(AlertStatus::Resolved);
         previous.ends_at = Some(at(30));
         let stored = record(previous, 2);
@@ -365,17 +370,16 @@ mod tests {
         .expect("status changed");
 
         assert_eq!(transition.kind, EventKind::Fired);
-        assert_eq!(transition.episode, 1, "the card is a new one");
         assert_eq!(
             transition.flap_count, 0,
-            "the flap count belongs to the episode"
+            "a day of quiet is a new occurrence, not a flap on the last one"
         );
     }
 
     #[test]
-    fn a_re_fire_whose_resolution_was_never_seen_stays_in_its_episode() {
+    fn a_re_fire_whose_resolution_was_never_seen_keeps_counting() {
         // No `resolved_at`, which is what a row written before the reconciler caught up looks
-        // like. Starting an episode from it would post a second card while the first is live.
+        // like. There is no quiet period to measure, so the re-fire is a flap.
         let mut stored = record(alert(AlertStatus::Resolved), 0);
         stored.resolved_at = None;
 
@@ -387,8 +391,38 @@ mod tests {
         )
         .expect("status changed");
 
-        assert_eq!(transition.episode, 0);
         assert_eq!(transition.flap_count, 1);
+    }
+
+    #[test]
+    fn a_poll_keeps_the_group_key_a_webhook_delivered() {
+        let mut delivered = alert(AlertStatus::Firing);
+        delivered.group_key = Some(GroupKey::new("{}:{alertname=\"Down\"}"));
+        let stored = record(delivered, 0);
+
+        // What the reconciler reads from Alertmanager's alert list: the same alert, no group.
+        let mut polled = alert(AlertStatus::Firing);
+        carry_over(Some(&stored), &mut polled);
+
+        assert_eq!(polled.group_key, stored.alert.group_key);
+        assert_eq!(
+            classify(Some(&stored), &polled, at(60), REGROUP),
+            None,
+            "a poll that learns nothing new is a redelivery, not a change of group"
+        );
+    }
+
+    #[test]
+    fn a_delivered_group_key_replaces_the_stored_one() {
+        let mut delivered = alert(AlertStatus::Firing);
+        delivered.group_key = Some(GroupKey::new("old"));
+        let stored = record(delivered, 0);
+
+        let mut incoming = alert(AlertStatus::Firing);
+        incoming.group_key = Some(GroupKey::new("new"));
+        carry_over(Some(&stored), &mut incoming);
+
+        assert_eq!(incoming.group_key, Some(GroupKey::new("new")));
     }
 
     #[test]

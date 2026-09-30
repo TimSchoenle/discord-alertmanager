@@ -53,8 +53,8 @@ pub use ids::{
     Snowflake, SubscriptionId, TagId, UserId, WorkerId,
 };
 pub use logic::{
-    IN_MEMORY_SCAN_LIMIT, Transition, classify, matches_regex_matchers, needs_in_memory_filter,
-    severities_at_or_above, suppression_map,
+    IN_MEMORY_SCAN_LIMIT, Transition, carry_over, classify, matches_regex_matchers,
+    needs_in_memory_filter, severities_at_or_above, suppression_map,
 };
 pub use notifications::{
     AckCommand, AckKind, AckOutcome, Acknowledgement, NewNotification, Notification, ThreadReply,
@@ -126,11 +126,30 @@ pub trait Store: Send + Sync + 'static {
         cutoff: DateTime<Utc>,
     ) -> Result<Vec<AlertRecord>, StoreError>;
 
+    /// The alerts currently firing under one `alertname`, or with none when `alertname` is `None`.
+    ///
+    /// The candidates for sharing a card with an alert that is resolving. The caller narrows them
+    /// by identity, which depends on configuration this trait does not hold; the name is only the
+    /// part of the question SQL can answer cheaply, since every alert sharing an identity shares
+    /// its `alertname`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Store::ingest_batch`].
+    async fn firing_alerts_named(
+        &self,
+        alertname: Option<&str>,
+    ) -> Result<Vec<AlertRecord>, StoreError>;
+
     /// Records the decision to notify, and enqueues the effects, in one transaction.
     ///
     /// Creating the notification row and enqueuing its post have to be atomic. Enqueuing first
     /// risks an effect referring to a row that does not exist; writing the row first risks a card
     /// nobody ever posts.
+    ///
+    /// A new card that supersedes another takes that card's dedupe key in the same transaction,
+    /// and the old card keeps its row under a retired key. A card moving to resolved records
+    /// when; one moving anywhere else forgets it.
     ///
     /// # Errors
     ///

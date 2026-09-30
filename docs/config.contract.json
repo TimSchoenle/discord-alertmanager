@@ -1,5 +1,10 @@
 {
   "terrace_contract": 1,
+  "producer": {
+    "name": "terrace-config",
+    "version": "0.14.0",
+    "loader": "figment"
+  },
   "app": {
     "name": "discord-alertmanager",
     "source": "https://github.com/TimSchoenle/discord-alertmanager"
@@ -1148,7 +1153,7 @@
         "env": "DAM_ENGINE__REGROUP_WINDOW_SECS",
         "env_file": "DAM_ENGINE__REGROUP_WINDOW_SECS_FILE",
         "secrets_file": "engine__regroup_window_secs",
-        "docs": "Seconds within which a re-fire reuses the existing card and thread.\n\nInside the window the card is reused and its flap count goes up. Outside it, a new card is\nposted carrying a link to the previous one.",
+        "docs": "Seconds a resolved card stays re-armable.\n\nAn alert that fires again inside the window, measured from when its card resolved, turns\nthat card back to firing, reopens its thread and counts a flap. Past the window a new card\nis posted carrying a link to the previous one, which keeps its history.",
         "ty": "u64",
         "values": [],
         "constraint": {
@@ -1166,6 +1171,36 @@
         "secrets_file_aliases": [],
         "default": "1800",
         "default_value": 1800,
+        "note": null,
+        "required": false,
+        "secret": false,
+        "reserved": false
+      },
+      {
+        "path": "engine.dedupe_ignore_labels",
+        "env": "DAM_ENGINE__DEDUPE_IGNORE_LABELS",
+        "env_file": "DAM_ENGINE__DEDUPE_IGNORE_LABELS_FILE",
+        "secrets_file": "engine__dedupe_ignore_labels",
+        "docs": "Labels that do not decide which card an alert is shown on.\n\nAlertmanager's fingerprint covers every label, so a label whose value churns gives one\ncondition a new fingerprint, and a new card, each time it changes. Naming such a label here\nputs every alert that differs only in it onto one card: the card follows whichever of them\nis firing and resolves when the last one does. `pod` and `instance` are the usual\ncandidates on Kubernetes, where a rollout replaces both. Per-alert routes only; a group\nroute is already keyed by Alertmanager's group.",
+        "ty": "Vec<String>",
+        "values": [],
+        "constraint": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "text_constraint": {
+          "pattern": "^\\s*[\\[\\{][\\s\\S]*[\\]\\}]\\s*$",
+          "type": "string"
+        },
+        "text_form": "structured",
+        "aliases": [],
+        "env_aliases": [],
+        "env_file_aliases": [],
+        "secrets_file_aliases": [],
+        "default": "[]",
+        "default_value": [],
         "note": null,
         "required": false,
         "secret": false,
@@ -2615,6 +2650,14 @@
             "minimum": 0,
             "type": "integer"
           },
+          "dedupe_ignore_labels": {
+            "default": [],
+            "description": "Labels that do not decide which card an alert is shown on.\n\nAlertmanager's fingerprint covers every label, so a label whose value churns gives one\ncondition a new fingerprint, and a new card, each time it changes. Naming such a label here\nputs every alert that differs only in it onto one card: the card follows whichever of them\nis firing and resolves when the last one does. `pod` and `instance` are the usual\ncandidates on Kubernetes, where a rollout replaces both. Per-alert routes only; a group\nroute is already keyed by Alertmanager's group.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "dispatchers": {
             "default": 4,
             "description": "Outbox dispatcher workers.\n\nWork is hashed into one lane per worker by its dedupe key, so every effect for one alert\nlands on one worker. Raising this widens the fan-out across alerts and never splits an\nalert across two workers.",
@@ -2660,7 +2703,7 @@
           },
           "regroup_window_secs": {
             "default": 1800,
-            "description": "Seconds within which a re-fire reuses the existing card and thread.\n\nInside the window the card is reused and its flap count goes up. Outside it, a new card is\nposted carrying a link to the previous one.",
+            "description": "Seconds a resolved card stays re-armable.\n\nAn alert that fires again inside the window, measured from when its card resolved, turns\nthat card back to firing, reopens its thread and counts a flap. Past the window a new card\nis posted carrying a link to the previous one, which keeps its history.",
             "minimum": 0,
             "type": "integer"
           },

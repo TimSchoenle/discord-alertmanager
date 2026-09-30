@@ -16,10 +16,11 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use dam_core::{AlertDelta, AlertStatus, DedupeKey, EventSource, Fingerprint, NotificationState};
+use dam_core::{Alert, AlertDelta, AlertStatus, EventSource, Fingerprint, NotificationState};
 use dam_engine::{
-    AlertFilter, AlertmanagerApi, AmError, DecisionSettings, ExistingCards, SharedRouting,
-    SharedStorm, StormCounter, decide, dedupe_keys, delivery_channel, suppressed_fingerprints,
+    AlertContext, AlertFilter, AlertmanagerApi, AmError, DecisionSettings, ExistingCards,
+    SharedRouting, SharedStorm, StormCounter, decide, dedupe_keys, delivery_channel,
+    identity_siblings, suppressed_fingerprints,
 };
 use dam_ingest::{IngestAccepted, IngestRequest, Readiness, ServiceError, WebhookService};
 use dam_store::{IngestBatch, RetentionPolicy, SilenceState, Store, StoreError, WorkerId};
@@ -137,18 +138,10 @@ impl PipelineService {
                 let channel = delivery_channel(&route.target);
 
                 // The decision's own key function, for the same reason. A group route, a route in
-                // digest mode and an alert in its second firing episode are each keyed
-                // differently, and computing a key a second way here would look up a card that
-                // does not exist and then create one the unique index refuses.
-                let mut keys = dedupe_keys(delta, route, &storm, &self.settings, now);
-
-                // The episode before this one, so a card that replaces it can link back. Read
-                // here rather than inside the decision, which does no I/O by design.
-                if let Some(previous) = delta.episode.checked_sub(1) {
-                    keys.push(DedupeKey::per_alert(&delta.alert.fingerprint, previous));
-                }
-
-                for key in keys {
+                // digest mode and an alert whose identity merges several fingerprints are each
+                // keyed differently, and computing a key a second way here would look up a card
+                // that does not exist and then post a duplicate beside the one that does.
+                for key in dedupe_keys(delta, route, &storm, &self.settings, now) {
                     if let Some(card) = self.store.notification_for(&key, channel).await? {
                         existing.insert((channel, key), card);
                     }
@@ -167,12 +160,17 @@ impl PipelineService {
                     .values()
                     .any(|card| card.state == NotificationState::Acked);
 
+            let siblings = self.firing_siblings(delta).await?;
+
             let decision = decide(
                 delta,
                 &snapshot,
                 &storm,
                 &existing,
-                acknowledged,
+                &AlertContext {
+                    acknowledged,
+                    firing_siblings: &siblings,
+                },
                 &self.settings,
                 now,
             );
@@ -193,6 +191,32 @@ impl PipelineService {
         }
 
         Ok(())
+    }
+
+    /// The other alerts sharing this one's card that are still firing, when that can matter.
+    ///
+    /// Only a resolution asks, because only a resolution can be overruled by one: the card stays
+    /// open while any alert behind it fires. An exact identity policy merges nothing, so the read
+    /// is skipped outright on a deployment that has not configured one.
+    ///
+    /// # Errors
+    ///
+    /// Returns the store's error.
+    async fn firing_siblings(&self, delta: &AlertDelta) -> Result<Vec<Alert>, StoreError> {
+        if delta.alert.is_firing() || self.settings.identity.is_exact() {
+            return Ok(Vec::new());
+        }
+
+        let candidates = self
+            .store
+            .firing_alerts_named(delta.alert.labels.alertname())
+            .await?;
+
+        Ok(identity_siblings(
+            &self.settings.identity,
+            &delta.alert,
+            candidates.into_iter().map(|record| record.alert),
+        ))
     }
 
     /// Folds a batch into the storm counter and publishes what it now says.

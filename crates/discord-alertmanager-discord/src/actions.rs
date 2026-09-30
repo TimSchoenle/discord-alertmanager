@@ -192,12 +192,13 @@ pub(crate) struct NewIgnore<'a> {
 
 /// The lane a silence created from an alert belongs to.
 ///
-/// The stored record rather than the alert, because the key carries the firing episode and only
-/// the record knows which one the alert is in. A silence and the card edits it causes then run on
-/// one worker instead of two racing over the same card.
+/// The alert's own per-alert key, so a silence and the card edits it causes run on one worker
+/// rather than two racing over the same card. A card whose identity policy merges fingerprints is
+/// keyed by the identity instead, and its edits may land on another lane; the silence itself
+/// changes Alertmanager rather than the card, so the race that costs is not one this can cause.
 pub(crate) fn silence_key(alert: Option<&AlertRecord>) -> DedupeKey {
     match alert {
-        Some(record) => DedupeKey::per_alert(&record.alert.fingerprint, record.episode),
+        Some(record) => DedupeKey::per_alert(&record.alert.fingerprint),
         // A silence written from an expression covers no single alert, so it gets a lane of its
         // own rather than borrowing one an alert is already serialised on.
         None => DedupeKey::from_stored("silence"),

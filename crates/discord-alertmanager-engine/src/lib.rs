@@ -35,8 +35,8 @@ pub mod routing;
 pub mod storm;
 
 pub use decide::{
-    DecisionSettings, ExistingCards, decide, dedupe_key, dedupe_keys, delivery_channel,
-    desired_tags,
+    AlertContext, DecisionSettings, ExistingCards, decide, dedupe_key, dedupe_keys,
+    delivery_channel, desired_tags, identity_siblings,
 };
 pub use ports::{
     AlertFilter, AlertmanagerApi, AmError, AmStatus, CardData, CardTarget, DigestNotice,

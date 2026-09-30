@@ -217,6 +217,11 @@ impl Fingerprint {
         }
     }
 
+    /// A fingerprint computed here rather than received, in Alertmanager's sixteen-digit form.
+    pub(crate) fn from_hash(hash: u64) -> Self {
+        Self(format!("{hash:016x}"))
+    }
+
     /// The fingerprint as a string slice.
     #[must_use]
     pub fn as_str(&self) -> &str {

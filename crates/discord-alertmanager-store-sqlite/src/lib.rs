@@ -172,4 +172,114 @@ mod tests {
     async fn the_conformance_suite_passes() {
         conformance::run(&store().await).await;
     }
+
+    #[tokio::test]
+    async fn legacy_episode_keys_migrate_to_one_key_per_alert() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("in-memory SQLite connects");
+
+        migrate_around(&pool, 5, LEGACY).await;
+        assert_legacy_keys_migrated(&pool).await;
+    }
+
+    /// Cards written under the per-episode keys that migration 0005 retires.
+    ///
+    /// Channel 1 holds three episodes of `ff`, the last still firing, and one card for `ee` that
+    /// never re-fired. Channel 2 holds its own `ff`. The orphaned row and the group key carry a
+    /// `#` or an `a:` of their own and must come through untouched.
+    const LEGACY: &str = "\
+        INSERT INTO alerts (fingerprint, labels_hash, labels, annotations, starts_at, status, \
+            am_state, severity, first_seen_at, last_seen_at, updated_at, episode) VALUES \
+            ('ff', '0', '{\"alertname\":\"Legacy\"}', '{}', '2026-01-01T00:00:00.000000Z', \
+             'firing', 'active', 'warning', '2026-01-01T00:00:00.000000Z', \
+             '2026-01-01T00:00:00.000000Z', '2026-01-01T00:00:00.000000Z', 2); \
+        INSERT INTO notifications (id, dedupe_key, fingerprint, route_id, guild_id, channel_id, \
+            state, created_at, updated_at) VALUES \
+            (1, 'a:ff', 'ff', 1, 1, 1, 'resolved', '2026-01-01T00:00:00.000000Z', \
+             '2026-01-01T01:00:00.000000Z'), \
+            (2, 'a:ff#1', 'ff', 1, 1, 1, 'resolved', '2026-01-02T00:00:00.000000Z', \
+             '2026-01-02T01:00:00.000000Z'), \
+            (3, 'a:ff#2', 'ff', 1, 1, 1, 'firing', '2026-01-03T00:00:00.000000Z', \
+             '2026-01-03T00:00:00.000000Z'), \
+            (4, 'a:ee', 'ee', 1, 1, 1, 'firing', '2026-01-03T00:00:00.000000Z', \
+             '2026-01-03T00:00:00.000000Z'), \
+            (5, 'a:ff', 'ff', 1, 1, 2, 'firing', '2026-01-03T00:00:00.000000Z', \
+             '2026-01-03T00:00:00.000000Z'), \
+            (6, 'orphaned:6:a:ff#1', 'ff', 1, 1, 1, 'orphaned', '2026-01-02T00:00:00.000000Z', \
+             '2026-01-02T00:00:00.000000Z'), \
+            (7, 'g:{}:{alertname=\"x#1\"}', 'ff', 1, 1, 1, 'firing', \
+             '2026-01-03T00:00:00.000000Z', '2026-01-03T00:00:00.000000Z');";
+
+    /// What every legacy card is keyed by once 0005 has run, by id.
+    const MIGRATED: [(i64, &str); 7] = [
+        (1, "superseded:1:a:ff"),
+        (2, "superseded:2:a:ff#1"),
+        (3, "a:ff"),
+        (4, "a:ee"),
+        (5, "a:ff"),
+        (6, "orphaned:6:a:ff#1"),
+        (7, "g:{}:{alertname=\"x#1\"}"),
+    ];
+
+    /// Applies every migration before `version`, then the fixture, then the rest.
+    async fn migrate_around(pool: &Pool<Sqlite>, version: i64, fixture: &'static str) {
+        for migration in MIGRATOR
+            .iter()
+            .filter(|migration| migration.version < version)
+        {
+            sqlx::raw_sql(migration.sql.clone())
+                .execute(pool)
+                .await
+                .expect("an earlier migration applies");
+        }
+
+        sqlx::raw_sql(fixture)
+            .execute(pool)
+            .await
+            .expect("the fixture is written");
+
+        for migration in MIGRATOR
+            .iter()
+            .filter(|migration| migration.version >= version)
+        {
+            sqlx::raw_sql(migration.sql.clone())
+                .execute(pool)
+                .await
+                .expect("the migration under test applies");
+        }
+    }
+
+    /// Asserts what 0005 made of the legacy cards.
+    async fn assert_legacy_keys_migrated(pool: &Pool<Sqlite>) {
+        let keys: Vec<(i64, String)> =
+            sqlx::query_as("SELECT id, dedupe_key FROM notifications ORDER BY id")
+                .fetch_all(pool)
+                .await
+                .expect("the keys read back");
+        let expected: Vec<(i64, String)> = MIGRATED
+            .iter()
+            .map(|(id, key)| (*id, (*key).to_owned()))
+            .collect();
+
+        assert_eq!(
+            keys, expected,
+            "the newest card per alert and channel holds the bare key; the older ones retire"
+        );
+
+        let resolved: Vec<i64> = sqlx::query_scalar(
+            "SELECT id FROM notifications WHERE resolved_at IS NOT NULL ORDER BY id",
+        )
+        .fetch_all(pool)
+        .await
+        .expect("the resolution times read back");
+
+        assert_eq!(
+            resolved,
+            vec![1, 2],
+            "a card resolved before the migration takes its last write as its resolution time"
+        );
+    }
 }

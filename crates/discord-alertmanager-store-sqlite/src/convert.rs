@@ -190,7 +190,6 @@ pub(crate) fn alert_record(row: &SqliteRow) -> Result<dam_store::AlertRecord, St
         last_seen_at: time_at(row, "last_seen_at")?,
         resolved_at: time_opt_at(row, "resolved_at")?,
         flap_count: count_at(row, "flap_count")?,
-        episode: count_at(row, "episode")?,
         updated_at: time_at(row, "updated_at")?,
     })
 }
@@ -226,6 +225,7 @@ pub(crate) fn notification(row: &SqliteRow) -> Result<Notification, StoreError> 
         responded_at: time_opt_at(row, "responded_at")?,
         escalated_at: time_opt_at(row, "escalated_at")?,
         supersedes: id_opt_at(row, "supersedes", NotificationId::new)?,
+        resolved_at: time_opt_at(row, "resolved_at")?,
         reply_count: count_at(row, "reply_count")?,
         created_at: time_at(row, "created_at")?,
         updated_at: time_at(row, "updated_at")?,

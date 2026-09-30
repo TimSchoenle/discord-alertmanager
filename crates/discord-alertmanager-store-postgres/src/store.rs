@@ -21,8 +21,8 @@ use dam_store::{
     IngestBatch, IngestOutcome, NewNotification, NewOutboxItem, Notification, NotificationId,
     OUTBOX_LANES, OutboxId, OutboxItem, Page, PruneReport, RetentionPolicy, Route, RouteId,
     RouteSource, SilenceLifecycle, SilenceLink, SilenceState, Store, StoreError, Subscription,
-    SubscriptionId, ThreadReply, Transition, UserId, WorkerId, classify, matches_regex_matchers,
-    needs_in_memory_filter, severities_at_or_above, suppression_map,
+    SubscriptionId, ThreadReply, Transition, UserId, WorkerId, carry_over, classify,
+    matches_regex_matchers, needs_in_memory_filter, severities_at_or_above, suppression_map,
 };
 use sqlx::{PgConnection, Postgres, QueryBuilder, Row, Transaction};
 
@@ -36,12 +36,12 @@ use crate::convert::{
 /// Every column of `alerts`, in the order the mapper expects to find them by name.
 const ALERT_COLUMNS: &str = "fingerprint, labels_hash, group_key, labels, annotations, starts_at, \
      ends_at, generator_url, status, am_state, severity, silenced_by, inhibited_by, \
-     first_seen_at, last_seen_at, resolved_at, flap_count, episode, updated_at";
+     first_seen_at, last_seen_at, resolved_at, flap_count, updated_at";
 
 /// Every column of `notifications`.
 const NOTIFICATION_COLUMNS: &str = "id, dedupe_key, fingerprint, route_id, guild_id, channel_id, message_id, \
      thread_id, state, render_hash, applied_tags, tags_hash, pinned, archived, responded_at, \
-     escalated_at, supersedes, reply_count, created_at, updated_at";
+     escalated_at, supersedes, resolved_at, reply_count, created_at, updated_at";
 
 /// Every column of `outbox`.
 const OUTBOX_COLUMNS: &str = "id, lane, kind, dedupe_key, payload, not_before, attempts, claimed_by, claimed_at, \
@@ -87,6 +87,8 @@ impl Store for PostgresStore {
             }
 
             let previous = read_alert(&mut tx, &alert.fingerprint).await?;
+            carry_over(previous.as_ref(), &mut alert);
+
             let Some(transition) = classify(
                 previous.as_ref(),
                 &alert,
@@ -117,7 +119,6 @@ impl Store for PostgresStore {
                 source: batch.source,
                 alert,
                 flap_count: transition.flap_count,
-                episode: transition.episode,
                 observed_at: batch.received_at,
             });
         }
@@ -194,6 +195,40 @@ impl Store for PostgresStore {
         })
     }
 
+    async fn firing_alerts_named(
+        &self,
+        alertname: Option<&str>,
+    ) -> Result<Vec<AlertRecord>, StoreError> {
+        // Spelled exactly as the partial index `alerts_firing_by_name` spells it, which is what
+        // lets the planner answer this from the index rather than from the firing set.
+        let sql = const_format(&[
+            "SELECT ",
+            ALERT_COLUMNS,
+            " FROM alerts WHERE status = 'firing' AND labels ->> 'alertname'",
+        ]);
+
+        let mut builder = QueryBuilder::<Postgres>::new(sql);
+        match alertname {
+            Some(name) => {
+                builder.push(" = ");
+                builder.push_bind(name.to_owned());
+            }
+            None => {
+                builder.push(" IS NULL");
+            }
+        }
+
+        builder
+            .push(" ORDER BY fingerprint")
+            .build()
+            .fetch_all(&self.pool)
+            .await
+            .map_err(backend)?
+            .iter()
+            .map(alert_record)
+            .collect()
+    }
+
     async fn firing_not_in(
         &self,
         present: &[Fingerprint],
@@ -234,6 +269,10 @@ impl Store for PostgresStore {
         let mut created = Vec::with_capacity(decision.new_cards.len());
 
         for planned in &decision.new_cards {
+            if let Some(replaced) = planned.card.supersedes {
+                retire_key(&mut tx, replaced, &planned.card.dedupe_key).await?;
+            }
+
             let id = insert_notification(&mut tx, &planned.card).await?;
 
             enqueue(
@@ -926,7 +965,6 @@ impl Store for PostgresStore {
                 kind,
                 source: EventSource::Reconciler,
                 flap_count: record.flap_count,
-                episode: record.episode,
                 alert: record.alert,
                 observed_at: now,
             });
@@ -1455,9 +1493,8 @@ async fn upsert_alert(
     sqlx::query(
         "INSERT INTO alerts (fingerprint, labels_hash, group_key, labels, annotations, starts_at, \
          ends_at, generator_url, status, am_state, severity, silenced_by, inhibited_by, \
-         first_seen_at, last_seen_at, resolved_at, flap_count, episode, updated_at) \
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, \
-         $19) \
+         first_seen_at, last_seen_at, resolved_at, flap_count, updated_at) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) \
          ON CONFLICT (fingerprint) DO UPDATE SET \
          labels_hash = excluded.labels_hash, group_key = excluded.group_key, \
          labels = excluded.labels, annotations = excluded.annotations, \
@@ -1466,7 +1503,7 @@ async fn upsert_alert(
          am_state = excluded.am_state, severity = excluded.severity, \
          silenced_by = excluded.silenced_by, inhibited_by = excluded.inhibited_by, \
          last_seen_at = excluded.last_seen_at, resolved_at = excluded.resolved_at, \
-         flap_count = excluded.flap_count, episode = excluded.episode, \
+         flap_count = excluded.flap_count, \
          updated_at = excluded.updated_at",
     )
     .bind(alert.fingerprint.as_str().to_owned())
@@ -1486,7 +1523,6 @@ async fn upsert_alert(
     .bind(at)
     .bind(transition.resolved_at)
     .bind(i32::try_from(transition.flap_count).unwrap_or(i32::MAX))
-    .bind(i32::try_from(transition.episode).unwrap_or(i32::MAX))
     .bind(at)
     .execute(conn)
     .await
@@ -1744,6 +1780,29 @@ async fn set_card_alert(
     Ok(())
 }
 
+/// Moves a replaced card off the key its replacement is about to take.
+///
+/// Conditional on the card still holding that key. A card that has already given it up, to an
+/// orphaning or to another replacement racing this one, is left alone; the insert that follows
+/// then meets the unique index and reports the conflict the caller already handles by re-reading.
+async fn retire_key(
+    conn: &mut PgConnection,
+    id: NotificationId,
+    key: &DedupeKey,
+) -> Result<(), StoreError> {
+    sqlx::query(
+        "UPDATE notifications SET dedupe_key = 'superseded:' || id || ':' || dedupe_key \
+         WHERE id = $1 AND dedupe_key = $2",
+    )
+    .bind(id.get())
+    .bind(key.as_str().to_owned())
+    .execute(conn)
+    .await
+    .map_err(backend)?;
+
+    Ok(())
+}
+
 /// Moves a card to a new state.
 async fn move_state(
     conn: &mut PgConnection,
@@ -1751,15 +1810,19 @@ async fn move_state(
     state: NotificationState,
     now: DateTime<Utc>,
 ) -> Result<(), StoreError> {
-    let affected =
-        sqlx::query("UPDATE notifications SET state = $1, updated_at = $2 WHERE id = $3")
-            .bind(state.as_str())
-            .bind(now)
-            .bind(id.get())
-            .execute(conn)
-            .await
-            .map_err(backend)?
-            .rows_affected();
+    // The resolution time is kept while the card stays resolved and forgotten the moment it
+    // leaves, so it always answers "resolved since when" for the card as it stands.
+    let affected = sqlx::query(
+        "UPDATE notifications SET state = $1, updated_at = $2, resolved_at = CASE \
+         WHEN $1 = 'resolved' THEN COALESCE(resolved_at, $2) ELSE NULL END WHERE id = $3",
+    )
+    .bind(state.as_str())
+    .bind(now)
+    .bind(id.get())
+    .execute(conn)
+    .await
+    .map_err(backend)?
+    .rows_affected();
 
     if affected == 0 {
         return Err(StoreError::no_such_notification(id));
@@ -1768,27 +1831,26 @@ async fn move_state(
     Ok(())
 }
 
-/// Reads every card carrying one dedupe key, across every channel it was posted to.
+/// Reads every card showing one alert, across every channel it was posted to.
 async fn read_cards_for(
     conn: &mut PgConnection,
     fingerprint: &Fingerprint,
 ) -> Result<Vec<Notification>, StoreError> {
-    // Every episode, not just the current one. Acknowledging answers the alert wherever it is
-    // shown, and after a re-fire that is spread across two keys: the card for the episode that
-    // just started, and the card for the one before it that is still on somebody's screen.
-    let (current, prefix) = DedupeKey::per_alert_episodes(fingerprint);
-
+    // By the alert a card shows as well as by its key. A card whose identity merges several
+    // fingerprints is keyed by none of them, and a card that was replaced keeps showing the alert
+    // under a retired key while it is still on somebody's screen; acknowledging answers both. An
+    // orphaned row names a message that is gone, so there is nothing of it to re-render.
     let sql = const_format(&[
         "SELECT ",
         NOTIFICATION_COLUMNS,
-        " FROM notifications WHERE dedupe_key = ",
+        " FROM notifications WHERE state <> 'orphaned' AND (fingerprint = ",
     ]);
 
     QueryBuilder::<Postgres>::new(sql)
-        .push_bind(current.as_str().to_owned())
-        .push(" OR dedupe_key LIKE ")
-        .push_bind(format!("{prefix}%"))
-        .push(" ORDER BY id")
+        .push_bind(fingerprint.as_str().to_owned())
+        .push(" OR dedupe_key = ")
+        .push_bind(DedupeKey::per_alert(fingerprint).as_str().to_owned())
+        .push(") ORDER BY id")
         .build()
         .fetch_all(conn)
         .await

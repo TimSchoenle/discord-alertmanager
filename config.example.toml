@@ -352,14 +352,29 @@
 #   engine__deadman_window_secs in the secrets directory
 # deadman_window_secs = 1800
 
-# Seconds within which a re-fire reuses the existing card and thread.
+# Seconds a resolved card stays re-armable.
 #
-# Inside the window the card is reused and its flap count goes up. Outside it, a new card is
-# posted carrying a link to the previous one.
+# An alert that fires again inside the window, measured from when its card resolved, turns
+# that card back to firing, reopens its thread and counts a flap. Past the window a new card
+# is posted carrying a link to the previous one, which keeps its history.
 # Type: u64
 # Also from: DAM_ENGINE__REGROUP_WINDOW_SECS, DAM_ENGINE__REGROUP_WINDOW_SECS_FILE=/path/to/file,
 #   engine__regroup_window_secs in the secrets directory
 # regroup_window_secs = 1800
+
+# Labels that do not decide which card an alert is shown on.
+#
+# Alertmanager's fingerprint covers every label, so a label whose value churns gives one
+# condition a new fingerprint, and a new card, each time it changes. Naming such a label here
+# puts every alert that differs only in it onto one card: the card follows whichever of them
+# is firing and resolves when the last one does. `pod` and `instance` are the usual
+# candidates on Kubernetes, where a rollout replaces both. Per-alert routes only; a group
+# route is already keyed by Alertmanager's group.
+# Type: Vec<String>
+# Also from: DAM_ENGINE__DEDUPE_IGNORE_LABELS,
+#   DAM_ENGINE__DEDUPE_IGNORE_LABELS_FILE=/path/to/file, engine__dedupe_ignore_labels in the
+#   secrets directory
+# dedupe_ignore_labels = []
 
 # Record a row in `alert_events` for every state transition.
 #

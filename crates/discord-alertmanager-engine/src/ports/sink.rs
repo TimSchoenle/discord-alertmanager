@@ -65,7 +65,8 @@ pub struct CardData {
     /// left believing the bot has started summarising for no reason.
     pub digest: Option<DigestNotice>,
 
-    /// The card this one replaced, when a re-fire started a new episode.
+    /// The card this one replaced, when the alert came back after that card had been resolved
+    /// for longer than the regroup window.
     ///
     /// The link is the whole point: without it, an alert that comes back a week later produces a
     /// card with no history and the one carrying that history is buried.
@@ -96,7 +97,7 @@ pub struct DigestNotice {
     pub window_secs: i64,
 }
 
-/// Where the card a new episode replaced can be found.
+/// Where the card a replacement superseded can be found.
 ///
 /// Carries the guild as well as the channel, because a Discord message link needs all three parts
 /// and a card knows the guild it lives in while a message reference does not.
