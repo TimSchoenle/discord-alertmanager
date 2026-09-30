@@ -490,49 +490,15 @@ pub struct AlertDelta {
     /// The alert as it now stands, not as it was.
     pub alert: Alert,
 
-    /// Consecutive firing periods seen for this fingerprint inside the current episode.
+    /// Re-fires this fingerprint has had inside the regroup window, counted from zero.
     ///
-    /// Zero on a first firing. A resolved alert that re-fires inside the regroup window
-    /// increments it and reuses its card rather than posting a second one.
+    /// Zero on a first firing, and zero again on a re-fire that arrives after a whole regroup
+    /// window of quiet. A card shows it, so an alert that keeps coming back says so.
     pub flap_count: u32,
-
-    /// Which firing episode this change belongs to.
-    ///
-    /// Zero until the alert first re-fires after a whole regroup window of quiet, and one more
-    /// on every such re-fire after that. The number is in the per-alert dedupe key, so a new
-    /// episode posts a new card instead of reviving one nobody has looked at since it resolved.
-    pub episode: u32,
 
     /// When this change was accepted.
     pub observed_at: DateTime<Utc>,
 }
-
-impl AlertDelta {
-    /// The dedupe key this delta belongs under for a per-alert route.
-    #[must_use]
-    pub fn per_alert_key(&self) -> DedupeKey {
-        DedupeKey::per_alert(&self.alert.fingerprint, self.episode)
-    }
-
-    /// The dedupe key this delta belongs under for a per-group route.
-    ///
-    /// Falls back to the per-alert key when Alertmanager supplied no group key, which is the case
-    /// for an alert the reconciler discovered rather than one a webhook delivered. Grouping is a
-    /// property of Alertmanager's routing tree, and the API's alert list does not carry it.
-    #[must_use]
-    pub fn per_group_key(&self) -> DedupeKey {
-        self.alert
-            .group_key
-            .as_ref()
-            .map_or_else(|| self.per_alert_key(), DedupeKey::per_group)
-    }
-}
-
-/// What separates a fingerprint from its episode number in a per-alert dedupe key.
-///
-/// Deliberately not a hex digit, so no fingerprint can produce a key that another fingerprint's
-/// episode prefix also matches.
-const EPISODE_SEPARATOR: char = '#';
 
 /// What a card is keyed by within a channel.
 ///
@@ -543,32 +509,18 @@ const EPISODE_SEPARATOR: char = '#';
 pub struct DedupeKey(String);
 
 impl DedupeKey {
-    /// The key for a route that posts one card per alert, in one firing episode.
+    /// The key for a route that posts one card per alert.
     ///
-    /// The episode is elided at zero, which covers every alert that has never outlived a regroup
-    /// window â€” nearly all of them â€” so the ordinary key stays the short one it has always been.
-    #[must_use]
-    pub fn per_alert(fingerprint: &Fingerprint, episode: u32) -> Self {
-        if episode == 0 {
-            Self(format!("a:{fingerprint}"))
-        } else {
-            Self(format!("a:{fingerprint}{EPISODE_SEPARATOR}{episode}"))
-        }
-    }
-
-    /// Every per-alert key one fingerprint can have: the first episode's key, and the prefix the
-    /// rest share.
+    /// Takes the alert's identity rather than its fingerprint. The two are equal unless an
+    /// [`IdentityPolicy`](crate::IdentityPolicy) leaves labels out, and when they differ the
+    /// identity has to decide the card, or every churned label value posts another one.
     ///
-    /// Acknowledging an alert answers it on every card showing it, and after a re-fire those
-    /// cards are spread across episodes. A caller matches the exact key or anything starting with
-    /// the prefix; the separator is not a hex digit, so the prefix cannot reach a longer
-    /// fingerprint that happens to begin with this one.
+    /// The key names the card an alert is shown on now, not every card it was ever shown on. A
+    /// card that is replaced gives its key up to the replacement, which is what lets a re-fire
+    /// find the one card to re-arm with a single lookup.
     #[must_use]
-    pub fn per_alert_episodes(fingerprint: &Fingerprint) -> (Self, String) {
-        (
-            Self::per_alert(fingerprint, 0),
-            format!("a:{fingerprint}{EPISODE_SEPARATOR}"),
-        )
+    pub fn per_alert(identity: &Fingerprint) -> Self {
+        Self(format!("a:{identity}"))
     }
 
     /// The key for a route that posts one card per Alertmanager group.
@@ -701,42 +653,8 @@ mod tests {
         let group = GroupKey::new("abcdef");
 
         assert_ne!(
-            DedupeKey::per_alert(&fingerprint, 0),
+            DedupeKey::per_alert(&fingerprint),
             DedupeKey::per_group(&group)
-        );
-    }
-
-    #[test]
-    fn a_later_episode_is_a_different_card() {
-        let fingerprint = Fingerprint::new("abcdef").expect("hex is a fingerprint");
-
-        assert_ne!(
-            DedupeKey::per_alert(&fingerprint, 0),
-            DedupeKey::per_alert(&fingerprint, 1)
-        );
-    }
-
-    #[test]
-    fn an_episode_prefix_cannot_reach_a_longer_fingerprint() {
-        let short = Fingerprint::new("abcdef").expect("hex is a fingerprint");
-        let longer = Fingerprint::new("abcdef01").expect("hex is a fingerprint");
-
-        let (_, prefix) = DedupeKey::per_alert_episodes(&short);
-
-        assert!(
-            !DedupeKey::per_alert(&longer, 0)
-                .as_str()
-                .starts_with(&prefix)
-        );
-        assert!(
-            !DedupeKey::per_alert(&longer, 3)
-                .as_str()
-                .starts_with(&prefix)
-        );
-        assert!(
-            DedupeKey::per_alert(&short, 3)
-                .as_str()
-                .starts_with(&prefix)
         );
     }
 
@@ -744,7 +662,6 @@ mod tests {
     fn a_key_always_lands_in_the_same_lane() {
         let key = DedupeKey::per_alert(
             &Fingerprint::new("0123456789abcdef").expect("hex is a fingerprint"),
-            0,
         );
 
         assert_eq!(key.lane(4), key.lane(4));

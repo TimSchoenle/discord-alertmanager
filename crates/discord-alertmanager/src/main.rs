@@ -29,6 +29,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use chrono::Utc;
 use dam_config::{Backend, Config};
+use dam_core::IdentityPolicy;
 use dam_discord::{Bot, LinkRenderer, Renderer, SerenitySink};
 use dam_engine::{AlertmanagerApi, DecisionSettings, DiscordSink, RoutingSnapshot, SharedRouting};
 use dam_store::{LaneAssignment, RetentionPolicy, RouteSource, Store};
@@ -162,6 +163,10 @@ async fn run() -> Result<()> {
             ),
             digest_window: storm_window,
             archive_after_minutes: config.render.thread_archive_after_minutes,
+            regroup_window: chrono::Duration::seconds(
+                i64::try_from(config.engine.regroup_window_secs).unwrap_or(i64::MAX),
+            ),
+            identity: IdentityPolicy::new(config.engine.dedupe_ignore_labels.iter().cloned()),
         },
         retention(&config),
         lease,

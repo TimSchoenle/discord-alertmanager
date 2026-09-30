@@ -3,13 +3,28 @@
 //! Pure over its arguments and total: no I/O, no clock, no randomness. Everything the pipeline
 //! does to Discord is a consequence of what this returns, which is why it is the piece worth
 //! testing exhaustively and the piece everything downstream can be written against.
+//!
+//! # One card per alert, found by identity and re-armed in place
+//!
+//! A per-alert card is keyed by the alert's identity rather than by its fingerprint, so an alert
+//! whose churning label gives it a new fingerprint lands on the card already showing it. The key
+//! names the card the alert is shown on now, and a lookup under it is the whole of duplicate
+//! detection.
+//!
+//! What happens to that card is decided from the alert's status against the card's state, not
+//! from which kind of event happened to arrive. A card showing resolved for an alert that is
+//! firing is re-armed whichever path noticed; a card showing firing for an alert that has
+//! resolved is resolved, unless another alert sharing its identity is still firing, in which case
+//! the card shows that one instead. The only re-fire that does not re-arm is one arriving after
+//! the card has been resolved for longer than the regroup window: that posts a new card, which
+//! takes the key and links back to the old one.
 
 use std::collections::HashMap;
 
 use chrono::{DateTime, Duration, Utc};
 use dam_core::{
-    AlertDelta, DedupeKey, EventKind, Labels, NotificationState, Severity, Trigger, initial_state,
-    next_state,
+    Alert, AlertDelta, AlertStatus, DedupeKey, EventKind, Fingerprint, IdentityPolicy, Labels,
+    NotificationState, Severity, Trigger, initial_state, next_state,
 };
 use dam_store::{
     CardUpdate, ChannelId, Decision, Effect, ForumPolicy, GroupStrategy, NewNotification,
@@ -30,7 +45,7 @@ const MAX_APPLIED_TAGS: usize = 5;
 const MAX_AUTO_ARCHIVE: u32 = 10_080;
 
 /// The knobs the decision reads, all of them from the engine's configuration section.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DecisionSettings {
     /// How long a card edit waits before it is sent.
     ///
@@ -47,6 +62,15 @@ pub struct DecisionSettings {
     /// Only ever applied to a card that has stopped firing. A live one holds Discord's maximum,
     /// because the thread is where the incident is being worked.
     pub archive_after_minutes: u32,
+
+    /// How long a resolved card stays re-armable.
+    ///
+    /// Measured from when the card resolved. A re-fire inside it turns the card back to firing;
+    /// one after it posts a replacement.
+    pub regroup_window: Duration,
+
+    /// Which alerts share a per-alert card.
+    pub identity: IdentityPolicy,
 }
 
 impl Default for DecisionSettings {
@@ -55,6 +79,8 @@ impl Default for DecisionSettings {
             debounce: Duration::seconds(3),
             digest_window: Duration::minutes(5),
             archive_after_minutes: 1440,
+            regroup_window: Duration::minutes(30),
+            identity: IdentityPolicy::default(),
         }
     }
 }
@@ -64,6 +90,22 @@ impl Default for DecisionSettings {
 /// Read from the store before the decision, so the decision itself stays pure. The key is the
 /// pair a card is unique under, which is also the pair the database's unique index enforces.
 pub type ExistingCards = HashMap<(ChannelId, DedupeKey), Notification>;
+
+/// What the caller read about the alert beyond its cards.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct AlertContext<'a> {
+    /// Whether anyone holds the alert.
+    ///
+    /// A property of the alert rather than of a card: a re-fire keeps it, or an alert somebody is
+    /// already working flaps back to unclaimed and pages the channel again.
+    pub acknowledged: bool,
+
+    /// Other alerts sharing this one's identity that are still firing.
+    ///
+    /// Only read when this change is a resolution and the identity policy merges anything. A card
+    /// that merges fingerprints resolves when the last of them does, not the first.
+    pub firing_siblings: &'a [Alert],
+}
 
 /// Decides what one accepted alert change does.
 ///
@@ -83,7 +125,7 @@ pub fn decide(
     snapshot: &RoutingSnapshot,
     storm: &StormState,
     existing: &ExistingCards,
-    acknowledged: bool,
+    context: &AlertContext<'_>,
     settings: &DecisionSettings,
     now: DateTime<Utc>,
 ) -> Decision {
@@ -94,24 +136,43 @@ pub fn decide(
 
     let severity = delta.alert.severity();
     let labels = &delta.alert.labels;
+    let identity = settings.identity.identity(&delta.alert);
 
     for route in snapshot.resolve(labels, severity) {
         let channel = delivery_channel(&route.target);
         let ignore = snapshot.ignore_for(route.guild_id, channel, labels, now);
         let mut keys = dedupe_keys(delta, route, storm, settings, now);
 
-        let held = keys
-            .iter()
-            .find_map(|key| existing.get(&(channel, key.clone())));
+        // The first card that can still carry this change, and failing that the card it
+        // outlived. A resolved card past the regroup window is history: the change goes on a
+        // replacement, which takes its key and links back to it.
+        let mut outlived_card = None;
+        let held = keys.iter().find_map(|key| {
+            let card = existing.get(&(channel, key.clone()))?;
+            if outlived(card, delta, settings, now) {
+                outlived_card.get_or_insert(card);
+                return None;
+            }
+            Some(card)
+        });
 
         if let Some(card) = held {
+            let siblings = if card.dedupe_key == DedupeKey::per_alert(&identity) {
+                context.firing_siblings
+            } else {
+                // A group or digest card is not keyed by identity, so the identity's other
+                // members say nothing about whether it is still firing.
+                &[]
+            };
+
             if let Some(update) = update_for(
                 delta,
                 route,
                 snapshot,
                 card,
                 ignore.is_some(),
-                acknowledged,
+                context.acknowledged,
+                siblings,
                 settings,
                 now,
             ) {
@@ -132,7 +193,7 @@ pub fn decide(
             key,
             ignore.is_some(),
             severity,
-            superseded(delta, channel, existing),
+            outlived_card.map(|card| card.id),
             now,
         ) {
             decision.new_cards.push(planned);
@@ -142,20 +203,22 @@ pub fn decide(
     decision
 }
 
-/// The card a new episode's card replaces, when the caller read one.
+/// Whether a card has been resolved for too long for this change to re-arm it.
 ///
-/// Only ever the immediately preceding episode. An alert that has flapped in and out for a month
-/// has a chain of cards behind it, and a card linking to the one before it walks that chain one
-/// step at a time, which is what somebody following it actually wants.
-fn superseded(
+/// Only a firing alert can outlive a card: anything else it says about a resolved card is an edit
+/// to history, and belongs on that card. A resolved card with no recorded resolution time is
+/// re-armed rather than replaced, because a replacement is the one outcome that cannot be undone.
+fn outlived(
+    card: &Notification,
     delta: &AlertDelta,
-    channel: ChannelId,
-    existing: &ExistingCards,
-) -> Option<NotificationId> {
-    let previous = delta.episode.checked_sub(1)?;
-    let key = DedupeKey::per_alert(&delta.alert.fingerprint, previous);
-
-    existing.get(&(channel, key)).map(|card| card.id)
+    settings: &DecisionSettings,
+    now: DateTime<Utc>,
+) -> bool {
+    card.state == NotificationState::Resolved
+        && delta.alert.is_firing()
+        && card
+            .resolved_at
+            .is_some_and(|resolved| now - resolved > settings.regroup_window)
 }
 
 /// The card to create for a route that has none, if one is warranted.
@@ -209,6 +272,55 @@ fn creation_for(
     })
 }
 
+/// The transition this change asks of a card, read from where the alert stands.
+///
+/// The alert's status against the card's state comes first, and the event kind only after it.
+/// Both sources of change can arrive out of order or be lost, so a card that disagrees with its
+/// alert is corrected by whichever change reaches it next, rather than only by the one event that
+/// was supposed to carry the news.
+fn trigger_for(delta: &AlertDelta, card: &Notification, ignored: bool) -> Option<Trigger> {
+    let open = card.state.is_open() || card.state == NotificationState::Ignored;
+
+    match delta.alert.status {
+        AlertStatus::Resolved if open => return Some(Trigger::Resolved),
+        AlertStatus::Resolved => return Trigger::from_event(delta.kind),
+        AlertStatus::Firing => {}
+    }
+
+    if ignored && card.state != NotificationState::Ignored {
+        return Some(Trigger::Ignored);
+    }
+
+    if !ignored && card.state == NotificationState::Ignored {
+        return Some(Trigger::Unignored);
+    }
+
+    if card.state == NotificationState::Resolved {
+        return Some(Trigger::Fired);
+    }
+
+    Trigger::from_event(delta.kind)
+}
+
+/// The alert a card should show once a resolution has landed on it, if it should stay firing.
+///
+/// Another alert sharing the card's identity and still firing on this route keeps the card open.
+/// The one the card already shows is preferred, so a card flipping between two live alerts on
+/// every resolution of a third does not happen.
+fn still_firing<'a>(
+    route: &Route,
+    card: &Notification,
+    siblings: &'a [Alert],
+) -> Option<&'a Alert> {
+    let live = |alert: &&Alert| alert.is_firing() && route.accepts(&alert.labels, alert.severity());
+
+    siblings
+        .iter()
+        .filter(live)
+        .find(|alert| alert.fingerprint == card.fingerprint)
+        .or_else(|| siblings.iter().find(live))
+}
+
 /// The change to a card that already exists, if this delta changes anything about it.
 #[expect(
     clippy::too_many_arguments,
@@ -222,6 +334,7 @@ fn update_for(
     card: &Notification,
     ignored: bool,
     acknowledged: bool,
+    siblings: &[Alert],
     settings: &DecisionSettings,
     now: DateTime<Utc>,
 ) -> Option<CardUpdate> {
@@ -231,15 +344,33 @@ fn update_for(
         return None;
     }
 
-    let trigger = if ignored && card.state != NotificationState::Ignored {
-        Some(Trigger::Ignored)
-    } else if !ignored && card.state == NotificationState::Ignored {
-        Some(Trigger::Unignored)
-    } else {
-        Trigger::from_event(delta.kind)
-    };
+    let mut trigger = trigger_for(delta, card, ignored);
+    let mut shown = &delta.alert;
 
-    let state = trigger.and_then(|trigger| next_state(card.state, trigger, acknowledged));
+    if trigger == Some(Trigger::Resolved)
+        && let Some(sibling) = still_firing(route, card, siblings)
+    {
+        // One of several alerts behind this card resolved and another has not. The card stays
+        // where it is and shows the one still firing, which is what an operator looking at it
+        // needs to know.
+        trigger = None;
+        shown = sibling;
+    }
+
+    let mut state = trigger.and_then(|trigger| next_state(card.state, trigger, acknowledged));
+
+    // A card re-armed for an alert Alertmanager is already suppressing lands on silenced, which is
+    // where a card created for it would have started. Coming back red would page a channel about
+    // an alert somebody has already decided should be quiet.
+    if card.state == NotificationState::Resolved
+        && matches!(
+            state,
+            Some(NotificationState::Firing | NotificationState::Acked)
+        )
+        && shown.am_state.is_suppressed()
+    {
+        state = Some(NotificationState::Silenced);
+    }
 
     // An update with no transition still re-renders: the annotations on the card changed, and
     // that is what the card is for. A redelivery that changes neither is dropped upstream, so
@@ -272,7 +403,7 @@ fn update_for(
 
     if let RouteTarget::Forum { channel, policy } = &route.target {
         effects.extend(forum_effects(
-            delta, snapshot, card, *channel, policy, effective, state, now,
+            delta, snapshot, card, *channel, policy, effective, state, shown, now,
         ));
     }
 
@@ -316,7 +447,7 @@ fn update_for(
 
     Some(CardUpdate {
         id: card.id,
-        fingerprint: delta.alert.fingerprint.clone(),
+        fingerprint: shown.fingerprint.clone(),
         state,
         effects,
     })
@@ -336,6 +467,7 @@ fn forum_effects(
     policy: &ForumPolicy,
     effective: NotificationState,
     state: Option<NotificationState>,
+    shown: &Alert,
     now: DateTime<Utc>,
 ) -> Vec<NewOutboxItem> {
     let mut effects = Vec::new();
@@ -346,8 +478,8 @@ fn forum_effects(
             channel,
             policy,
             effective,
-            delta.alert.severity(),
-            &delta.alert.labels,
+            shown.severity(),
+            &shown.labels,
         );
 
         effects.push(immediate(
@@ -365,7 +497,7 @@ fn forum_effects(
             effects.push(immediate(
                 Effect::ThreadNote {
                     notification: card.id,
-                    text: state_note(effective, delta),
+                    text: state_note(card.state, effective, delta.flap_count),
                 },
                 card,
                 now,
@@ -379,7 +511,7 @@ fn forum_effects(
         let wants_pin = effective.wants_pin()
             && policy
                 .pin_min_severity
-                .is_some_and(|floor| delta.alert.severity() >= floor);
+                .is_some_and(|floor| shown.severity() >= floor);
         if wants_pin != card.pinned {
             effects.push(immediate(
                 Effect::SetPinned {
@@ -432,11 +564,17 @@ pub fn dedupe_keys(
     settings: &DecisionSettings,
     now: DateTime<Utc>,
 ) -> Vec<DedupeKey> {
+    let per_alert = || DedupeKey::per_alert(&settings.identity.identity(&delta.alert));
+
     let configured = match route.group_strategy {
-        GroupStrategy::PerGroup => delta.per_group_key(),
-        // The per-alert key carries the episode, so an alert that re-fired after a whole regroup
-        // window of quiet resolves to a key no card holds yet and is posted afresh.
-        GroupStrategy::PerAlert => delta.per_alert_key(),
+        // Falls back to the per-alert key when no group key has ever been delivered for the
+        // alert, which is the case for one the reconciler discovered before any webhook did.
+        GroupStrategy::PerGroup => delta
+            .alert
+            .group_key
+            .as_ref()
+            .map_or_else(per_alert, DedupeKey::per_group),
+        GroupStrategy::PerAlert => per_alert(),
         GroupStrategy::Digest => return vec![digest_key(route, settings, now)],
     };
 
@@ -471,6 +609,27 @@ pub fn dedupe_key(
     dedupe_keys(delta, route, storm, settings, now)
         .pop()
         .expect("every route has at least one key")
+}
+
+/// The alerts among `candidates` that share `alert`'s identity, other than `alert` itself.
+///
+/// What the caller narrows the store's firing set to before handing it to [`decide`]. Here rather
+/// than in the caller so the notion of "the same card" is spelled once, beside the key built
+/// from it.
+#[must_use]
+pub fn identity_siblings(
+    policy: &IdentityPolicy,
+    alert: &Alert,
+    candidates: impl IntoIterator<Item = Alert>,
+) -> Vec<Alert> {
+    let identity: Fingerprint = policy.identity(alert);
+
+    candidates
+        .into_iter()
+        .filter(|candidate| {
+            candidate.fingerprint != alert.fingerprint && policy.identity(candidate) == identity
+        })
+        .collect()
 }
 
 /// The rolling key one window on one route shares.
@@ -581,8 +740,15 @@ fn slug(value: &str) -> String {
 }
 
 /// The one line a state change posts into the thread.
-fn state_note(state: NotificationState, delta: &AlertDelta) -> String {
+///
+/// A card coming back from resolved says so, whichever open state it lands in: "Firing." on a
+/// thread whose last line was "Resolved." reads as a new incident rather than the old one
+/// returning.
+fn state_note(previous: NotificationState, state: NotificationState, flap_count: u32) -> String {
+    let rearmed = previous == NotificationState::Resolved;
+
     match state {
+        NotificationState::Acked if rearmed => "Firing again. Still acknowledged.".to_owned(),
         NotificationState::Acked => "Acknowledged.".to_owned(),
         NotificationState::Silenced => "Silenced in Alertmanager.".to_owned(),
         NotificationState::Ignored => {
@@ -590,9 +756,10 @@ fn state_note(state: NotificationState, delta: &AlertDelta) -> String {
         }
         NotificationState::Resolved => "Resolved.".to_owned(),
         NotificationState::Orphaned => "Card lost; a replacement was posted.".to_owned(),
-        NotificationState::Firing if delta.flap_count > 0 => {
-            format!("Firing again, flap ×{}.", delta.flap_count)
+        NotificationState::Firing if flap_count > 0 => {
+            format!("Firing again, flap ×{flap_count}.")
         }
+        NotificationState::Firing if rearmed => "Firing again.".to_owned(),
         NotificationState::Firing => "Firing.".to_owned(),
     }
 }
@@ -600,10 +767,10 @@ fn state_note(state: NotificationState, delta: &AlertDelta) -> String {
 #[cfg(test)]
 mod tests {
     use chrono::TimeZone;
-    use dam_core::MatcherSet;
     use dam_core::{
         Alert, AlertStatus, AmState, Annotations, EventSource, Fingerprint, LabelName, Labels,
     };
+    use dam_core::{IdentityPolicy, MatcherSet};
     use dam_store::{
         ChannelId, ForumTag, GuildId, Mentions, NotificationId, RouteId, RouteSource, RouteTarget,
         StateTags, TagId, ThreadPolicy,
@@ -645,7 +812,6 @@ mod tests {
                 group_key: None,
             },
             flap_count: 0,
-            episode: 0,
             observed_at: now(),
         }
     }
@@ -739,6 +905,7 @@ mod tests {
             responded_at: None,
             escalated_at: None,
             supersedes: None,
+            resolved_at: None,
             reply_count: 0,
             created_at: now(),
             updated_at: now(),
@@ -752,6 +919,19 @@ mod tests {
     /// reads the same numbers a deployment would.
     fn quiet() -> StormState {
         StormState::empty(50, 20, Duration::seconds(60))
+    }
+
+    /// What the caller knows about an alert with no siblings.
+    fn known(acknowledged: bool) -> AlertContext<'static> {
+        AlertContext {
+            acknowledged,
+            firing_siblings: &[],
+        }
+    }
+
+    /// The key a per-alert route files this delta under, with no identity policy.
+    fn key_of(delta: &AlertDelta) -> DedupeKey {
+        DedupeKey::per_alert(&delta.alert.fingerprint)
     }
 
     fn kinds(update: &CardUpdate) -> Vec<&'static str> {
@@ -785,7 +965,7 @@ mod tests {
                 &DecisionSettings::default(),
                 now()
             ),
-            delta.per_alert_key(),
+            key_of(&delta),
             "a quiet per-alert route keeps its own card per alert"
         );
 
@@ -797,7 +977,7 @@ mod tests {
             now(),
         );
 
-        assert_ne!(key, delta.per_alert_key());
+        assert_ne!(key, key_of(&delta));
         assert!(
             key.as_str().starts_with("d:"),
             "past the threshold the route rolls one card per window: {key:?}"
@@ -812,7 +992,6 @@ mod tests {
 
         let key = DedupeKey::per_alert(
             &Fingerprint::new("0123456789abcdef").expect("hex is a fingerprint"),
-            0,
         );
         let mut existing = ExistingCards::new();
         existing.insert(
@@ -825,7 +1004,7 @@ mod tests {
             &snapshot,
             &storming(),
             &existing,
-            false,
+            &known(false),
             &DecisionSettings::default(),
             now(),
         );
@@ -878,19 +1057,101 @@ mod tests {
     }
 
     #[test]
-    fn a_new_episode_links_back_to_the_card_it_replaced() {
-        let route = text_route();
+    fn a_re_fire_long_after_the_card_resolved_replaces_it() {
+        let snapshot = RoutingSnapshot::new(vec![text_route()], Vec::new(), Vec::new());
         let channel = ChannelId::new(100);
-        let snapshot = RoutingSnapshot::new(vec![route], Vec::new(), Vec::new());
+        let settings = DecisionSettings::default();
 
-        let mut delta = delta(EventKind::Fired, AlertStatus::Firing, AmState::Active);
-        delta.episode = 1;
+        let delta = delta(EventKind::Fired, AlertStatus::Firing, AmState::Active);
+        let key = key_of(&delta);
+        let mut resolved = card(NotificationState::Resolved, channel, &key);
+        resolved.resolved_at = Some(now() - settings.regroup_window - Duration::seconds(1));
 
-        let previous = DedupeKey::per_alert(&delta.alert.fingerprint, 0);
+        let mut existing = ExistingCards::new();
+        existing.insert((channel, key.clone()), resolved);
+
+        let decision = decide(
+            &delta,
+            &snapshot,
+            &quiet(),
+            &existing,
+            &known(false),
+            &settings,
+            now(),
+        );
+
+        assert!(
+            decision.updates.is_empty(),
+            "a card resolved longer ago than the window is not turned red again"
+        );
+        assert_eq!(decision.new_cards.len(), 1);
+        assert_eq!(
+            decision.new_cards[0].card.supersedes,
+            Some(NotificationId::new(7)),
+            "the replacement carries the link to what it replaced"
+        );
+        assert_eq!(
+            decision.new_cards[0].card.dedupe_key, key,
+            "and takes the key, so the next change finds it with one lookup"
+        );
+        assert!(
+            decision.new_cards[0].mention,
+            "a new occurrence pages again"
+        );
+    }
+
+    #[test]
+    fn a_re_fire_inside_the_window_re_arms_the_card() {
+        let snapshot = RoutingSnapshot::new(vec![forum_route()], Vec::new(), forum_tags());
+        let channel = ChannelId::new(200);
+        let settings = DecisionSettings::default();
+
+        let delta = delta(EventKind::Fired, AlertStatus::Firing, AmState::Active);
+        let key = key_of(&delta);
+        let mut resolved = card(NotificationState::Resolved, channel, &key);
+        resolved.resolved_at = Some(now() - settings.regroup_window + Duration::seconds(1));
+        resolved.archived = true;
+
+        let mut existing = ExistingCards::new();
+        existing.insert((channel, key), resolved);
+
+        let decision = decide(
+            &delta,
+            &snapshot,
+            &quiet(),
+            &existing,
+            &known(false),
+            &settings,
+            now(),
+        );
+
+        assert!(decision.new_cards.is_empty(), "no second card");
+        let update = &decision.updates[0];
+        assert_eq!(update.state, Some(NotificationState::Firing));
+        assert_eq!(kinds(update)[0], "set_flags", "the post is reopened first");
+
+        let note = update
+            .effects
+            .iter()
+            .find_map(|item| match &item.effect {
+                Effect::ThreadNote { text, .. } => Some(text.clone()),
+                _ => None,
+            })
+            .expect("a re-armed post says so");
+        assert_eq!(note, "Firing again.");
+    }
+
+    #[test]
+    fn a_card_re_armed_for_a_suppressed_alert_comes_back_silenced() {
+        let snapshot = RoutingSnapshot::new(vec![text_route()], Vec::new(), Vec::new());
+        let channel = ChannelId::new(100);
+        let delta = delta(EventKind::Fired, AlertStatus::Firing, AmState::Suppressed);
+        let key = key_of(&delta);
+
         let mut existing = ExistingCards::new();
         existing.insert(
-            (channel, previous.clone()),
-            card(NotificationState::Resolved, channel, &previous),
+            (channel, key.clone()),
+            card(NotificationState::Resolved, channel, &key),
         );
 
         let decision = decide(
@@ -898,29 +1159,261 @@ mod tests {
             &snapshot,
             &quiet(),
             &existing,
-            false,
+            &known(false),
             &DecisionSettings::default(),
             now(),
         );
 
-        assert_eq!(
-            decision.new_cards.len(),
-            1,
-            "the resolved card of the last episode is not edited back to firing"
+        assert_eq!(decision.updates[0].state, Some(NotificationState::Silenced));
+    }
+
+    #[test]
+    fn a_resolved_card_with_no_recorded_resolution_is_re_armed_rather_than_replaced() {
+        let snapshot = RoutingSnapshot::new(vec![text_route()], Vec::new(), Vec::new());
+        let channel = ChannelId::new(100);
+        let delta = delta(EventKind::Fired, AlertStatus::Firing, AmState::Active);
+        let key = key_of(&delta);
+
+        let mut existing = ExistingCards::new();
+        existing.insert(
+            (channel, key.clone()),
+            card(NotificationState::Resolved, channel, &key),
         );
-        assert_eq!(
-            decision.new_cards[0].card.supersedes,
-            Some(NotificationId::new(7)),
-            "the replacement carries the link to what it replaced"
+
+        let decision = decide(
+            &delta,
+            &snapshot,
+            &quiet(),
+            &existing,
+            &known(false),
+            &DecisionSettings::default(),
+            now(),
         );
+
+        assert!(decision.new_cards.is_empty());
+        assert_eq!(decision.updates[0].state, Some(NotificationState::Firing));
+    }
+
+    #[test]
+    fn a_firing_alert_re_arms_its_resolved_card_whatever_the_event_says() {
+        // A reconciler pass sees the alert firing while its card says resolved: the resolve and
+        // the re-fire both happened, and the webhook for the second was lost. An annotation
+        // update is what arrives, and it still has to put the card right.
+        let snapshot = RoutingSnapshot::new(vec![text_route()], Vec::new(), Vec::new());
+        let channel = ChannelId::new(100);
+        let delta = delta(EventKind::Updated, AlertStatus::Firing, AmState::Active);
+        let key = key_of(&delta);
+
+        let mut existing = ExistingCards::new();
+        existing.insert(
+            (channel, key.clone()),
+            card(NotificationState::Resolved, channel, &key),
+        );
+
+        let decision = decide(
+            &delta,
+            &snapshot,
+            &quiet(),
+            &existing,
+            &known(false),
+            &DecisionSettings::default(),
+            now(),
+        );
+
+        assert_eq!(decision.updates[0].state, Some(NotificationState::Firing));
+    }
+
+    #[test]
+    fn a_resolved_alert_resolves_its_open_card_whatever_the_event_says() {
+        let snapshot = RoutingSnapshot::new(vec![text_route()], Vec::new(), Vec::new());
+        let channel = ChannelId::new(100);
+        let delta = delta(EventKind::Updated, AlertStatus::Resolved, AmState::Active);
+        let key = key_of(&delta);
+
+        let mut existing = ExistingCards::new();
+        existing.insert(
+            (channel, key.clone()),
+            card(NotificationState::Firing, channel, &key),
+        );
+
+        let decision = decide(
+            &delta,
+            &snapshot,
+            &quiet(),
+            &existing,
+            &known(false),
+            &DecisionSettings::default(),
+            now(),
+        );
+
+        assert_eq!(decision.updates[0].state, Some(NotificationState::Resolved));
+    }
+
+    #[test]
+    fn a_churned_label_lands_on_the_card_already_showing_the_alert() {
+        let snapshot = RoutingSnapshot::new(vec![forum_route()], Vec::new(), forum_tags());
+        let channel = ChannelId::new(200);
+        let settings = DecisionSettings {
+            identity: IdentityPolicy::new(["pod"]),
+            ..DecisionSettings::default()
+        };
+
+        let mut first = delta(EventKind::Fired, AlertStatus::Firing, AmState::Active);
+        first.alert.labels = labels(&[
+            ("alertname", "PodDown"),
+            ("severity", "critical"),
+            ("pod", "web-1"),
+        ]);
+        let mut second = first.clone();
+        second.alert.fingerprint = Fingerprint::new("fedcba9876543210").expect("hex");
+        second.alert.labels = labels(&[
+            ("alertname", "PodDown"),
+            ("severity", "critical"),
+            ("pod", "web-2"),
+        ]);
+
+        let key = dedupe_key(&first, &forum_route(), &quiet(), &settings, now());
         assert_eq!(
-            decision.new_cards[0].card.dedupe_key,
-            DedupeKey::per_alert(&delta.alert.fingerprint, 1)
+            key,
+            dedupe_key(&second, &forum_route(), &quiet(), &settings, now()),
+            "one identity, one key"
+        );
+
+        let mut existing = ExistingCards::new();
+        existing.insert(
+            (channel, key.clone()),
+            card(NotificationState::Resolved, channel, &key),
+        );
+
+        let decision = decide(
+            &second,
+            &snapshot,
+            &quiet(),
+            &existing,
+            &known(false),
+            &settings,
+            now(),
+        );
+
+        assert!(
+            decision.new_cards.is_empty(),
+            "the replacement pod re-arms the card rather than posting its own"
+        );
+        assert_eq!(decision.updates[0].state, Some(NotificationState::Firing));
+        assert_eq!(
+            decision.updates[0].fingerprint, second.alert.fingerprint,
+            "and the card shows the alert that is firing now"
         );
     }
 
     #[test]
-    fn a_first_episode_supersedes_nothing() {
+    fn a_card_stays_firing_while_another_alert_behind_it_still_fires() {
+        let snapshot = RoutingSnapshot::new(vec![forum_route()], Vec::new(), forum_tags());
+        let channel = ChannelId::new(200);
+        let settings = DecisionSettings {
+            identity: IdentityPolicy::new(["pod"]),
+            ..DecisionSettings::default()
+        };
+
+        let mut gone = delta(EventKind::Resolved, AlertStatus::Resolved, AmState::Active);
+        gone.alert.labels = labels(&[
+            ("alertname", "PodDown"),
+            ("severity", "critical"),
+            ("pod", "web-1"),
+        ]);
+        let mut live = gone.alert.clone();
+        live.fingerprint = Fingerprint::new("fedcba9876543210").expect("hex");
+        live.status = AlertStatus::Firing;
+        live.labels = labels(&[
+            ("alertname", "PodDown"),
+            ("severity", "critical"),
+            ("pod", "web-2"),
+        ]);
+
+        let key = dedupe_key(&gone, &forum_route(), &quiet(), &settings, now());
+        let mut existing = ExistingCards::new();
+        existing.insert(
+            (channel, key.clone()),
+            card(NotificationState::Firing, channel, &key),
+        );
+
+        let siblings = [live.clone()];
+        let decision = decide(
+            &gone,
+            &snapshot,
+            &quiet(),
+            &existing,
+            &AlertContext {
+                acknowledged: false,
+                firing_siblings: &siblings,
+            },
+            &settings,
+            now(),
+        );
+
+        let update = &decision.updates[0];
+        assert_eq!(update.state, None, "the card does not resolve");
+        assert_eq!(
+            update.fingerprint, live.fingerprint,
+            "it shows the one still firing"
+        );
+        assert_eq!(kinds(update), vec!["edit_card"]);
+
+        let alone = decide(
+            &gone,
+            &snapshot,
+            &quiet(),
+            &existing,
+            &known(false),
+            &settings,
+            now(),
+        );
+
+        assert_eq!(
+            alone.updates[0].state,
+            Some(NotificationState::Resolved),
+            "the last one to resolve resolves the card"
+        );
+    }
+
+    #[test]
+    fn siblings_are_the_other_alerts_of_one_identity() {
+        let policy = IdentityPolicy::new(["pod"]);
+        let alert = |fingerprint: &str, pod: &str, namespace: &str| {
+            let mut alert = delta(EventKind::Fired, AlertStatus::Firing, AmState::Active).alert;
+            alert.fingerprint = Fingerprint::new(fingerprint).expect("hex");
+            alert.labels = labels(&[
+                ("alertname", "PodDown"),
+                ("namespace", namespace),
+                ("pod", pod),
+            ]);
+            alert
+        };
+
+        let this = alert("aa", "web-1", "prod");
+        let siblings = identity_siblings(
+            &policy,
+            &this,
+            [
+                this.clone(),
+                alert("bb", "web-2", "prod"),
+                alert("cc", "web-3", "staging"),
+            ],
+        );
+
+        let found: Vec<&str> = siblings
+            .iter()
+            .map(|alert| alert.fingerprint.as_str())
+            .collect();
+        assert_eq!(
+            found,
+            vec!["bb"],
+            "itself and another namespace are not siblings"
+        );
+    }
+
+    #[test]
+    fn a_first_card_supersedes_nothing() {
         let snapshot = RoutingSnapshot::new(vec![text_route()], Vec::new(), Vec::new());
         let delta = delta(EventKind::Fired, AlertStatus::Firing, AmState::Active);
 
@@ -929,7 +1422,7 @@ mod tests {
             &snapshot,
             &quiet(),
             &ExistingCards::new(),
-            false,
+            &known(false),
             &DecisionSettings::default(),
             now(),
         );
@@ -945,7 +1438,6 @@ mod tests {
 
         let key = DedupeKey::per_alert(
             &Fingerprint::new("0123456789abcdef").expect("hex is a fingerprint"),
-            0,
         );
         let mut existing = ExistingCards::new();
         existing.insert(
@@ -963,7 +1455,7 @@ mod tests {
             &snapshot,
             &quiet(),
             &existing,
-            false,
+            &known(false),
             &settings,
             now(),
         );
@@ -995,7 +1487,6 @@ mod tests {
 
         let key = DedupeKey::per_alert(
             &Fingerprint::new("0123456789abcdef").expect("hex is a fingerprint"),
-            0,
         );
         let mut archived = card(NotificationState::Resolved, channel, &key);
         archived.archived = true;
@@ -1008,7 +1499,7 @@ mod tests {
             &snapshot,
             &quiet(),
             &existing,
-            false,
+            &known(false),
             &DecisionSettings::default(),
             now(),
         );
@@ -1042,7 +1533,7 @@ mod tests {
             &snapshot,
             &quiet(),
             &ExistingCards::new(),
-            false,
+            &known(false),
             &DecisionSettings::default(),
             now(),
         );
@@ -1063,7 +1554,7 @@ mod tests {
             &snapshot,
             &quiet(),
             &ExistingCards::new(),
-            false,
+            &known(false),
             &DecisionSettings::default(),
             now(),
         );
@@ -1094,7 +1585,7 @@ mod tests {
             &snapshot,
             &quiet(),
             &ExistingCards::new(),
-            false,
+            &known(false),
             &DecisionSettings::default(),
             now(),
         );
@@ -1112,7 +1603,7 @@ mod tests {
             &snapshot,
             &quiet(),
             &ExistingCards::new(),
-            false,
+            &known(false),
             &DecisionSettings::default(),
             now(),
         );
@@ -1128,7 +1619,7 @@ mod tests {
     fn an_annotation_change_edits_the_card_without_moving_it() {
         let route = text_route();
         let delta = delta(EventKind::Updated, AlertStatus::Firing, AmState::Active);
-        let key = delta.per_alert_key();
+        let key = key_of(&delta);
         let mut existing = ExistingCards::new();
         existing.insert(
             (ChannelId::new(100), key.clone()),
@@ -1141,7 +1632,7 @@ mod tests {
             &snapshot,
             &quiet(),
             &existing,
-            false,
+            &known(false),
             &DecisionSettings::default(),
             now(),
         );
@@ -1156,7 +1647,7 @@ mod tests {
     fn a_card_edit_waits_for_the_debounce() {
         let route = text_route();
         let delta = delta(EventKind::Updated, AlertStatus::Firing, AmState::Active);
-        let key = delta.per_alert_key();
+        let key = key_of(&delta);
         let mut existing = ExistingCards::new();
         existing.insert(
             (ChannelId::new(100), key.clone()),
@@ -1173,7 +1664,7 @@ mod tests {
             &snapshot,
             &quiet(),
             &existing,
-            false,
+            &known(false),
             &settings,
             now(),
         );
@@ -1188,7 +1679,7 @@ mod tests {
     fn resolving_a_forum_post_retags_notes_unpins_disables_and_archives_it() {
         let route = forum_route();
         let delta = delta(EventKind::Resolved, AlertStatus::Resolved, AmState::Active);
-        let key = delta.per_alert_key();
+        let key = key_of(&delta);
         let mut card = card(NotificationState::Firing, ChannelId::new(200), &key);
         card.pinned = true;
         let mut existing = ExistingCards::new();
@@ -1200,7 +1691,7 @@ mod tests {
             &snapshot,
             &quiet(),
             &existing,
-            false,
+            &known(false),
             &DecisionSettings::default(),
             now(),
         );
@@ -1225,7 +1716,7 @@ mod tests {
     fn a_resolved_forum_post_is_re_rendered_before_it_is_archived() {
         let route = forum_route();
         let delta = delta(EventKind::Resolved, AlertStatus::Resolved, AmState::Active);
-        let key = delta.per_alert_key();
+        let key = key_of(&delta);
         let mut existing = ExistingCards::new();
         existing.insert(
             (ChannelId::new(200), key.clone()),
@@ -1238,7 +1729,7 @@ mod tests {
             &snapshot,
             &quiet(),
             &existing,
-            false,
+            &known(false),
             &DecisionSettings::default(),
             now(),
         );
@@ -1271,7 +1762,7 @@ mod tests {
     fn an_update_that_changes_no_state_asks_for_no_pin() {
         let route = forum_route();
         let delta = delta(EventKind::Updated, AlertStatus::Firing, AmState::Active);
-        let key = delta.per_alert_key();
+        let key = key_of(&delta);
         let mut existing = ExistingCards::new();
         existing.insert(
             (ChannelId::new(200), key.clone()),
@@ -1284,7 +1775,7 @@ mod tests {
             &snapshot,
             &quiet(),
             &existing,
-            false,
+            &known(false),
             &DecisionSettings::default(),
             now(),
         );
@@ -1303,7 +1794,7 @@ mod tests {
     fn an_archived_post_is_reopened_before_it_is_edited() {
         let route = forum_route();
         let delta = delta(EventKind::Fired, AlertStatus::Firing, AmState::Active);
-        let key = delta.per_alert_key();
+        let key = key_of(&delta);
         let mut card = card(NotificationState::Resolved, ChannelId::new(200), &key);
         card.archived = true;
         let mut existing = ExistingCards::new();
@@ -1315,7 +1806,7 @@ mod tests {
             &snapshot,
             &quiet(),
             &existing,
-            false,
+            &known(false),
             &DecisionSettings::default(),
             now(),
         );
@@ -1332,7 +1823,7 @@ mod tests {
         let route = forum_route();
         let mut delta = delta(EventKind::Fired, AlertStatus::Firing, AmState::Active);
         delta.flap_count = 2;
-        let key = delta.per_alert_key();
+        let key = key_of(&delta);
         let mut existing = ExistingCards::new();
         existing.insert(
             (ChannelId::new(200), key.clone()),
@@ -1345,7 +1836,7 @@ mod tests {
             &snapshot,
             &quiet(),
             &existing,
-            true,
+            &known(true),
             &DecisionSettings::default(),
             now(),
         );
@@ -1361,14 +1852,14 @@ mod tests {
                 _ => None,
             })
             .expect("a state change posts a note");
-        assert!(note.contains("Acknowledged"), "{note}");
+        assert_eq!(note, "Firing again. Still acknowledged.");
     }
 
     #[test]
     fn an_orphaned_card_is_never_touched_again() {
         let route = text_route();
         let delta = delta(EventKind::Resolved, AlertStatus::Resolved, AmState::Active);
-        let key = delta.per_alert_key();
+        let key = key_of(&delta);
         let mut existing = ExistingCards::new();
         existing.insert(
             (ChannelId::new(100), key.clone()),
@@ -1381,7 +1872,7 @@ mod tests {
             &snapshot,
             &quiet(),
             &existing,
-            false,
+            &known(false),
             &DecisionSettings::default(),
             now(),
         );
@@ -1405,7 +1896,7 @@ mod tests {
             revoked_at: None,
         };
         let delta = delta(EventKind::Updated, AlertStatus::Firing, AmState::Active);
-        let key = delta.per_alert_key();
+        let key = key_of(&delta);
         let mut existing = ExistingCards::new();
         existing.insert(
             (ChannelId::new(100), key.clone()),
@@ -1418,7 +1909,7 @@ mod tests {
             &snapshot,
             &quiet(),
             &existing,
-            false,
+            &known(false),
             &DecisionSettings::default(),
             now(),
         );

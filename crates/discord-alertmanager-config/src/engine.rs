@@ -55,11 +55,22 @@ pub struct Engine {
     /// deadman.
     pub deadman_window_secs: u64,
 
-    /// Seconds within which a re-fire reuses the existing card and thread.
+    /// Seconds a resolved card stays re-armable.
     ///
-    /// Inside the window the card is reused and its flap count goes up. Outside it, a new card is
-    /// posted carrying a link to the previous one.
+    /// An alert that fires again inside the window, measured from when its card resolved, turns
+    /// that card back to firing, reopens its thread and counts a flap. Past the window a new card
+    /// is posted carrying a link to the previous one, which keeps its history.
     pub regroup_window_secs: u64,
+
+    /// Labels that do not decide which card an alert is shown on.
+    ///
+    /// Alertmanager's fingerprint covers every label, so a label whose value churns gives one
+    /// condition a new fingerprint, and a new card, each time it changes. Naming such a label here
+    /// puts every alert that differs only in it onto one card: the card follows whichever of them
+    /// is firing and resolves when the last one does. `pod` and `instance` are the usual
+    /// candidates on Kubernetes, where a rollout replaces both. Per-alert routes only; a group
+    /// route is already keyed by Alertmanager's group.
+    pub dedupe_ignore_labels: Vec<String>,
 
     /// Record a row in `alert_events` for every state transition.
     ///
@@ -88,6 +99,7 @@ impl Default for Engine {
             prune_interval_secs: 3600,
             deadman_window_secs: 1800,
             regroup_window_secs: 1800,
+            dedupe_ignore_labels: Vec::new(),
             persist_events: true,
             storm: Storm::default(),
             retention: Retention::default(),

@@ -137,7 +137,6 @@ pub(crate) fn alert_record(row: &PgRow) -> Result<AlertRecord, StoreError> {
         last_seen_at: row.try_get("last_seen_at").map_err(backend)?,
         resolved_at: row.try_get("resolved_at").map_err(backend)?,
         flap_count: count_at(row, "flap_count")?,
-        episode: count_at(row, "episode")?,
         updated_at: row.try_get("updated_at").map_err(backend)?,
     })
 }
@@ -173,6 +172,7 @@ pub(crate) fn notification(row: &PgRow) -> Result<Notification, StoreError> {
         responded_at: row.try_get("responded_at").map_err(backend)?,
         escalated_at: row.try_get("escalated_at").map_err(backend)?,
         supersedes: id_opt_at(row, "supersedes", NotificationId::new)?,
+        resolved_at: row.try_get("resolved_at").map_err(backend)?,
         reply_count: count_at(row, "reply_count")?,
         created_at: row.try_get("created_at").map_err(backend)?,
         updated_at: row.try_get("updated_at").map_err(backend)?,

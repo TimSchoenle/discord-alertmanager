@@ -90,9 +90,14 @@ The same generator writes `docs/config.md`, `docs/config.json` and `config.examp
   instead, saying on the card why it did. Discord's per-channel limits are strict enough that an
   unthrottled storm produces rate-limit responses rather than notifications, and a worse card in a
   readable channel beats a better one nobody receives.
-- An alert that resolves and fires again minutes later reuses its card and counts the flap. One
-  that comes back a week later gets a new card carrying a link to the old one, because reviving a
-  card that scrolled away days ago tells nobody anything.
+- An alert that resolves and fires again re-arms its card: the post reopens, turns red and counts
+  the flap. Only one whose card has been resolved for longer than the regroup window gets a new
+  card, carrying a link to the old one, because reviving a card that scrolled away days ago tells
+  nobody anything.
+- Labels whose values churn can be left out of an alert's identity with
+  `engine.dedupe_ignore_labels`. A rollout that replaces the pod behind an alert then lands on the
+  card already showing it instead of posting a duplicate, and the card resolves when the last
+  alert behind it does.
 - A route can escalate. A card that stays firing and unacknowledged past its deadline mentions the
   people the route names, once. The failure this exists for is the quiet one: the message arrived,
   it scrolled past, and the channel is silent precisely because everybody assumes somebody else
@@ -273,7 +278,7 @@ before there is a configuration to describe them, so no file can supply one.
 | `DAM_CONFIG` | config | `config.toml` | Names the TOML layer: a file, or a directory whose `*.toml` files are all merged in name order. |
 | `DAM_SECRETS_DIR` | secrets dir | — | Names a directory of key-named files — a mounted Kubernetes `Secret` volume. Each file supplies the key its name spells. |
 
-Behind them are 79 keys. Each is spelled the same way in every layer: `__`
+Behind them are 80 keys. Each is spelled the same way in every layer: `__`
 separates nesting levels and case is folded, so `discord.token` is `DAM_DISCORD__TOKEN` as a
 variable and `discord__token` as a file name in the secrets directory.
 
@@ -287,7 +292,7 @@ These are the ones with no default, which the process will not start without:
 | `ingest.bind` | `SocketAddr` | `DAM_INGEST__BIND` | `0.0.0.0:9099` | — | Address and port to listen on. |
 | `ingest.webhook_token` | `SecretString` | `DAM_INGEST__WEBHOOK_TOKEN` | unset | secret | Bearer token every webhook request has to carry. |
 
-[docs/config.md](docs/config.md) has all 79 of them with their defaults,
+[docs/config.md](docs/config.md) has all 80 of them with their defaults,
 [docs/config.json](docs/config.json) is the JSON Schema, and
 [config.example.toml](config.example.toml) is the same surface as a commented file. All three are
 written by `cargo xtask config-docs`.

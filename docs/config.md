@@ -60,7 +60,8 @@ indirection, in that order of precedence.
 | `engine.escalation_interval_secs` | `u64` | `DAM_ENGINE__ESCALATION_INTERVAL_SECS` | `15` | — | Seconds between escalation timer sweeps. |
 | `engine.prune_interval_secs` | `u64` | `DAM_ENGINE__PRUNE_INTERVAL_SECS` | `3600` | — | Seconds between retention sweeps. |
 | `engine.deadman_window_secs` | `u64` | `DAM_ENGINE__DEADMAN_WINDOW_SECS` | `1800` | — | Seconds of webhook silence that, combined with an unreachable Alertmanager, trips the deadman. |
-| `engine.regroup_window_secs` | `u64` | `DAM_ENGINE__REGROUP_WINDOW_SECS` | `1800` | — | Seconds within which a re-fire reuses the existing card and thread. |
+| `engine.regroup_window_secs` | `u64` | `DAM_ENGINE__REGROUP_WINDOW_SECS` | `1800` | — | Seconds a resolved card stays re-armable. |
+| `engine.dedupe_ignore_labels` | `Vec<String>` | `DAM_ENGINE__DEDUPE_IGNORE_LABELS` | `[]` | — | Labels that do not decide which card an alert is shown on. |
 | `engine.persist_events` | `bool` | `DAM_ENGINE__PERSIST_EVENTS` | `true` | — | Record a row in `alert_events` for every state transition. |
 | `engine.storm.threshold` | `u32` | `DAM_ENGINE__STORM__THRESHOLD` | `50` | — | Alerts on one route inside the window that trigger digest mode. |
 | `engine.storm.window_secs` | `u64` | `DAM_ENGINE__STORM__WINDOW_SECS` | `60` | — | Length of the window, in seconds. |

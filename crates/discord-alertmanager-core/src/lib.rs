@@ -15,9 +15,12 @@
 //!
 //! Alert identity is Alertmanager's own `fingerprint`. A locally computed `labels_hash` sits
 //! beside it, so a change in Alertmanager's hashing across versions is detectable rather than
-//! silent.
+//! silent. Which card an alert belongs on is a separate question with a separate answer: an
+//! `IdentityPolicy` can leave out labels whose values churn, so one condition keeps one card while
+//! its fingerprint moves.
 
 pub mod alert;
+pub mod identity;
 pub mod labels;
 pub mod matcher;
 pub mod state;
@@ -29,6 +32,7 @@ pub use alert::{
     SEVERITY_LABEL, Severity,
 };
 pub use error::CoreError;
+pub use identity::IdentityPolicy;
 pub use labels::{Fingerprint, GroupKey, LabelName, Labels, LabelsHash, MAX_LABEL_LEN};
 pub use matcher::{MAX_REGEX_LEN, MatchOp, Matcher, MatcherSet};
 pub use state::{NotificationState, Trigger, initial_state, next_state};
