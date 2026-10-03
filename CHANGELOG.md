@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.1](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.8.0...v0.8.1) (2026-10-03)
+
+
+### Miscellaneous
+
+* **deps:** update oras-project/setup-oras action to v2.0.2 ([#94](https://github.com/TimSchoenle/discord-alertmanager/issues/94)) ([a7f3c29](https://github.com/TimSchoenle/discord-alertmanager/commit/a7f3c29fd48f7d7f44f720d65d677c978d8df9dc))
+* **deps:** update rust crate terrace-config to v0.15.0 ([#92](https://github.com/TimSchoenle/discord-alertmanager/issues/92)) ([40f74bc](https://github.com/TimSchoenle/discord-alertmanager/commit/40f74bc486eb57364c0a756bc3d1d6b87dad4518))
+* **deps:** update timschoenle/actions/actions/common/readme-variables to vactions-common-readme-variables-v1.2.3 ([#95](https://github.com/TimSchoenle/discord-alertmanager/issues/95)) ([9ddeae6](https://github.com/TimSchoenle/discord-alertmanager/commit/9ddeae6bd05fb8d120bd032b3c89e39f9816f42d))
+* **deps:** update timschoenle/actions/actions/common/render-template to vactions-common-render-template-v1.2.3 ([#96](https://github.com/TimSchoenle/discord-alertmanager/issues/96)) ([bbd4d8f](https://github.com/TimSchoenle/discord-alertmanager/commit/bbd4d8f16ca6a0f15094d456da6de7ce2bb20537))
+* **deps:** update timschoenle/actions/actions/common/upsert-pr-comment to vactions-common-upsert-pr-comment-v1.1.3 ([#97](https://github.com/TimSchoenle/discord-alertmanager/issues/97)) ([02f2fd6](https://github.com/TimSchoenle/discord-alertmanager/commit/02f2fd6a815b0833128e547d663c0541dd36b5aa))
+* **deps:** update timschoenle/actions/actions/helm/update-chart-version to vactions-helm-update-chart-version-v1.6.13 ([#98](https://github.com/TimSchoenle/discord-alertmanager/issues/98)) ([30d91fe](https://github.com/TimSchoenle/discord-alertmanager/commit/30d91fe024368c2456d1bd0e9ab7e69ee19fd9cc))
+* **deps:** update timschoenle/actions/actions/rust/clippy to vactions-rust-clippy-v1.1.12 ([#99](https://github.com/TimSchoenle/discord-alertmanager/issues/99)) ([c0358aa](https://github.com/TimSchoenle/discord-alertmanager/commit/c0358aa3257f607af243111f06aa49db51d50168))
+* **deps:** update timschoenle/actions/actions/rust/config-contract to vactions-rust-config-contract-v1.3.3 ([#100](https://github.com/TimSchoenle/discord-alertmanager/issues/100)) ([1d7079f](https://github.com/TimSchoenle/discord-alertmanager/commit/1d7079fe79969a4d5cf632d03b9851fcfd97b421))
+
 ## [0.8.0](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.7.2...v0.8.0) (2026-09-30)
 
 
