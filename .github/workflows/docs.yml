@@ -13,6 +13,19 @@ name: docs
 # in `check` mode instead: nothing is written, and a stale `README.md` fails the job. Without that,
 # editing `README.md` directly would appear to work right up until the next pull request silently
 # reverted it.
+#
+# Before rendering, the pull request job also runs `cargo xtask config-docs` and commits what it
+# writes: `docs/config.md`, `docs/config.json`, `docs/config.contract.json` and
+# `config.example.toml`. All four are a function of the types in `discord-alertmanager-config` and
+# of the terrace-config release that renders them, so a dependency bump moves them with no source
+# change at all, and without this every such bump sat red on `Config Docs` and `Config Contract`
+# until someone ran the command by hand. They go first because the README's configuration tables
+# are lifted out of `docs/config.md`. The reverse gates stay in build.yaml, which runs on every
+# event and therefore also covers `main` and forks.
+#
+# The Dockerfile's `terrace-config:labels` region is not regenerated here: `xtask` does not write
+# it, and its three values (envelope version, in-image path, loader prefix) move only with a
+# deliberate change to the prefix, which `Config Contract` reports.
 
 on:
   pull_request:
@@ -37,7 +50,8 @@ jobs:
     # their branch anyway. `check` below picks those pull requests up instead.
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Compiling `xtask` and the schema example is most of this budget.
+    timeout-minutes: 25
     permissions:
       contents: read # the write happens with the App token below, not with GITHUB_TOKEN
     steps:
@@ -66,8 +80,31 @@ jobs:
           ref: ${{ github.head_ref }}
           persist-credentials: false
 
+      # The pinned toolchain from `rust-toolchain.toml`, as `Config Docs` in build.yaml uses, so the
+      # regenerated files are byte-identical to what that gate renders.
+      - name: Install pinned toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+
+      # The command a developer runs, not a second spelling of the cargo invocations behind it.
+      # The contract is rendered without `--version`, `--revision` or `--created`, so it does not
+      # move between runs over the same tree.
+      - name: Regenerate the configuration reference and contract
+        run: cargo xtask config-docs
+
+      # A commit of its own: these move when the configuration surface or terrace-config moves,
+      # which is not when the README's prose does. Every path is named so nothing else left dirty
+      # in the workspace rides along. The commit API re-reads the branch head, so the README commit
+      # below lands on top of this one.
+      - name: Commit the configuration reference and contract
+        id: config-docs
+        uses: TimSchoenle/actions/actions/common/commit-changes@7e8fd61045447d321c5139eea8f2e2b766333f8b # tag=actions-common-commit-changes-v1.5.3
+        with:
+          commit_message: "docs: regenerate the configuration reference and contract"
+          file_pattern: "docs/config.md docs/config.json docs/config.contract.json config.example.toml"
+          token: ${{ steps.generate_token.outputs.token }}
+
       # Invoked through `bash` rather than executed: the repository is authored on Windows, where
-      # git does not record the executable bit.
+      # git does not record the executable bit. It reads `docs/config.md` as regenerated above.
       #
       # Assigned before it is echoed. With `echo "json=$(...)"` the exit status belongs to `echo`,
       # so a failed generator leaves the step green, `readme-variables` reads the empty `extra` as
@@ -111,7 +148,14 @@ jobs:
         env:
           COMMITTED: ${{ steps.readme.outputs.changes_detected }}
           COMMIT_URL: ${{ steps.readme.outputs.commit_url }}
+          CONFIG_COMMITTED: ${{ steps.config-docs.outputs.changes_detected }}
+          CONFIG_URL: ${{ steps.config-docs.outputs.commit_url }}
         run: |
+          if [ "${CONFIG_COMMITTED}" = "true" ]; then
+            echo "Configuration reference and contract regenerated: ${CONFIG_URL}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "The configuration reference and contract already matched the types." >> "$GITHUB_STEP_SUMMARY"
+          fi
           if [ "${COMMITTED}" = "true" ]; then
             echo "README.md re-rendered: ${COMMIT_URL}" >> "$GITHUB_STEP_SUMMARY"
           else
