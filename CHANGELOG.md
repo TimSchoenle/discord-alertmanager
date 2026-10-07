@@ -1,5 +1,55 @@
 # Changelog
 
+## [0.8.1](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.8.0...v0.8.1) (2026-10-07)
+
+
+### Bug Fixes
+
+* **deps:** regenerate config contract and drop yanked yoke-derive ([#104](https://github.com/TimSchoenle/discord-alertmanager/issues/104)) ([95e8907](https://github.com/TimSchoenle/discord-alertmanager/commit/95e8907cd6b395c46a3628f7ec35663be42c2979))
+
+
+### CI
+
+* check the Docker image with the shared docker/image-check actions ([#106](https://github.com/TimSchoenle/discord-alertmanager/issues/106)) ([07f0a04](https://github.com/TimSchoenle/discord-alertmanager/commit/07f0a049dc5e7f04529f6cb78fc3768f684c79aa))
+* regenerate config contract on pull requests ([#105](https://github.com/TimSchoenle/discord-alertmanager/issues/105)) ([8e0573e](https://github.com/TimSchoenle/discord-alertmanager/commit/8e0573e9ffbf0969126e102b968350f534edca26))
+
+
+### Miscellaneous
+
+* **deps:** update dependency rust to 1.99 ([#102](https://github.com/TimSchoenle/discord-alertmanager/issues/102)) ([12423cf](https://github.com/TimSchoenle/discord-alertmanager/commit/12423cf798eded2ca6f6a9b96988af7a1855ba5d))
+* **deps:** update docker/dockerfile:1.27 docker digest to 4edf897 ([#101](https://github.com/TimSchoenle/discord-alertmanager/issues/101)) ([a9ffd4b](https://github.com/TimSchoenle/discord-alertmanager/commit/a9ffd4bbf55267c0523002608436a26822af79c7))
+* **deps:** update oras-project/setup-oras action to v2.0.2 ([#94](https://github.com/TimSchoenle/discord-alertmanager/issues/94)) ([a7f3c29](https://github.com/TimSchoenle/discord-alertmanager/commit/a7f3c29fd48f7d7f44f720d65d677c978d8df9dc))
+* **deps:** update rust crate insta to v1.49.0 ([#116](https://github.com/TimSchoenle/discord-alertmanager/issues/116)) ([b3f64a6](https://github.com/TimSchoenle/discord-alertmanager/commit/b3f64a696584cff073249b065796085c941007a9))
+* **deps:** update rust crate terrace-config to v0.15.0 ([#92](https://github.com/TimSchoenle/discord-alertmanager/issues/92)) ([40f74bc](https://github.com/TimSchoenle/discord-alertmanager/commit/40f74bc486eb57364c0a756bc3d1d6b87dad4518))
+* **deps:** update rust crate tokio to v1.53.2 ([#117](https://github.com/TimSchoenle/discord-alertmanager/issues/117)) ([330806d](https://github.com/TimSchoenle/discord-alertmanager/commit/330806d24c4ae1d9ccfd17d7165ee21109b312ac))
+* **deps:** update rust to v1.99.0 ([#103](https://github.com/TimSchoenle/discord-alertmanager/issues/103)) ([68f9173](https://github.com/TimSchoenle/discord-alertmanager/commit/68f917343c969dcabc2940e72cc9dbb6df4a601c))
+* **deps:** update timschoenle/actions/.github/workflows/maintenance-auto-approve-renovate.yaml to vworkflows-maintenance-auto-approve-renovate-v1.4.26 ([#107](https://github.com/TimSchoenle/discord-alertmanager/issues/107)) ([32a4eb4](https://github.com/TimSchoenle/discord-alertmanager/commit/32a4eb42460df1ab5e3fb5fcf30037ff3aefcbb0))
+* **deps:** update timschoenle/actions/.github/workflows/maintenance-auto-approve-renovate.yaml to vworkflows-maintenance-auto-approve-renovate-v1.4.27 ([#118](https://github.com/TimSchoenle/discord-alertmanager/issues/118)) ([99c775d](https://github.com/TimSchoenle/discord-alertmanager/commit/99c775d49476751da5452d4219cbe71d9349af0a))
+* **deps:** update timschoenle/actions/.github/workflows/maintenance-timed-auto-pr-approve.yaml to vworkflows-maintenance-timed-auto-pr-approve-v1.2.38 ([#108](https://github.com/TimSchoenle/discord-alertmanager/issues/108)) ([7bd93e0](https://github.com/TimSchoenle/discord-alertmanager/commit/7bd93e0f9cb9b7301ac8a7caa797eeca2bd83cc0))
+* **deps:** update timschoenle/actions/.github/workflows/maintenance-timed-auto-pr-approve.yaml to vworkflows-maintenance-timed-auto-pr-approve-v1.2.39 ([#119](https://github.com/TimSchoenle/discord-alertmanager/issues/119)) ([1d70099](https://github.com/TimSchoenle/discord-alertmanager/commit/1d7009920bc867612dd6cdcb9bbfee64d0e28a58))
+* **deps:** update timschoenle/actions/actions/common/commit-changes to vactions-common-commit-changes-v1.5.4 ([#109](https://github.com/TimSchoenle/discord-alertmanager/issues/109)) ([aef8ba2](https://github.com/TimSchoenle/discord-alertmanager/commit/aef8ba27b8fdb85734ac5b34e42d6b23fb6a6f15))
+* **deps:** update timschoenle/actions/actions/common/commit-changes to vactions-common-commit-changes-v1.5.5 ([#120](https://github.com/TimSchoenle/discord-alertmanager/issues/120)) ([7f13206](https://github.com/TimSchoenle/discord-alertmanager/commit/7f13206c3c9d09c98e53985dc13582db3bece223))
+* **deps:** update timschoenle/actions/actions/common/readme-variables to vactions-common-readme-variables-v1.2.3 ([#95](https://github.com/TimSchoenle/discord-alertmanager/issues/95)) ([9ddeae6](https://github.com/TimSchoenle/discord-alertmanager/commit/9ddeae6bd05fb8d120bd032b3c89e39f9816f42d))
+* **deps:** update timschoenle/actions/actions/common/readme-variables to vactions-common-readme-variables-v1.2.4 ([#110](https://github.com/TimSchoenle/discord-alertmanager/issues/110)) ([66ce604](https://github.com/TimSchoenle/discord-alertmanager/commit/66ce604da5f761b1b8135fb4d0c9d53518f7f0d3))
+* **deps:** update timschoenle/actions/actions/common/readme-variables to vactions-common-readme-variables-v1.2.5 ([#121](https://github.com/TimSchoenle/discord-alertmanager/issues/121)) ([e3dfb19](https://github.com/TimSchoenle/discord-alertmanager/commit/e3dfb196c1cffaa05d22846e6eb7f2b6d7c911f3))
+* **deps:** update timschoenle/actions/actions/common/render-template to vactions-common-render-template-v1.2.3 ([#96](https://github.com/TimSchoenle/discord-alertmanager/issues/96)) ([bbd4d8f](https://github.com/TimSchoenle/discord-alertmanager/commit/bbd4d8f16ca6a0f15094d456da6de7ce2bb20537))
+* **deps:** update timschoenle/actions/actions/common/render-template to vactions-common-render-template-v1.2.4 ([#111](https://github.com/TimSchoenle/discord-alertmanager/issues/111)) ([074086c](https://github.com/TimSchoenle/discord-alertmanager/commit/074086cce46ee1c730d9d29c8a1aada1aa9b9371))
+* **deps:** update timschoenle/actions/actions/common/render-template to vactions-common-render-template-v1.2.5 ([#122](https://github.com/TimSchoenle/discord-alertmanager/issues/122)) ([5ba4505](https://github.com/TimSchoenle/discord-alertmanager/commit/5ba450513aa0a3f96ccfaa084cacdc4f73c2ca64))
+* **deps:** update timschoenle/actions/actions/common/render-template-and-commit to vactions-common-render-template-and-commit-v1.1.11 ([#112](https://github.com/TimSchoenle/discord-alertmanager/issues/112)) ([e7e915f](https://github.com/TimSchoenle/discord-alertmanager/commit/e7e915f5dd84cd11fe1069b83e87d54961da9ad2))
+* **deps:** update timschoenle/actions/actions/common/render-template-and-commit to vactions-common-render-template-and-commit-v1.1.12 ([#123](https://github.com/TimSchoenle/discord-alertmanager/issues/123)) ([9b9392a](https://github.com/TimSchoenle/discord-alertmanager/commit/9b9392aabda3b03f4dffec2e4ffe4d9adfdf3572))
+* **deps:** update timschoenle/actions/actions/common/upsert-pr-comment to vactions-common-upsert-pr-comment-v1.1.3 ([#97](https://github.com/TimSchoenle/discord-alertmanager/issues/97)) ([02f2fd6](https://github.com/TimSchoenle/discord-alertmanager/commit/02f2fd6a815b0833128e547d663c0541dd36b5aa))
+* **deps:** update timschoenle/actions/actions/docker/image-check to vactions-docker-image-check-v1.1.1 ([#124](https://github.com/TimSchoenle/discord-alertmanager/issues/124)) ([ee2a53a](https://github.com/TimSchoenle/discord-alertmanager/commit/ee2a53accdac4fd670647898d4a1a823e8e43896))
+* **deps:** update timschoenle/actions/actions/docker/image-check-summary to vactions-docker-image-check-summary-v1.1.1 ([#125](https://github.com/TimSchoenle/discord-alertmanager/issues/125)) ([529599d](https://github.com/TimSchoenle/discord-alertmanager/commit/529599d5370a333e6f6a46bdbbf2eccddf3fdf5c))
+* **deps:** update timschoenle/actions/actions/helm/update-chart-version to vactions-helm-update-chart-version-v1.6.13 ([#98](https://github.com/TimSchoenle/discord-alertmanager/issues/98)) ([30d91fe](https://github.com/TimSchoenle/discord-alertmanager/commit/30d91fe024368c2456d1bd0e9ab7e69ee19fd9cc))
+* **deps:** update timschoenle/actions/actions/helm/update-chart-version to vactions-helm-update-chart-version-v1.6.14 ([#113](https://github.com/TimSchoenle/discord-alertmanager/issues/113)) ([eb83d46](https://github.com/TimSchoenle/discord-alertmanager/commit/eb83d46afe9ab1bc2b7c417cfffc06b1b5b0b68c))
+* **deps:** update timschoenle/actions/actions/helm/update-chart-version to vactions-helm-update-chart-version-v1.6.15 ([#126](https://github.com/TimSchoenle/discord-alertmanager/issues/126)) ([0185b41](https://github.com/TimSchoenle/discord-alertmanager/commit/0185b41cd1551c87993c411d26871dca36cf5de1))
+* **deps:** update timschoenle/actions/actions/rust/auto-format to vactions-rust-auto-format-v1.1.19 ([#114](https://github.com/TimSchoenle/discord-alertmanager/issues/114)) ([15c24ee](https://github.com/TimSchoenle/discord-alertmanager/commit/15c24ee2721d27a3303a17cf51f9ebb152372fd6))
+* **deps:** update timschoenle/actions/actions/rust/auto-format to vactions-rust-auto-format-v1.1.20 ([#127](https://github.com/TimSchoenle/discord-alertmanager/issues/127)) ([e4a27df](https://github.com/TimSchoenle/discord-alertmanager/commit/e4a27df468f6bf1d097fee2c6c0ba9338b45b445))
+* **deps:** update timschoenle/actions/actions/rust/clippy to vactions-rust-clippy-v1.1.12 ([#99](https://github.com/TimSchoenle/discord-alertmanager/issues/99)) ([c0358aa](https://github.com/TimSchoenle/discord-alertmanager/commit/c0358aa3257f607af243111f06aa49db51d50168))
+* **deps:** update timschoenle/actions/actions/rust/config-contract to vactions-rust-config-contract-v1.3.3 ([#100](https://github.com/TimSchoenle/discord-alertmanager/issues/100)) ([1d7079f](https://github.com/TimSchoenle/discord-alertmanager/commit/1d7079fe79969a4d5cf632d03b9851fcfd97b421))
+* **deps:** update timschoenle/actions/actions/rust/config-contract to vactions-rust-config-contract-v1.3.4 ([#115](https://github.com/TimSchoenle/discord-alertmanager/issues/115)) ([6ac84b2](https://github.com/TimSchoenle/discord-alertmanager/commit/6ac84b2637d6bece92690f4e9cfd5ed161d6ffaa))
+* **deps:** update timschoenle/actions/actions/rust/config-contract to vactions-rust-config-contract-v1.3.5 ([#128](https://github.com/TimSchoenle/discord-alertmanager/issues/128)) ([f5eb243](https://github.com/TimSchoenle/discord-alertmanager/commit/f5eb2438d5f9b8a4cd3bd8e2ab09262c6a058168))
+
 ## [0.8.0](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.7.2...v0.8.0) (2026-09-30)
 
 
