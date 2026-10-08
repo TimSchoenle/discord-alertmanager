@@ -24,6 +24,7 @@ dam-engine.workspace = true
 # on the crate that owns it.
 dam-store.workspace = true
 reqwest.workspace = true
+rustls.workspace = true
 secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true

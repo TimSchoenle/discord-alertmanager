@@ -80,8 +80,14 @@ impl AlertmanagerClient {
             ));
         }
 
+        // reqwest is built without a crypto provider of its own, so one has to be the process
+        // default before the client is built, or building it panics. `ring` is the provider every
+        // other TLS user in the tree links. Installing fails only when a default already exists,
+        // and that default is then the one to keep, so the result is deliberately ignored.
+        let _ = rustls::crypto::ring::default_provider().install_default();
+
         let mut builder = Client::builder()
-            .use_rustls_tls()
+            .tls_backend_rustls()
             .user_agent(USER_AGENT)
             .timeout(Duration::from_secs(config.timeout_secs))
             .connect_timeout(Duration::from_secs(config.connect_timeout_secs));
@@ -110,9 +116,7 @@ impl AlertmanagerClient {
                 )));
             }
 
-            for authority in authorities {
-                builder = builder.add_root_certificate(authority);
-            }
+            builder = builder.tls_certs_merge(authorities);
         }
 
         let http = builder

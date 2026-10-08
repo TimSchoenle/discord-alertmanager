@@ -65,9 +65,14 @@ serenity = { version = "0.12", default-features = false, features = [
 axum = "0.8"
 tower = "0.5"
 tower-http = { version = "0.7", default-features = false }
-# `>=0.11.22` in serenity's manifest unifies onto whatever this asks for; 0.12 is the newest line
-# serenity 0.12.5 was released against, so it stays here until serenity itself moves.
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+# serenity 0.12.5 asks for `>=0.11.22` but enables `reqwest/rustls-tls`, a feature 0.13 removed, so
+# serenity stays on reqwest 0.12 and this line is a second copy until serenity itself moves.
+# `rustls-no-provider` rather than `rustls`: the latter links `aws-lc-rs` as a second crypto
+# provider next to the `ring` everything else uses. The `ring` provider is installed explicitly by
+# the one client built on this, so the crypto stack does not depend on another crate's features.
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider"] }
+# Only to install the `ring` provider for reqwest 0.13; the version is the one reqwest links.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 
 # --- storage ----------------------------------------------------------------------------------
 sqlx = { version = "0.9", default-features = false, features = [
