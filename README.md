@@ -35,26 +35,26 @@ leaving the client. A silence goes to Alertmanager and stops every receiver, the
 An ignore is bot-local and stops only Discord, which is what "stop pinging #ops at 3am but keep
 paging" actually asks for.
 
-It has not been released. Every part of it is written and covered by tests — the listener, the
-Alertmanager client, the decision pipeline, both storage backends, the gateway and the commands —
-and it has not yet run anywhere long enough for that to mean what a version number would.
+Each release is a signed image on Docker Hub and GHCR and a Helm chart pinned to that image's
+digest. [CHANGELOG.md](CHANGELOG.md) lists what every release changed.
 
 ## Quick start
 
-Two things need supplying before it does anything: a bot token and somewhere to send its cards.
-Everything else has a default.
+The process stops at startup without a bot token and at least one Alertmanager endpoint. With
+`DAM_DISCORD__TOKEN` exported in the shell, this runs the current release:
 
 ```bash
-git clone https://github.com/TimSchoenle/discord-alertmanager
-cd discord-alertmanager
-
-# Every key the service reads, rendered from the Rust types that load it.
-cargo run -p discord-alertmanager-config --features config-schema \
-    --example config-schema -- --format markdown
+docker run --rm -p 9099:9099 \
+    --tmpfs /data:uid=1001,gid=1001 \
+    -e DAM_STORAGE__SQLITE__PATH=/data/discord-alertmanager.db \
+    -e DAM_DISCORD__TOKEN \
+    -e DAM_ALERTMANAGER__ENDPOINTS='["http://alertmanager:9093"]' \
+    ghcr.io/timschoenle/discord-alertmanager:v0.8.1
 ```
 
-The same generator writes `docs/config.md`, `docs/config.json` and `config.example.toml`.
-`cargo xtask config-docs` runs all three and is what CI compares against.
+The database lives in a tmpfs and goes with the container. The bot accepts webhooks and posts
+nothing until it has a route: declare one under `[[routes]]` in the configuration file, or name a
+role in `discord.capabilities.admin` and add one with `/route add`.
 
 ## Table of contents
 
@@ -75,9 +75,8 @@ The same generator writes `docs/config.md`, `docs/config.json` and `config.examp
   across its cluster and survives this bot being down. An ignore is a row in this bot's database
   and suppresses nothing but Discord. Every command and label says which one it is, because an
   operator who confuses them either wakes someone up or fails to.
-- The Alertmanager client takes a list of peers and tries them in order, so a high-availability
-  set has no primary to fail over from. A request that fails retries on a bounded backoff and then
-  gives up, which is what keeps a struggling Alertmanager from being hammered by its own client.
+- The Alertmanager client tries a list of peers in order, so a high-availability set has no
+  primary to fail over from. A failed request retries on a bounded backoff and then gives up.
 - A webhook can be lost to a restart, a partition, or a receiver that never sent `send_resolved`.
   A reconciler polls the alert set on a fixed cadence and compares it, so the push path is not the
   only way an alert state reaches the bot. The same poll feeds what `/readyz` reports.
@@ -85,24 +84,20 @@ The same generator writes `docs/config.md`, `docs/config.json` and `config.examp
   a lease, and the claim is the one query the two backends implement differently:
   `FOR UPDATE SKIP LOCKED` on PostgreSQL, `BEGIN IMMEDIATE` on SQLite.
 - One `Store` trait, one conformance suite, and both backends run it. A behaviour that holds on
-  SQLite and not on PostgreSQL is a failing test rather than a production surprise. Which backend
-  a process opens is a configuration key, not a build flag, so one binary answers both.
-- A route past its alert threshold stops posting one card per alert and rolls one card per window
-  instead, saying on the card why it did. Discord's per-channel limits are strict enough that an
-  unthrottled storm produces rate-limit responses rather than notifications, and a worse card in a
-  readable channel beats a better one nobody receives.
+  SQLite and not on PostgreSQL is a failing test rather than a production surprise.
+- A route past its alert threshold rolls one digest card per window instead of one card per
+  alert, and says on the card why. An unthrottled storm meets Discord's per-channel rate limits
+  and produces rejected requests, not notifications.
 - An alert that resolves and fires again re-arms its card: the post reopens, turns red and counts
-  the flap. Only one whose card has been resolved for longer than the regroup window gets a new
-  card, carrying a link to the old one, because reviving a card that scrolled away days ago tells
-  nobody anything.
+  the flap. Only a card resolved for longer than the regroup window is replaced by a new one, which
+  links back to it.
 - Labels whose values churn can be left out of an alert's identity with
   `engine.dedupe_ignore_labels`. A rollout that replaces the pod behind an alert then lands on the
   card already showing it instead of posting a duplicate, and the card resolves when the last
   alert behind it does.
 - A route can escalate. A card that stays firing and unacknowledged past its deadline mentions the
-  people the route names, once. The failure this exists for is the quiet one: the message arrived,
-  it scrolled past, and the channel is silent precisely because everybody assumes somebody else
-  took it.
+  people the route names, once: the alert that scrolled past because everybody assumed somebody
+  else took it.
 - A deadman watches the bot itself. When no webhook has arrived inside its window *and*
   Alertmanager cannot be reached, it says so in the administrative channel, as does a route that
   has stopped delivering because the bot lacks a permission in it.
@@ -158,17 +153,28 @@ Both backends are in every build, and `storage.backend` decides which one a proc
 pool is opened at boot rather than at the first query: a container that accepts webhooks and drops
 them is worse than one that will not start.
 
+The image is built `FROM scratch` and runs as UID and GID 1001 in a read-only `/app`. SQLite's
+default path is relative to `/app` and fails to open, so `storage.sqlite.path` has to point into a
+volume that UID can write: a host directory owned by 1001, or a pod volume with `fsGroup: 1001`.
+
 ## Usage
 
-Configuration is read at startup from the layers described under
-[Configuration](#configuration). With none of it supplied, the process still loads, installs
-logging and metrics, and then stops on the first thing it cannot do.
+The image reads `/app/config.toml` and, with `DAM_SECRETS_DIR` set, one file per secret key.
+Keeping the token out of the TOML file means the file can be committed:
 
 ```bash
-DAM_LOG_LEVEL=info \
-DAM_ALERTMANAGER__ENDPOINTS='["http://alertmanager:9093"]' \
-    cargo run -p discord-alertmanager
+mkdir -p secrets data && sudo chown 1001:1001 data
+printf '%s' "$DISCORD_BOT_TOKEN" > secrets/discord__token
+docker run -d --name discord-alertmanager -p 9099:9099 \
+    -v "$PWD/config.toml:/app/config.toml:ro" \
+    -v "$PWD/secrets:/run/secrets/dam:ro" \
+    -v "$PWD/data:/data" \
+    -e DAM_SECRETS_DIR=/run/secrets/dam \
+    ghcr.io/timschoenle/discord-alertmanager:v0.8.1
 ```
+
+`config.toml` carries `alertmanager.endpoints`, `storage.sqlite.path` set under `/data`, and the
+routes. [config.example.toml](config.example.toml) has every key commented.
 
 Point Alertmanager at the listener with an ordinary `webhook_config` receiver:
 
@@ -183,6 +189,9 @@ receivers:
             type: Bearer
             credentials_file: /etc/alertmanager/discord-token
 ```
+
+That file holds the value of `ingest.webhook_token`. With the key unset the listener accepts any
+request, which is defensible only where nothing outside the namespace can reach port 9099.
 
 ### Discord permissions
 
@@ -201,6 +210,24 @@ asks for `Mention Everyone`: an escalation pings only the roles and users its ro
 intent, which has to be turned on for the application in the Discord developer portal before the
 bot can use it.
 
+### Slash commands
+
+Each command checks the caller's roles against `discord.capabilities`, and every denial is written
+to the audit log. Discord's own command permissions only decide what the client shows.
+
+| Command | Subcommands | Capability |
+| --- | --- | --- |
+| `/alerts` | `list`, `show` / `ack`, `unack`, `assign` | view / operate |
+| `/ignore` | `list` / `add`, `remove` | view / operate |
+| `/silence` | `list` / `create`, `extend`, `expire` | view / silence |
+| `/subscribe` | `add`, `list`, `remove` | view |
+| `/status` | `alertmanager`, `bot` / `config` | view / admin |
+| `/route` | `add`, `list`, `remove`, `test` | admin |
+| `/cards` | `resync` | admin |
+
+`view` defaults to `@everyone` and the other three to nobody, so a fresh deployment can read its
+alerts and cannot silence a page.
+
 ### Forum route example
 
 A forum route needs `target.kind = "forum"`, `target.id` set to the forum channel, and
@@ -214,8 +241,6 @@ guild_id = 111111111111111111
 matchers = "namespace=~prod-.*"
 min_severity = "warning"
 priority = 10
-continue_to_next = false
-enabled = true
 
 [routes.target]
 kind = "forum"
@@ -224,20 +249,8 @@ id = 222222222222222222
 [routes.target.policy]
 title_template = "{{ labels.alertname }} — {{ labels.namespace }}"
 manage_tags = true
-severity_tags = true
 label_tags = ["namespace"]
 default_tag = "unclassified"
-archive_on_resolve = true
-lock_on_resolve = false
-pin_min_severity = "critical"
-max_pinned = 5
-bump_on_state_change = true
-
-[routes.target.policy.state_tags]
-firing = "firing"
-acked = "acked"
-silenced = "silenced"
-resolved = "resolved"
 
 [routes.mentions]
 roles = [333333333333333333]
@@ -249,12 +262,13 @@ roles = [333333333333333333]
 ```
 
 Each firing alert becomes its own post, titled from `title_template` and tagged with its
-severity and its `namespace` label's value. `manage_tags = true` lets the bot create `unclassified`
-and any not-yet-seen `namespace` value or `state_tags` the first time a post needs one, which is
-why this route also wants `Manage Channels` from [Discord permissions](#discord-permissions);
-leave it `false` to only ever apply tags that already exist. The post is pinned once it turns
-critical, archived the moment its alert resolves, and never locked, so a flap can still reopen it
-without `Manage Threads` on hand.
+severity, its state and its `namespace` label's value. `manage_tags = true` lets the bot create
+`unclassified`, a state tag, or a not-yet-seen `namespace` value the first time a post needs one,
+which is why this route also wants `Manage Channels` from
+[Discord permissions](#discord-permissions); leave it `false` to only ever apply tags that already
+exist. The policy keys left out keep their defaults: the post is pinned once it turns critical,
+archived the moment its alert resolves, and never locked, so a flap can still reopen it without
+`Manage Threads` on hand.
 
 ### The workspace
 
@@ -279,8 +293,8 @@ differs from the package name throughout, so both are listed.
 
 ## Configuration
 
-Four variables decide where configuration comes from. They are read straight from the environment,
-before there is a configuration to describe them, so no file can supply one.
+The loader's own variables decide where configuration comes from. They are read straight from the
+environment, before there is a configuration to describe them, so no file can supply one.
 
 | Variable | Role | Default | Purpose |
 | --- | --- | --- | --- |
@@ -291,7 +305,9 @@ Behind them are 80 keys. Each is spelled the same way in every layer: `__`
 separates nesting levels and case is folded, so `discord.token` is `DAM_DISCORD__TOKEN` as a
 variable and `discord__token` as a file name in the secrets directory.
 
-These are the ones with no default, which the process will not start without:
+These are the keys every deployment has to decide on. The process stops without a token or an
+endpoint. The other three default to SQLite in the working directory, a listener on every
+interface, and a webhook that takes no authentication:
 
 | TOML | Type | Environment | Default | Flags | Purpose |
 | --- | --- | --- | --- | --- | --- |
@@ -318,21 +334,14 @@ serves the Prometheus registry and is switched off with a single key.
 
 The `telemetry` section holds everything the process says about itself. `telemetry.log_level`
 takes `RUST_LOG` syntax and `telemetry.log_format` switches the subscriber to JSON for a log
-aggregator. Both describe the subscriber, so the subscriber is installed once the configuration
-has been read rather than before it; nothing is lost in that window, because loading reads files
-and environment variables and logs nothing. A configuration that will not load is the one thing
-that has to be reported without one, and a bootstrap subscriber reading `DAM_TELEMETRY__LOG_LEVEL`
-and `DAM_TELEMETRY__LOG_FORMAT` straight from the environment carries that report.
+aggregator. A configuration that will not load is reported by a bootstrap subscriber, which reads
+`DAM_TELEMETRY__LOG_LEVEL` and `DAM_TELEMETRY__LOG_FORMAT` straight from the environment.
 
-Sentry sits under the same section and is off until `telemetry.sentry.dsn` is set. It is linked
-into every build, so turning it on is a key rather than a rebuild. With a DSN it reports panics
-and, by default, anything logged at `error`, with the preceding `info` records attached as
-breadcrumbs; `event_level` and `breadcrumb_level` move both thresholds, and `telemetry.log_level`
-still gates what either can see. Tracing is separate and starts at zero: raising
-`traces_sample_rate` above `0.0` turns each webhook batch, outbox item, periodic pass and slash
-command into one trace, and only this workspace's own spans are traced. A DSN that does not parse
-stops the process, because reporting that quietly failed to start is discovered during the
-incident it was meant to describe.
+Sentry is linked into every build and off until `telemetry.sentry.dsn` is set. It then reports
+panics and anything logged at `error`, with the preceding `info` records as breadcrumbs.
+Tracing starts at zero: raising `traces_sample_rate` above `0.0` turns each webhook batch, outbox
+item, periodic pass and slash command into one trace. A DSN that does not parse stops the process,
+because reporting that quietly failed to start is discovered during the incident it was for.
 
 Five things run on their own clocks beside the listener: the reconciler, the silence sync, the
 lease janitor, the escalation sweep and the retention pruner. Each has its own interval key, a
