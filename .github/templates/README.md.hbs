@@ -14,7 +14,7 @@ Generated from .github/templates/README.md.hbs. Edit that file, not this one.
 
 CI renders it on every pull request and commits the result back to the branch. A push to
 `{{ repo.branch }}` whose README.md does not match its template fails the `readme` job in
-.github/workflows/docs.yml, which is a required check.
+.github/workflows/docs.yml.
 
 The payload is collected by TimSchoenle/actions/actions/common/readme-variables, which reads
 {{ repo.manifest }} and walks docs/, merged over the output of one command:
