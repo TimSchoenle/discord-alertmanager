@@ -22,6 +22,7 @@ Nothing in this comment may contain a mustache that is not a real reference.
 A Discord operator surface for Prometheus Alertmanager.
 
 [![Release](https://img.shields.io/github/v/release/TimSchoenle/discord-alertmanager?sort=semver)](https://github.com/TimSchoenle/discord-alertmanager/releases)
+[![Chart](https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Ftimschoenle.github.io%2Fhelm-charts%2Findex.yaml&query=%24.entries.discord-alertmanager%5B0%5D.version&label=chart)](https://github.com/TimSchoenle/helm-charts/tree/main/charts/discord-alertmanager)
 [![Build](https://img.shields.io/github/actions/workflow/status/TimSchoenle/discord-alertmanager/build.yaml?branch=main)](https://github.com/TimSchoenle/discord-alertmanager/actions/workflows/build.yaml)
 [![Licence](https://img.shields.io/github/license/TimSchoenle/discord-alertmanager)](LICENSE)
 [![MSRV](https://img.shields.io/badge/MSRV-1.94-blue)](Cargo.toml)
@@ -134,7 +135,15 @@ cosign verify ghcr.io/timschoenle/discord-alertmanager:v0.8.1 \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
-There is no chart yet.
+With Helm:
+
+```bash
+helm repo add timschoenle https://timschoenle.github.io/helm-charts
+helm install discord-alertmanager timschoenle/discord-alertmanager
+```
+
+The chart pins the image by digest. Its values are documented in
+[TimSchoenle/helm-charts](https://github.com/TimSchoenle/helm-charts/tree/main/charts/discord-alertmanager).
 
 From source:
 
