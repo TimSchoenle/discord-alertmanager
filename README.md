@@ -49,7 +49,7 @@ docker run --rm -p 9099:9099 \
     -e DAM_STORAGE__SQLITE__PATH=/data/discord-alertmanager.db \
     -e DAM_DISCORD__TOKEN \
     -e DAM_ALERTMANAGER__ENDPOINTS='["http://alertmanager:9093"]' \
-    ghcr.io/timschoenle/discord-alertmanager:v0.8.1
+    ghcr.io/timschoenle/discord-alertmanager:v0.9.0
 ```
 
 The database lives in a tmpfs and goes with the container. The bot accepts webhooks and posts
@@ -116,8 +116,8 @@ registries. Both receive the same manifests from the same build, so a digest rea
 resolves in the other.
 
 ```bash
-docker pull timschoenle/discord-alertmanager:v0.8.1
-docker pull ghcr.io/timschoenle/discord-alertmanager:v0.8.1
+docker pull timschoenle/discord-alertmanager:v0.9.0
+docker pull ghcr.io/timschoenle/discord-alertmanager:v0.9.0
 ```
 
 Pin the digest in production. Every published index is signed with cosign against a GitHub OIDC
@@ -125,7 +125,7 @@ identity, and the configuration contract is attached to that digest as an OCI re
 alongside it, so an image can be checked without trusting the tag it arrived under:
 
 ```bash
-cosign verify ghcr.io/timschoenle/discord-alertmanager:v0.8.1 \
+cosign verify ghcr.io/timschoenle/discord-alertmanager:v0.9.0 \
     --certificate-identity-regexp '^https://github.com/TimSchoenle/discord-alertmanager/\.github/workflows/' \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
@@ -145,7 +145,7 @@ From source:
 ```bash
 git clone https://github.com/TimSchoenle/discord-alertmanager
 cd discord-alertmanager
-git checkout v0.8.1
+git checkout v0.9.0
 cargo build --release
 ```
 
@@ -170,7 +170,7 @@ docker run -d --name discord-alertmanager -p 9099:9099 \
     -v "$PWD/secrets:/run/secrets/dam:ro" \
     -v "$PWD/data:/data" \
     -e DAM_SECRETS_DIR=/run/secrets/dam \
-    ghcr.io/timschoenle/discord-alertmanager:v0.8.1
+    ghcr.io/timschoenle/discord-alertmanager:v0.9.0
 ```
 
 `config.toml` carries `alertmanager.endpoints`, `storage.sqlite.path` set under `/data`, and the
