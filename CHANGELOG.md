@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.9.1](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.9.0...v0.9.1) (2026-10-10)
+
+
+### Documentation
+
+* **readme:** align the template with the README standard ([#145](https://github.com/TimSchoenle/discord-alertmanager/issues/145)) ([0bb0d65](https://github.com/TimSchoenle/discord-alertmanager/commit/0bb0d6578bb7bd591a8386416173e7a0cd6feda5))
+
+
+### CI
+
+* move CodeQL to the shared action ([#143](https://github.com/TimSchoenle/discord-alertmanager/issues/143)) ([67864e7](https://github.com/TimSchoenle/discord-alertmanager/commit/67864e750f1a5ef003849740f824acf9c3618970))
+
+
+### Miscellaneous
+
+* **deps:** update timschoenle/actions/.github/workflows/maintenance-auto-approve-renovate.yaml to vworkflows-maintenance-auto-approve-renovate-v1.4.28 ([#146](https://github.com/TimSchoenle/discord-alertmanager/issues/146)) ([9c94886](https://github.com/TimSchoenle/discord-alertmanager/commit/9c948862832a8c434d25ac7d958159a47ea9de83))
+* **deps:** update timschoenle/actions/.github/workflows/maintenance-timed-auto-pr-approve.yaml to vworkflows-maintenance-timed-auto-pr-approve-v1.2.40 ([#147](https://github.com/TimSchoenle/discord-alertmanager/issues/147)) ([5d38451](https://github.com/TimSchoenle/discord-alertmanager/commit/5d38451902a9b84142b16038dc8d9fac2adc32da))
+
 ## [0.9.0](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.8.1...v0.9.0) (2026-10-10)
 
 
