@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.9.0](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.8.1...v0.9.0) (2026-10-10)
+
+
+### Features
+
+* **discord:** add /debug merge to explain why two posts are separate ([#141](https://github.com/TimSchoenle/discord-alertmanager/issues/141)) ([11a8455](https://github.com/TimSchoenle/discord-alertmanager/commit/11a8455d5fee9ac118d32b0e7ec6d1558fc1f16b))
+
+
+### Documentation
+
+* **readme:** add a Helm chart badge and install section ([#137](https://github.com/TimSchoenle/discord-alertmanager/issues/137)) ([e44c902](https://github.com/TimSchoenle/discord-alertmanager/commit/e44c902fecfd12b1f05e0feb06dbe25d78e2bb46))
+* **readme:** rewrite the template for the released service ([#140](https://github.com/TimSchoenle/discord-alertmanager/issues/140)) ([cc29b5d](https://github.com/TimSchoenle/discord-alertmanager/commit/cc29b5d610660b7ac678c7d6bdf6dbd9e1ec4d8f))
+
+
+### Miscellaneous
+
+* **deps:** update all non-major action updates ([6a0f9de](https://github.com/TimSchoenle/discord-alertmanager/commit/6a0f9dea41301d25f4c8c66f39cdd04a34c4b8b0))
+* **deps:** update all non-major action updates ([#142](https://github.com/TimSchoenle/discord-alertmanager/issues/142)) ([6a0f9de](https://github.com/TimSchoenle/discord-alertmanager/commit/6a0f9dea41301d25f4c8c66f39cdd04a34c4b8b0))
+* **deps:** update rust crate reqwest to 0.13 ([#90](https://github.com/TimSchoenle/discord-alertmanager/issues/90)) ([1c1e497](https://github.com/TimSchoenle/discord-alertmanager/commit/1c1e497c6c951d5923197583344baa7fd717e894))
+* **deps:** update rust crate terrace-config to v0.15.1 ([#133](https://github.com/TimSchoenle/discord-alertmanager/issues/133)) ([bd707ed](https://github.com/TimSchoenle/discord-alertmanager/commit/bd707ed1e21fda03a8392a1f6bac010eb32c06f3))
+* **deps:** update step-security/harden-runner action to v2.22.0 ([#130](https://github.com/TimSchoenle/discord-alertmanager/issues/130)) ([84d797c](https://github.com/TimSchoenle/discord-alertmanager/commit/84d797c7e18f304ecbc1028a7eaf49a1d0ad0987))
+* **deps:** update timschoenle/actions/actions/common/commit-changes to vactions-common-commit-changes-v1.5.6 ([#131](https://github.com/TimSchoenle/discord-alertmanager/issues/131)) ([efea2d2](https://github.com/TimSchoenle/discord-alertmanager/commit/efea2d24cd73df4873e621008f73270d15dd8ed2))
+* **deps:** update timschoenle/actions/actions/common/readme-variables to vactions-common-readme-variables-v1.2.6 ([#132](https://github.com/TimSchoenle/discord-alertmanager/issues/132)) ([101e818](https://github.com/TimSchoenle/discord-alertmanager/commit/101e818488c16a7dcb8635350c96935edd381d76))
+* **deps:** update timschoenle/actions/actions/common/render-template to vactions-common-render-template-v1.2.6 ([#134](https://github.com/TimSchoenle/discord-alertmanager/issues/134)) ([76278b7](https://github.com/TimSchoenle/discord-alertmanager/commit/76278b7e57df6541e4b485dca7255e3266f3a686))
+* **deps:** update timschoenle/actions/actions/common/render-template-and-commit to vactions-common-render-template-and-commit-v1.1.13 ([#135](https://github.com/TimSchoenle/discord-alertmanager/issues/135)) ([4db746e](https://github.com/TimSchoenle/discord-alertmanager/commit/4db746eba7b60e3b71cfc3ca6f53256f9fcceeac))
+* **deps:** update timschoenle/actions/actions/docker/image-check to vactions-docker-image-check-v1.1.2 ([#136](https://github.com/TimSchoenle/discord-alertmanager/issues/136)) ([2d229d8](https://github.com/TimSchoenle/discord-alertmanager/commit/2d229d8a269fad9fc0a342b1e96d928fd32d02a9))
+* **deps:** update timschoenle/actions/actions/docker/image-check-summary to vactions-docker-image-check-summary-v1.1.2 ([#138](https://github.com/TimSchoenle/discord-alertmanager/issues/138)) ([77a759d](https://github.com/TimSchoenle/discord-alertmanager/commit/77a759dac1c7d33ceefa9ff9a4cfa9110c11e1a6))
+* **deps:** update timschoenle/actions/actions/rust/config-contract to vactions-rust-config-contract-v1.3.6 ([#139](https://github.com/TimSchoenle/discord-alertmanager/issues/139)) ([672fa23](https://github.com/TimSchoenle/discord-alertmanager/commit/672fa234c6887615ab201c051fc96f41d5cf05e8))
+
 ## [0.8.1](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.8.0...v0.8.1) (2026-10-07)
 
 
