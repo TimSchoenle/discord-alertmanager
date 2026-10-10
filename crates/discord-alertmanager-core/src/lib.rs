@@ -29,7 +29,7 @@ mod error;
 
 pub use alert::{
     Alert, AlertDelta, AlertStatus, AmState, Annotations, DedupeKey, EventKind, EventSource,
-    SEVERITY_LABEL, Severity,
+    KeyScope, Retirement, SEVERITY_LABEL, Severity,
 };
 pub use error::CoreError;
 pub use identity::IdentityPolicy;

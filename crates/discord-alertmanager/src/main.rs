@@ -145,6 +145,18 @@ async fn run() -> Result<()> {
         Arc::clone(&renderer),
     ));
 
+    let decisions = DecisionSettings {
+        debounce: chrono::Duration::seconds(
+            i64::try_from(config.render.debounce_secs).unwrap_or(3),
+        ),
+        digest_window: storm_window,
+        archive_after_minutes: config.render.thread_archive_after_minutes,
+        regroup_window: chrono::Duration::seconds(
+            i64::try_from(config.engine.regroup_window_secs).unwrap_or(i64::MAX),
+        ),
+        identity: IdentityPolicy::new(config.engine.dedupe_ignore_labels.iter().cloned()),
+    };
+
     let lease = Duration::from_secs(config.engine.outbox_lease_secs.max(1));
     let service = Arc::new(service::PipelineService::new(
         Arc::clone(&store),
@@ -157,17 +169,7 @@ async fn run() -> Result<()> {
             storm_window,
         ),
         Arc::clone(&admin),
-        DecisionSettings {
-            debounce: chrono::Duration::seconds(
-                i64::try_from(config.render.debounce_secs).unwrap_or(3),
-            ),
-            digest_window: storm_window,
-            archive_after_minutes: config.render.thread_archive_after_minutes,
-            regroup_window: chrono::Duration::seconds(
-                i64::try_from(config.engine.regroup_window_secs).unwrap_or(i64::MAX),
-            ),
-            identity: IdentityPolicy::new(config.engine.dedupe_ignore_labels.iter().cloned()),
-        },
+        decisions.clone(),
         retention(&config),
         lease,
         chrono::Duration::seconds(i64::try_from(config.engine.deadman_window_secs).unwrap_or(1800)),
@@ -231,6 +233,7 @@ async fn run() -> Result<()> {
         Arc::clone(&routing),
         Arc::clone(&renderer),
         route_defaults(&config),
+        decisions,
         service.gateway_flag(),
     );
 

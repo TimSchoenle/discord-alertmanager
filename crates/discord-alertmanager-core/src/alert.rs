@@ -547,6 +547,53 @@ impl DedupeKey {
         &self.0
     }
 
+    /// Why a card no longer holds this key, when it has given it up.
+    ///
+    /// The store retires a key rather than deleting the card that held it, by prefixing it with
+    /// `superseded:<id>:` when a replacement takes it and `orphaned:<id>:` when the message it
+    /// named was deleted.
+    #[must_use]
+    pub fn retirement(&self) -> Option<Retirement> {
+        if self.0.starts_with(SUPERSEDED_PREFIX) {
+            Some(Retirement::Superseded)
+        } else if self.0.starts_with(ORPHANED_PREFIX) {
+            Some(Retirement::Orphaned)
+        } else {
+            None
+        }
+    }
+
+    /// What the key covers, read through any retirement prefix.
+    ///
+    /// The inverse of the three constructors. A retired key reports the scope it had while it was
+    /// live, which is the scope its card was created for.
+    #[must_use]
+    pub fn scope(&self) -> KeyScope<'_> {
+        let live = [SUPERSEDED_PREFIX, ORPHANED_PREFIX]
+            .iter()
+            .find_map(|prefix| self.0.strip_prefix(prefix))
+            .and_then(|rest| rest.split_once(':').map(|(_, key)| key))
+            .unwrap_or(&self.0);
+
+        if let Some(identity) = live.strip_prefix("a:") {
+            return KeyScope::Alert(identity);
+        }
+
+        if let Some(group) = live.strip_prefix("g:") {
+            return KeyScope::Group(group);
+        }
+
+        live.strip_prefix("d:")
+            .and_then(|rest| rest.split_once(':'))
+            .and_then(|(route, window)| {
+                Some(KeyScope::Digest {
+                    route_id: route.parse().ok()?,
+                    window: DateTime::from_timestamp(window.parse().ok()?, 0)?,
+                })
+            })
+            .unwrap_or(KeyScope::Unrecognised)
+    }
+
     /// The worker lane this key belongs to.
     ///
     /// Hashing the key into one of `lanes` lanes puts every piece of work for one alert on one
@@ -562,6 +609,44 @@ impl DedupeKey {
 
         u16::try_from(hash % u64::from(lanes)).unwrap_or(0)
     }
+}
+
+/// The prefix a key carries once a replacement card has taken it.
+const SUPERSEDED_PREFIX: &str = "superseded:";
+
+/// The prefix a key carries once the message its card named was deleted.
+const ORPHANED_PREFIX: &str = "orphaned:";
+
+/// What one [`DedupeKey`] covers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyScope<'a> {
+    /// One alert identity, from a per-alert route.
+    Alert(&'a str),
+
+    /// One Alertmanager group, from a per-group route.
+    Group(&'a str),
+
+    /// One digest window on one route.
+    Digest {
+        /// The route rolling the digest.
+        route_id: i64,
+
+        /// When the window opened.
+        window: DateTime<Utc>,
+    },
+
+    /// A key none of the constructors produces.
+    Unrecognised,
+}
+
+/// Why a card gave its key up.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Retirement {
+    /// A replacement card took the key after the alert re-fired past the regroup window.
+    Superseded,
+
+    /// The card's message was deleted, and the key was freed for a fresh card.
+    Orphaned,
 }
 
 impl fmt::Display for DedupeKey {
@@ -655,6 +740,33 @@ mod tests {
         assert_ne!(
             DedupeKey::per_alert(&fingerprint),
             DedupeKey::per_group(&group)
+        );
+    }
+
+    #[test]
+    fn a_key_reports_its_scope_through_a_retirement() {
+        let identity = Fingerprint::new("abcdef").expect("hex is a fingerprint");
+        let live = DedupeKey::per_alert(&identity);
+        let retired = DedupeKey::from_stored(format!("superseded:42:{live}"));
+        let orphaned = DedupeKey::from_stored("orphaned:7:g:{}:{x=\"y\"}");
+        let window = DateTime::from_timestamp(1_700_000_000, 0).expect("the timestamp is valid");
+
+        assert_eq!(live.scope(), KeyScope::Alert("abcdef"));
+        assert_eq!(live.retirement(), None);
+        assert_eq!(retired.scope(), KeyScope::Alert("abcdef"));
+        assert_eq!(retired.retirement(), Some(Retirement::Superseded));
+        assert_eq!(orphaned.scope(), KeyScope::Group("{}:{x=\"y\"}"));
+        assert_eq!(orphaned.retirement(), Some(Retirement::Orphaned));
+        assert_eq!(
+            DedupeKey::digest(3, window).scope(),
+            KeyScope::Digest {
+                route_id: 3,
+                window
+            }
+        );
+        assert_eq!(
+            DedupeKey::from_stored("x:1").scope(),
+            KeyScope::Unrecognised
         );
     }
 

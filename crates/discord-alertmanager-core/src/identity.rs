@@ -49,6 +49,12 @@ impl IdentityPolicy {
         self.ignored.is_empty()
     }
 
+    /// Whether the policy leaves the label `name` out of an identity.
+    #[must_use]
+    pub fn ignores(&self, name: &str) -> bool {
+        self.ignored.contains(name)
+    }
+
     /// The identity of one alert.
     #[must_use]
     pub fn identity(&self, alert: &Alert) -> Fingerprint {

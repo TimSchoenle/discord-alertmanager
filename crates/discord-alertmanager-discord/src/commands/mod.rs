@@ -17,6 +17,7 @@
 
 mod alerts;
 mod cards;
+mod debug;
 mod ignores;
 mod routes;
 mod silences;
@@ -252,6 +253,7 @@ pub(crate) fn registry() -> Vec<Arc<dyn SlashCommand>> {
         Arc::new(subscriptions::Subscriptions),
         Arc::new(status::Status),
         Arc::new(cards::Cards),
+        Arc::new(debug::DebugCommand),
     ]
 }
 
