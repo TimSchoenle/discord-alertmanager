@@ -1,6 +1,6 @@
 //! Why two cards are two cards.
 //!
-//! The reverse of [`crate::decide`]: given two cards an operator expected to be one, it names the
+//! The reverse of [`crate::decide()`]: given two cards an operator expected to be one, it names the
 //! input that sent them apart. Pure for the same reason the decision is, and kept beside it so a
 //! change to what "the same card" means has to be made in both places within one crate.
 //!
