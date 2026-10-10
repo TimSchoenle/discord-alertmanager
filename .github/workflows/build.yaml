@@ -428,7 +428,7 @@ jobs:
       # from overwriting each other's results. `comment: summary` because a leg can only own its
       # own comment: each one uploads a fragment, and `image-size-report` below posts one table.
       - name: Check Docker image
-        uses: TimSchoenle/actions/actions/docker/image-check@c4068f4412c52bcf92d15f9bb255d37b2eafd0b7 # tag=actions-docker-image-check-v1.1.1
+        uses: TimSchoenle/actions/actions/docker/image-check@1e89d598e447ab05d36edc9e9d18e8771adf6426 # tag=actions-docker-image-check-v1.1.2
         with:
           image: discord-alertmanager:test
           platform: ${{ matrix.platform }}
