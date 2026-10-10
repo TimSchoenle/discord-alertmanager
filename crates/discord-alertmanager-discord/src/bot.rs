@@ -27,7 +27,8 @@ use chrono::Utc;
 use dam_config::Discord as DiscordConfig;
 use dam_core::Severity;
 use dam_engine::{
-    AlertmanagerApi, DiscordSink, RouteDefaults, SharedRouting, TagSpec, load_snapshot,
+    AlertmanagerApi, DecisionSettings, DiscordSink, RouteDefaults, SharedRouting, TagSpec,
+    load_snapshot,
 };
 use dam_store::{
     AuditEntry, ChannelId, Effect, ForumPolicy, NewOutboxItem, Notification, RouteTarget, Store,
@@ -73,6 +74,12 @@ pub struct BotContext {
     /// kinds of route would archive their threads on different schedules for no reason anybody
     /// could see.
     pub(crate) route_defaults: RouteDefaults,
+
+    /// The settings every decision is made under.
+    ///
+    /// Read by `/debug merge`, which explains a decision after the fact and has to apply the same
+    /// identity policy and windows the pipeline applied, or it would explain a different one.
+    pub(crate) decisions: DecisionSettings,
 
     /// Who may do what.
     pub(crate) capabilities: CapabilityMap,
@@ -183,6 +190,7 @@ impl Bot {
         routing: Arc<SharedRouting>,
         renderer: Arc<Renderer>,
         route_defaults: RouteDefaults,
+        decisions: DecisionSettings,
         connected: Arc<AtomicBool>,
     ) -> Self {
         // `GUILDS` for the channel and role cache authorisation reads, `GUILD_MESSAGES` for the
@@ -203,6 +211,7 @@ impl Bot {
                 routing,
                 renderer,
                 route_defaults,
+                decisions,
                 capabilities: CapabilityMap::new(&config.capabilities),
                 commands: commands::registry(),
                 dev_guild: config.dev_guild_id.map(GuildId::new),

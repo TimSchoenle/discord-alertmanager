@@ -1486,6 +1486,25 @@ async fn only_the_first_reply_changes_the_card(store: &dyn Store) {
         .await
         .expect("the completion succeeds");
 
+    let found = store
+        .notification_for_thread(ChannelId::new(901))
+        .await
+        .expect("the read succeeds")
+        .expect("the thread names the card");
+
+    assert_eq!(found.id, id);
+    assert_eq!(
+        found.reply_count, 0,
+        "looking a card up by its thread is not a reply"
+    );
+    assert!(
+        store
+            .notification_for_thread(ChannelId::new(999_998))
+            .await
+            .expect("an unknown thread is not an error")
+            .is_none()
+    );
+
     let reply = ThreadReply {
         thread_id: ChannelId::new(901),
         author_id: UserId::new(3),

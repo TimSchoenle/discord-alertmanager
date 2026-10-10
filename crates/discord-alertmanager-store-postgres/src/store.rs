@@ -693,6 +693,26 @@ impl Store for PostgresStore {
         row.as_ref().map(notification).transpose()
     }
 
+    async fn notification_for_thread(
+        &self,
+        thread: ChannelId,
+    ) -> Result<Option<Notification>, StoreError> {
+        let sql = const_format(&[
+            "SELECT ",
+            NOTIFICATION_COLUMNS,
+            " FROM notifications WHERE thread_id = ",
+        ]);
+
+        let row = QueryBuilder::<Postgres>::new(sql)
+            .push_bind(thread.to_db())
+            .build()
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(backend)?;
+
+        row.as_ref().map(notification).transpose()
+    }
+
     async fn notification(&self, id: NotificationId) -> Result<Option<Notification>, StoreError> {
         let sql = const_format(&[
             "SELECT ",

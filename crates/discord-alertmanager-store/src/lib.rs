@@ -268,6 +268,19 @@ pub trait Store: Send + Sync + 'static {
         channel: ChannelId,
     ) -> Result<Option<Notification>, StoreError>;
 
+    /// The card whose thread, or whose forum post, is `thread`.
+    ///
+    /// A read with no side effect, unlike [`Store::record_reply`], which finds a card the same way
+    /// and counts the reply against it.
+    ///
+    /// # Errors
+    ///
+    /// As [`Store::ingest_batch`].
+    async fn notification_for_thread(
+        &self,
+        thread: ChannelId,
+    ) -> Result<Option<Notification>, StoreError>;
+
     /// One card by its surrogate key, which is what a button carries.
     ///
     /// # Errors
