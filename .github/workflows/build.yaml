@@ -4,10 +4,11 @@ name: Build
 # to `main` so that a merge queue skipped nothing.
 #
 # Three kinds of job live here. The first kind compiles and runs the workspace — `check`, `test`,
-# `clippy`, `doc`, `msrv`. The second kind reads a committed artefact and regenerates it —
-# `config-docs` and `config-contract` — so a generated file cannot drift from the types that
-# produce it. The third kind builds the image the release will push, on both architectures, and
-# checks that what came out describes the configuration the source tree declares.
+# `clippy`, `doc`, `msrv`, and `coverage`, which also uploads to Codecov. The second kind reads a
+# committed artefact and regenerates it — `config-docs` and `config-contract` — so a generated file
+# cannot drift from the types that produce it. The third kind builds the image the release will
+# push, on both architectures, and checks that what came out describes the configuration the
+# source tree declares.
 
 on:
   push:
@@ -81,19 +82,28 @@ jobs:
         with:
           clippy_arguments: '--workspace --all-targets --all-features'
 
+  # The `test` set again, instrumented, with the result uploaded to Codecov. It stays beside `test`
+  # rather than replacing it, so a Codecov outage fails this job and leaves the test verdict
+  # standing. The upload authenticates with this job's OIDC token, so the repository holds no
+  # Codecov secret. `.github/codecov.yml` decides what the Codecov statuses check.
   coverage:
     name: Coverage
-    environment:
-      name: ci
-      deployment: false
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read # Required to checkout the code
+      id-token: write # Required to authenticate the Codecov upload with OIDC
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
         with:
           egress-policy: audit
+
+      - name: Run Coverage
+        uses: TimSchoenle/actions/actions/rust/coverage-codecov@3dc15ee0f2fbacdc1741a20bc0e8ad1011b989c7 # tag=actions-rust-coverage-codecov-v2.0.0
+        with:
+          test_arguments: '--workspace --all-features'
+          flags: rust
 
   fmt:
     name: Auto Format
