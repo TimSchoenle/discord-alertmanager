@@ -24,6 +24,7 @@ A Discord operator surface for Prometheus Alertmanager.
 [![Release](https://img.shields.io/github/v/release/TimSchoenle/discord-alertmanager?sort=semver)](https://github.com/TimSchoenle/discord-alertmanager/releases)
 [![Chart](https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Ftimschoenle.github.io%2Fhelm-charts%2Findex.yaml&query=%24.entries.discord-alertmanager%5B0%5D.version&label=chart)](https://github.com/TimSchoenle/helm-charts/tree/main/charts/discord-alertmanager)
 [![Build](https://img.shields.io/github/actions/workflow/status/TimSchoenle/discord-alertmanager/build.yaml?branch=main)](https://github.com/TimSchoenle/discord-alertmanager/actions/workflows/build.yaml)
+[![Coverage](https://codecov.io/gh/TimSchoenle/discord-alertmanager/graph/badge.svg)](https://codecov.io/gh/TimSchoenle/discord-alertmanager)
 [![Licence](https://img.shields.io/github/license/TimSchoenle/discord-alertmanager)](LICENSE)
 [![MSRV](https://img.shields.io/badge/MSRV-1.94-blue)](Cargo.toml)
 
