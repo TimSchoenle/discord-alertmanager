@@ -14,6 +14,13 @@
       "enabled": false
     },
     {
+      "description": "testcontainers-modules requires the same testcontainers minor it was released against. 0.15 needs 0.27, so 0.28 fails to resolve. Lift this once a testcontainers-modules release depends on testcontainers 0.28, and bump both in one pull request.",
+      "matchPackageNames": [
+        "testcontainers"
+      ],
+      "allowedVersions": "<0.28"
+    },
+    {
       "description": "cargo-chef stays enabled, unlike in the other repositories of this estate. They track the floating latest-rust-alpine tag, which has nothing to bump; this Dockerfile pins it by digest, so leaving it disabled would freeze the build toolchain image at whatever digest was current the day it was written.",
       "matchPackageNames": [
         "lukemathwalker/cargo-chef"
