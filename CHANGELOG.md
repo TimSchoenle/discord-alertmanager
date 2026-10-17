@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.9.1](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.9.0...v0.9.1) (2026-10-17)
+
+
+### Bug Fixes
+
+* **deps:** hold testcontainers at 0.27 until testcontainers-modules supports 0.28 ([#158](https://github.com/TimSchoenle/discord-alertmanager/issues/158)) ([f8dc043](https://github.com/TimSchoenle/discord-alertmanager/commit/f8dc043010db8be229fe016421d7cfc167efb8b7))
+
+
+### Dependencies
+
+* **deps:** update rust crate proptest to v1.12.0 ([#164](https://github.com/TimSchoenle/discord-alertmanager/issues/164)) ([9401d2f](https://github.com/TimSchoenle/discord-alertmanager/commit/9401d2fe9ec425988819c28b402b527d834e2469))
+* **deps:** update rust crate rustls to v0.23.46 [security] ([#165](https://github.com/TimSchoenle/discord-alertmanager/issues/165)) ([2b6a177](https://github.com/TimSchoenle/discord-alertmanager/commit/2b6a177243c979074a0bbaa62b9867a05d880009))
+* **deps:** update rust crate serde_json to v1.0.152 ([#163](https://github.com/TimSchoenle/discord-alertmanager/issues/163)) ([158f4e6](https://github.com/TimSchoenle/discord-alertmanager/commit/158f4e6c2e738e75ec6fa73ba2470d652222d51d))
+* **deps:** update rust crate serde_json to v1.0.154 ([#166](https://github.com/TimSchoenle/discord-alertmanager/issues/166)) ([1a0a17d](https://github.com/TimSchoenle/discord-alertmanager/commit/1a0a17d9ee3e7d77e7d50827f4d17696089ebd70))
+* **deps:** update rust crate testcontainers to 0.28 ([#91](https://github.com/TimSchoenle/discord-alertmanager/issues/91)) ([226ff12](https://github.com/TimSchoenle/discord-alertmanager/commit/226ff12b7cfa419d9199d8e88ddf7d951fd341c1))
+* **deps:** update rust crate tokio to v1.53.3 ([#169](https://github.com/TimSchoenle/discord-alertmanager/issues/169)) ([509c595](https://github.com/TimSchoenle/discord-alertmanager/commit/509c595782a697a248ef4093cff276640735db78))
+* **deps:** update rust crate tokio-util to v0.7.20 ([#159](https://github.com/TimSchoenle/discord-alertmanager/issues/159)) ([22e9044](https://github.com/TimSchoenle/discord-alertmanager/commit/22e90444b4f502d2d0e9baa11c21da12f29ff657))
+
 ## [0.9.0](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.8.1...v0.9.0) (2026-10-10)
 
 
