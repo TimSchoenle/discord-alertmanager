@@ -12,6 +12,7 @@
 
 use chrono::{DateTime, Utc};
 use dam_core::Alert;
+use minijinja::value::Serde;
 use minijinja::{Environment, UndefinedBehavior, Value};
 use serde_json::json;
 
@@ -27,7 +28,8 @@ pub fn environment() -> Environment<'static> {
     // Strict, so a missing label is a render error the caller turns into a dropped button rather
     // than an empty substitution nobody notices until the link goes nowhere.
     env.set_undefined_behavior(UndefinedBehavior::Strict);
-    env.set_keep_trailing_newline(false);
+    // A template's trailing newline is stripped, which is minijinja's default and is pinned by a
+    // test below: a newline carried into a URL or a forum title is a value nobody wrote.
     env.add_filter("urlencode", urlencode);
     env.add_filter("mdescape", mdescape);
 
@@ -130,7 +132,7 @@ pub fn context(
         root["window"] = json!({ "from_ms": from_ms, "to_ms": to_ms });
     }
 
-    Value::from_serialize(&root)
+    Value::from(Serde(&root))
 }
 
 #[cfg(test)]
@@ -157,15 +159,29 @@ mod tests {
 
         let rendered = env.render_str(
             "{{ labels.absent }}",
-            Value::from_serialize(json!({
+            Value::from(Serde(json!({
                 "labels": { "present": "1" },
-            })),
+            }))),
         );
 
         assert!(
             rendered.is_err(),
             "strict undefined behaviour is what turns a typo into a dropped button rather than a \
              link that goes nowhere"
+        );
+    }
+
+    #[test]
+    fn a_trailing_newline_in_a_template_is_not_rendered() {
+        let env = environment();
+
+        let rendered = env
+            .render_str("https://example.invalid/\n", Value::UNDEFINED)
+            .expect("a template without substitutions renders");
+
+        assert_eq!(
+            rendered, "https://example.invalid/",
+            "a newline at the end of a configured template must not reach a URL or a forum title"
         );
     }
 }
