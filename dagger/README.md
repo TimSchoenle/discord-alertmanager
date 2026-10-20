@@ -1,9 +1,12 @@
-# Dagger pipeline (proof of concept)
+# Dagger pipeline
 
-A Dagger module that runs this repository's test suite and builds its container image as typed
-functions, the same way on a laptop and on a GitHub runner. `.github/workflows/ci.yml` runs it
-next to `build.yaml` on every pull request and push to `main`, so the two can be compared run for
-run. It gates nothing and publishes nothing.
+A Dagger module that builds this repository's container image, and can run its test suite, as
+typed functions that behave the same on a laptop and on a GitHub runner.
+
+CI builds the image through it: the `docker-build-test` job in `.github/workflows/build.yaml`, on
+a native runner per architecture. The tests stay on the `Test` job, where rust-cache on the runner
+is faster than a containerised build. Releases are still built from the `Dockerfile` by
+`release-please.yaml`; see [Before moving releases](#before-moving-releases).
 
 ## Layout
 
@@ -13,8 +16,8 @@ run. It gates nothing and publishes nothing.
 | `dagger/src/index.ts` | The `DiscordAlertmanager` object and its functions. |
 | `dagger/src/config.ts` | Pinned versions, image layout, and pure parsing helpers. |
 | `dagger/src/platform.ts` | Per-architecture build parameters (musl triple, UPX). |
-| `.github/workflows/ci.yml` | The CI job, including the cargo cache carried between runs. |
-| `.github/scripts/dagger-cache.sh` | Times each phase, enforces the archive size limit, writes the report. |
+| `.github/workflows/build.yaml` | The `docker-build-test` job, including the cargo cache carried between runs. |
+| `.github/scripts/dagger-cache.sh` | Enforces the cache archive size limit before a save. |
 
 The module uses the TypeScript SDK. The Rust SDK (`dagger-sdk` on crates.io) is a client library
 only: it can drive an engine from a Rust program, but it cannot define a module, so `dagger call`
@@ -51,9 +54,9 @@ Steps that do run reuse three kinds of cache volume:
   directories lives in `CARGO_HOME` itself. Mounting only the subdirectories gives each container
   its own lock, and two concurrent builds then corrupt the shared checkout. That is the failure the
   Dockerfile's `contract-builder` stage avoids with separate cache ids.
-- One target directory per toolchain, libc and architecture, mounted at `/app/target`. The test
-  build has no debug info (`CARGO_PROFILE_DEV_DEBUG=0`), which is most of a debug target
-  directory's size; a failing test still reports its file and line.
+- One target directory per toolchain, purpose (test, release, contract) and architecture, mounted
+  at `/app/target`. Debug builds have no debug info (`CARGO_PROFILE_DEV_DEBUG=0`), which is most
+  of a debug target directory's size; a failing test still reports its file and line.
 - `/var/lib/docker` of the test sidecar, so the PostgreSQL image is pulled once.
 
 Dependencies are compiled first, from a `cargo chef` recipe. The recipe depends only on the
@@ -65,8 +68,9 @@ workspace crates compile.
 - **Labels come from the generator at build time.** The Dockerfile pastes the generator's output
   into `LABEL` lines and CI checks that the paste is still accurate. The module applies the
   labels from the same generator run that produces `contract.json`, so the two cannot disagree.
-- **Tests run on `rust:<channel>-trixie`** (glibc), like the `Test` job on Ubuntu. The release
-  binary is built on `rust:<channel>-alpine` (musl), like the Dockerfile.
+- **`test` runs on `rust:<channel>-trixie`** (glibc), like the `Test` job on Ubuntu. The release
+  binary and the contract generator are built on `rust:<channel>-alpine` (musl), so an image
+  build pulls one toolchain image.
 - **The toolchain comes from `rust-toolchain.toml`.** The builder image tag is read from the file,
   so a toolchain bump moves the pipeline without a second edit.
 - **No Sentry debug-file upload.** The Dockerfile's opt-in upload is release-only; adding it here
@@ -133,37 +137,49 @@ seconds. `dagger call -i …` opens a terminal in the failing container when a s
 
 Every run starts a fresh engine, and only cargo's caches cross from one run to the next:
 
-1. `actions/cache` restores the newest archive for this lockfile and toolchain, or else the newest
-   at all.
+1. `actions/cache` restores the newest archive for this architecture, lockfile and toolchain, or
+   else the newest for the architecture.
 2. `dagger call cache-restore` unpacks it into the new engine's cargo volumes.
-3. `test`, `docker` (exported as a tarball) and `smoke-test` run.
-4. `dagger call cache-archive` packs the volumes again, and the archive is saved under a new key
-   unless it exceeds `CACHE_ARCHIVE_LIMIT_BYTES`.
+3. `dagger call docker … export-image` builds the image and loads it into the runner's Docker
+   daemon, where the existing checks (labels, contract, start-up, Trivy, size) read it.
+4. When nothing for this lockfile and toolchain was restored, `dagger call cache-archive` packs
+   the volumes again and the archive is saved under a new key, unless it exceeds
+   `CACHE_ARCHIVE_LIMIT_BYTES`.
 
 The archive holds `CARGO_HOME` without unpacked crate sources or git working copies (cargo
-recreates both from the downloads it keeps) and the two target directories. It leaves out base
-images and Dagger's own step cache. Images are pulled again in seconds and were most of the 13 GiB
-the first version of this workflow archived by saving the whole engine. Dagger's step skipping
-therefore works within a run but not across runs; cargo's reuse of compiled dependencies does.
+recreates both from the downloads it keeps) and the release and contract target directories. It
+leaves out base images and Dagger's own step cache: images are pulled again in seconds, and the
+whole engine state was 13 GiB. Dagger's step skipping therefore works within a run but not across
+runs; cargo's reuse of compiled dependencies does.
 
-Pushes to `main` and same-repository pull requests save. A pull request's entry is readable only
-by that pull request, so `main` never restores what a branch built. The job summary lists each
-phase's duration and the archive size.
+Saving only when the lockfile or toolchain changed keeps it to one entry per dependency change,
+architecture and scope. A pull request's entry is readable only by that pull request, so `main`
+never restores what a branch built.
 
-## What to watch
+## Pinned versions
 
-- **The archive cost.** Download, restore and archive are separate rows in the job summary. If
-  together they approach what the cold build costs, the cache is not paying for itself.
-- **Cache eviction.** Every run that saves adds one archive to the repository's 10 GB quota, which
-  `build.yaml`'s buildx cache shares. GitHub evicts least recently used entries first.
-  `CACHE_ARCHIVE_LIMIT_BYTES` caps one entry; it does not cap how many there are.
+Renovate maintains every pin through the custom managers in `renovate.json`:
 
-## Before adopting
+| Pin | Where | How Renovate finds it |
+| --- | --- | --- |
+| Dagger CLI and engine | `DAGGER_VERSION` in `build.yaml`, `engineVersion` in `dagger.json` | `renovate:` comment, and a manager for `dagger.json`; grouped into one pull request |
+| Base images (`alpine`, `docker:…-dind`) | `dagger/src/config.ts` | Any `"name:tag@sha256:digest"` string in the module |
+| `cargo-chef` release binary (per architecture, with SHA-256) | `dagger/src/config.ts` | `renovate:` comment; Renovate bumps the tag and recomputes both digests |
+| Rust builder images | derived from `rust-toolchain.toml` | Renovate already updates the toolchain file |
 
-- Renovate does not see the pins in `dagger/src/config.ts`, `dagger.json` and `ci.yml`. A regex
-  custom manager would cover them.
-- Signing, the contract referrer and the multi-platform index merge stay in `release-please.yaml`.
-  `publish` returns the digest they need.
+A new image pin must be written `name:tag@sha256:digest`. Without the digest no manager matches
+it, and it would never be updated.
+
+## Before moving releases
+
+- `release-please.yaml` builds the published image from the `Dockerfile`, so for now the image CI
+  checks and the image that ships are built by two definitions. Both are checked against the same
+  contract and run the same start-up test, but a change to one must be mirrored in the other
+  until releases move.
+- The Sentry debug-file upload exists only in the Dockerfile. It would be a `Secret` argument on
+  `build`.
+- Signing, the contract referrer and the multi-platform index merge stay in `release-please.yaml`
+  either way. `publish` returns the digest they need.
 - For a cache that does not ride through `actions/cache`, the alternatives are a self-hosted
   runner with a long-lived engine (no archive at all, and Dagger skips unchanged steps across
   runs too) or Dagger Cloud's managed cache.

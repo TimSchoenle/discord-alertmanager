@@ -16,8 +16,9 @@
  * Two kinds of caching are in play. Dagger caches every step by its inputs, so an unchanged
  * step is skipped outright. Inside a step that does run, cargo reuses three cache volumes:
  * `CARGO_HOME` (registry index, crate sources, git checkouts) and one target directory per
- * toolchain/libc/architecture. Both survive between calls on the same engine. CI starts every
- * run on a fresh engine and carries only the cargo volumes across, see `.github/workflows/ci.yml`.
+ * toolchain, purpose and architecture. Both survive between calls on the same engine. CI starts
+ * every run on a fresh engine and carries only the cargo volumes an image build uses across, see
+ * the `docker-build-test` job in `.github/workflows/build.yaml`.
  */
 
 import {
@@ -39,7 +40,7 @@ import {
 import {
   ALPINE_IMAGE,
   BINARY,
-  CARGO_CHEF_VERSION,
+  CARGO_CHEF,
   CONTRACT_PATH,
   DIND_IMAGE,
   EXECUTION_DIRECTORY,
@@ -77,10 +78,14 @@ const RECIPE = "/tmp/recipe.json"
 
 /** Where `cacheArchive` and `cacheRestore` mount the cargo caches, one subdirectory each. */
 const CACHE_ROOT = "/cache"
-const CACHE_NAMES = ["cargo-home", "target-gnu", "target-musl"] as const
+const CACHE_NAMES = ["cargo-home", "target-release", "target-contract"] as const
 
-/** The two builder flavours: glibc for tests (as CI runs them), musl for the static release. */
-type Libc = "gnu" | "musl"
+/**
+ * What a builder container is for. Each purpose has its own target directory, because their
+ * artefacts never overlap: tests build debug on glibc (as the `Test` job does), the release
+ * builds the static musl binary, and the contract generator is a debug build on the musl image.
+ */
+type Purpose = "test" | "release" | "contract"
 
 @object()
 export class DiscordAlertmanager {
@@ -107,7 +112,7 @@ export class DiscordAlertmanager {
    */
   @func()
   async test(): Promise<string> {
-    const env = await this.preparedEnv("gnu", await dag.defaultPlatform(), [
+    const env = await this.preparedEnv("test", await dag.defaultPlatform(), [
       "--all-targets",
       "--all-features",
     ])
@@ -131,7 +136,11 @@ export class DiscordAlertmanager {
   async build(platform?: Platform): Promise<File> {
     const resolved = platform ?? (await dag.defaultPlatform())
     const spec = targetFor(resolved)
-    const env = await this.preparedEnv("musl", resolved, ["--release", "--target", spec.muslTriple])
+    const env = await this.preparedEnv("release", resolved, [
+      "--release",
+      "--target",
+      spec.muslTriple,
+    ])
 
     // Build and copy out in one exec. The target directory is a shared cache volume, and its
     // content between two execs is not guaranteed to be what the first one left there.
@@ -158,18 +167,17 @@ export class DiscordAlertmanager {
    * Generates the configuration contract and the image labels that describe it.
    *
    * Both files come out of one generator run on one source tree, which is the guarantee the
-   * Dockerfile's `contract-builder` stage gives. Runs in the test environment, whose target
-   * volume already holds the `config-schema` build from `test`.
+   * Dockerfile's `contract-builder` stage gives. Built on the same musl image as the release, so
+   * an image build pulls one toolchain image, with a target directory of its own.
    *
    * @param appVersion Release recorded in the document's `app.version`. Omitted, the field is
    *   absent, which keeps the output equal to the committed `docs/config.contract.json`.
+   * @param platform Platform to run the generator on. Defaults to the engine's own. The output
+   *   does not depend on it.
    */
   @func()
-  async contract(appVersion?: string): Promise<Directory> {
-    const env = await this.preparedEnv("gnu", await dag.defaultPlatform(), [
-      "--all-targets",
-      "--all-features",
-    ])
+  async contract(appVersion?: string, platform?: Platform): Promise<Directory> {
+    const env = await this.preparedEnv("contract", platform ?? (await dag.defaultPlatform()))
     const versionArgs =
       appVersion === undefined || appVersion === "" ? [] : ["--version", appVersion]
     const generate = (format: string): string[] => [
@@ -213,7 +221,10 @@ export class DiscordAlertmanager {
     release = "unreleased",
   ): Promise<Container> {
     const resolved = platform ?? (await dag.defaultPlatform())
-    const [binary, contract] = await Promise.all([this.build(resolved), this.contract(appVersion)])
+    const [binary, contract] = await Promise.all([
+      this.build(resolved),
+      this.contract(appVersion, resolved),
+    ])
     const labels = parseLabels(await contract.file("contract.labels").contents())
 
     const env = dag
@@ -278,7 +289,7 @@ export class DiscordAlertmanager {
       // `expect: ANY` because a non-zero exit is the expected outcome; the log line is the check.
       image.withExec(["./app"], { expect: ReturnType.Any }).combinedOutput(),
       image.label("dev.terrace.config.contract.path"),
-      this.contract("smoke-test").then((dir) => dir.file("contract.json").contents()),
+      this.contract("smoke-test", platform).then((dir) => dir.file("contract.json").contents()),
     ])
 
     if (!output.includes("starting version=")) {
@@ -334,10 +345,11 @@ export class DiscordAlertmanager {
   /**
    * Packs what cargo can reuse into one `tar.zst`, for CI to carry to the next run.
    *
-   * Only the cargo caches go in: `CARGO_HOME` and the two target directories of the engine's
-   * platform. Base images and Dagger's own step cache stay out; a fresh runner downloads the
-   * images in seconds, and they were most of the engine state. Unpacked crate sources and git
-   * working copies are left out too, since cargo recreates both from what is kept.
+   * Only the cargo caches an image build uses go in: `CARGO_HOME` and the release and contract
+   * target directories of the engine's platform. Base images and Dagger's own step cache stay
+   * out; a fresh runner downloads the images in seconds, and they were most of the engine state.
+   * Unpacked crate sources and git working copies are left out too, since cargo recreates both
+   * from what is kept.
    *
    * Never cached: the result depends on the volumes' contents, which are not an input.
    */
@@ -414,12 +426,16 @@ export class DiscordAlertmanager {
         .withMountedCache(`${CACHE_ROOT}/cargo-home`, cargoHomeVolume(), {
           sharing: CacheSharingMode.Shared,
         })
-        .withMountedCache(`${CACHE_ROOT}/target-gnu`, targetVolume(channel, "gnu", arch), {
-          sharing: CacheSharingMode.Shared,
-        })
-        .withMountedCache(`${CACHE_ROOT}/target-musl`, targetVolume(channel, "musl", arch), {
-          sharing: CacheSharingMode.Shared,
-        })
+        .withMountedCache(
+          `${CACHE_ROOT}/target-release`,
+          targetVolume(channel, "release", arch),
+          { sharing: CacheSharingMode.Shared },
+        )
+        .withMountedCache(
+          `${CACHE_ROOT}/target-contract`,
+          targetVolume(channel, "contract", arch),
+          { sharing: CacheSharingMode.Shared },
+        )
     )
   }
 
@@ -428,21 +444,30 @@ export class DiscordAlertmanager {
    *
    * @param cookFlags Flags for `cargo chef cook`; they must select the same profile, target and
    *   features as the build that follows, or the precompiled artefacts are not the ones it uses.
+   *   Omitted, nothing is precompiled: the contract generator needs a small part of the graph,
+   *   and its target volume already makes a rebuild incremental.
    */
-  private async preparedEnv(libc: Libc, platform: Platform, cookFlags: string[]): Promise<Container> {
-    const env = await this.rustEnv(libc, platform)
+  private async preparedEnv(
+    purpose: Purpose,
+    platform: Platform,
+    cookFlags?: string[],
+  ): Promise<Container> {
+    let env = await this.rustEnv(purpose, platform)
 
-    // The recipe is a function of the manifests and the lockfile only, so its content, and with
-    // it the cook step's cache key, stays the same across source-only changes.
-    const recipe = env
-      .withDirectory(EXECUTION_DIRECTORY, this.source)
-      .withExec(["cargo", "chef", "prepare", "--recipe-path", RECIPE])
-      .file(RECIPE)
+    if (cookFlags !== undefined) {
+      // The recipe is a function of the manifests and the lockfile only, so its content, and
+      // with it the cook step's cache key, stays the same across source-only changes.
+      const recipe = env
+        .withDirectory(EXECUTION_DIRECTORY, this.source)
+        .withExec(["cargo", "chef", "prepare", "--recipe-path", RECIPE])
+        .file(RECIPE)
+      env = env
+        .withFile(RECIPE, recipe)
+        .withExec(["cargo", "chef", "cook", "--locked", ...cookFlags, "--recipe-path", RECIPE])
+    }
 
     return (
       env
-        .withFile(RECIPE, recipe)
-        .withExec(["cargo", "chef", "cook", "--locked", ...cookFlags, "--recipe-path", RECIPE])
         .withDirectory(EXECUTION_DIRECTORY, this.source)
         // cargo decides whether a workspace crate is stale by mtime. The target directory
         // outlives this checkout, so a file restored with an older mtime (a branch switch, an
@@ -464,7 +489,7 @@ export class DiscordAlertmanager {
   }
 
   /**
-   * The bare toolchain container for one libc and platform, with caches mounted.
+   * The bare toolchain container for one purpose and platform, with caches mounted.
    *
    * `CARGO_HOME` is a single volume instead of separate `registry` and `git` mounts. cargo
    * serialises access to those directories through a lock file in `CARGO_HOME` itself; with
@@ -472,37 +497,35 @@ export class DiscordAlertmanager {
    * cargo processes corrupt the shared checkout. That is the `failed to clone into … no error`
    * the Dockerfile's `contract-builder` stage works around with separate cache ids.
    */
-  private async rustEnv(libc: Libc, platform: Platform): Promise<Container> {
+  private async rustEnv(purpose: Purpose, platform: Platform): Promise<Container> {
     const channel = await this.toolchainChannel()
     const spec = targetFor(platform)
-    const image = libc === "musl" ? `rust:${channel}-alpine` : `rust:${channel}-trixie`
 
-    let base = dag.container({ platform }).from(image)
-    if (libc === "musl") {
-      base = base.withExec(["apk", "add", "--no-cache", ...muslPackages(spec)])
+    let base = dag.container({ platform })
+    if (purpose === "test") {
+      base = base.from(`rust:${channel}-trixie`)
     } else {
-      // No debug info in the test build. It is most of a debug target directory, which is what
-      // CI archives, and a failing test still reports its file and line: the panic location is
+      base = base
+        .from(`rust:${channel}-alpine`)
+        .withExec(["apk", "add", "--no-cache", ...muslPackages(spec, purpose)])
+    }
+    if (purpose !== "release") {
+      // No debug info in debug builds. It is most of a debug target directory, which is what CI
+      // archives, and a failing test still reports its file and line: the panic location is
       // compiled in independently of debug info.
       base = base
         .withEnvVariable("CARGO_PROFILE_DEV_DEBUG", "0")
         .withEnvVariable("CARGO_PROFILE_TEST_DEBUG", "0")
     }
 
+    if (purpose !== "contract") {
+      // Only the builders that precompile dependencies need it. Before the cache mounts, so it
+      // lands in an image layer rather than on a volume shared with builds.
+      base = base.withFile("/usr/local/bin/cargo-chef", cargoChef(spec), { permissions: 0o755 })
+    }
+
     return (
       base
-        // Before the cache mounts, so the binary lands in an image layer that is cached once per
-        // toolchain rather than on a volume shared with builds.
-        .withExec([
-          "cargo",
-          "install",
-          "--locked",
-          "--root",
-          "/usr/local",
-          "--version",
-          CARGO_CHEF_VERSION,
-          "cargo-chef",
-        ])
         // The image's toolchain, and not whatever `rust-toolchain.toml` would make rustup fetch:
         // the file also lists `rustfmt` and `clippy`, which a build does not need, and rustup
         // would download them on every cold cache.
@@ -514,7 +537,7 @@ export class DiscordAlertmanager {
         .withEnvVariable("CARGO_INCREMENTAL", "0")
         .withEnvVariable("CARGO_NET_RETRY", "10")
         .withMountedCache(CARGO_HOME, cargoHomeVolume(), { sharing: CacheSharingMode.Shared })
-        .withMountedCache(TARGET_DIR, targetVolume(channel, libc, spec.arch), {
+        .withMountedCache(TARGET_DIR, targetVolume(channel, purpose, spec.arch), {
           sharing: CacheSharingMode.Shared,
         })
         .withWorkdir(EXECUTION_DIRECTORY)
@@ -522,12 +545,38 @@ export class DiscordAlertmanager {
   }
 }
 
-/** Alpine packages the musl builder needs on top of the official Rust image. */
-function muslPackages(spec: TargetSpec): string[] {
+/** Alpine packages the musl builders need on top of the official Rust image. */
+function muslPackages(spec: TargetSpec, purpose: Purpose): string[] {
   // `musl-dev` for the C code in `ring`, `binutils` for `strip`. No OpenSSL: the workspace is
-  // rustls-only and deny.toml bans `openssl-sys`.
+  // rustls-only and deny.toml bans `openssl-sys`. UPX only where the release binary is packed.
   const packages = ["musl-dev", "binutils"]
-  return spec.upx ? [...packages, "upx"] : packages
+  return purpose === "release" && spec.upx ? [...packages, "upx"] : packages
+}
+
+/**
+ * The `cargo-chef` binary for an architecture, downloaded from its release and verified against
+ * the pinned digest. The binary is static, so it runs on the glibc and the musl builders alike.
+ *
+ * @throws Error when the two architectures' pins name different releases, which means a version
+ *   bump updated one entry and not the other.
+ */
+function cargoChef(spec: TargetSpec): File {
+  const versions = new Set(Object.values(CARGO_CHEF).map((asset) => asset.version))
+  if (versions.size !== 1) {
+    throw new Error(`CARGO_CHEF pins different releases: ${[...versions].join(", ")}`)
+  }
+  const asset = CARGO_CHEF[spec.arch]
+  const name = `cargo-chef-${spec.muslTriple}`
+  const release = `https://github.com/LukeMathWalker/cargo-chef/releases/download/${asset.version}`
+  const archive = dag.http(`${release}/${name}.tar.xz`, { checksum: `sha256:${asset.sha256}` })
+  return dag
+    .container()
+    .from(ALPINE_IMAGE)
+    .withExec(["apk", "add", "--no-cache", "xz"])
+    .withMountedFile("/in/cargo-chef.tar.xz", archive)
+    .withExec(["mkdir", "-p", "/out"])
+    .withExec(["tar", "-xJf", "/in/cargo-chef.tar.xz", "-C", "/out", "--strip-components=1"])
+    .file("/out/cargo-chef")
 }
 
 /** Cache volumes are global to the engine, so every name carries the project prefix. */
@@ -540,9 +589,9 @@ function cargoHomeVolume(): CacheVolume {
   return cacheVolume("cargo-home")
 }
 
-/** One target directory per toolchain, libc and architecture: their artefacts never overlap. */
-function targetVolume(channel: string, libc: Libc, arch: string): CacheVolume {
-  return cacheVolume(`target-${channel}-${libc}-${arch}`)
+/** One target directory per toolchain, purpose and architecture: their artefacts never overlap. */
+function targetVolume(channel: string, purpose: Purpose, arch: string): CacheVolume {
+  return cacheVolume(`target-${channel}-${purpose}-${arch}`)
 }
 
 /**

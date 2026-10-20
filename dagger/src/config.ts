@@ -4,8 +4,36 @@
  * Nothing here talks to the engine, so every function is deterministic in its input.
  */
 
-/** `cargo-chef`, installed into the builder images. The Dockerfile takes it from a prebuilt image. */
-export const CARGO_CHEF_VERSION = "0.1.78"
+/*
+ * Every pinned version below is updated by Renovate through the custom managers in
+ * `renovate.json`. Images are written `name:tag@sha256:digest`, which is the form those managers
+ * recognise; a tag without a digest is invisible to them. The Rust builder images are not here:
+ * their tag is read from `rust-toolchain.toml`, which Renovate already updates.
+ */
+
+/** A release asset fetched by URL, pinned to its tag and verified against its SHA-256. */
+export interface ReleaseAsset {
+  readonly version: string
+  readonly sha256: string
+}
+
+/**
+ * `cargo-chef`, as the static musl binary its release publishes for each architecture, so no
+ * builder compiles it. The two entries move together: Renovate bumps the tag and recomputes each
+ * digest in one pull request, and `cargoChef` refuses a mismatched pair.
+ */
+export const CARGO_CHEF: Readonly<Record<"amd64" | "arm64", ReleaseAsset>> = {
+  // renovate: datasource=github-release-attachments depName=LukeMathWalker/cargo-chef
+  amd64: {
+    version: "v0.1.78",
+    sha256: "aca691abfbfbbe00d482e0ed2249eec3091b65e96a0ce92947fb5b254d48b16d",
+  },
+  // renovate: datasource=github-release-attachments depName=LukeMathWalker/cargo-chef
+  arm64: {
+    version: "v0.1.78",
+    sha256: "cd59b90fce5fa84c4189648fec33404ec5491791eebdb812df5e7fca8336408d",
+  },
+}
 
 /**
  * Supplies `/etc/passwd`, `/etc/group`, the CA bundle and zoneinfo to the `scratch` runtime.
@@ -15,7 +43,8 @@ export const ALPINE_IMAGE =
   "alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6"
 
 /** Docker daemon the PostgreSQL conformance test starts its throwaway container on. */
-export const DIND_IMAGE = "docker:29.9.1-dind"
+export const DIND_IMAGE =
+  "docker:29.9.1-dind@sha256:3e5756e2b6dad6a5f1f5deacf0a19f9eaa2581b76ae092b2d4a118162e1d4d4e"
 
 /** The workspace's binary package and the binary it produces. */
 export const PACKAGE = "discord-alertmanager"

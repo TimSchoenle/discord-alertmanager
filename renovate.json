@@ -26,6 +26,60 @@
         "lukemathwalker/cargo-chef"
       ],
       "enabled": true
+    },
+    {
+      "description": "The Dagger CLI in build.yaml and the engine version in dagger.json must be the same release, so they move in one pull request.",
+      "matchDepNames": [
+        "dagger/dagger"
+      ],
+      "groupName": "dagger"
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Container images the Dagger module pins. Only the `name:tag@sha256:digest` form is recognised, so an image without a digest fails review rather than going unmaintained.",
+      "managerFilePatterns": [
+        "/^dagger/src/.+\\.ts$/"
+      ],
+      "matchStrings": [
+        "\"(?<depName>[a-z0-9][a-z0-9._/-]*):(?<currentValue>[A-Za-z0-9][A-Za-z0-9._-]*)@(?<currentDigest>sha256:[a-f0-9]{64})\""
+      ],
+      "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "Versions named by a `renovate:` comment on the line above them, in the Dagger module and in workflows. The datasources are listed so that a release-attachment pin, which carries a digest, is matched only by the manager below.",
+      "managerFilePatterns": [
+        "/^dagger/src/.+\\.ts$/",
+        "/^\\.github/workflows/.+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "(?:#|//) renovate: datasource=(?<datasource>github-releases|crate|docker|npm) depName=(?<depName>\\S+)(?: extractVersion=(?<extractVersion>\\S+))?\\s*\\n[^\\n]*?[\"'](?<currentValue>[^\"'@\\s]+)[\"']"
+      ]
+    },
+    {
+      "customType": "regex",
+      "description": "Release assets the Dagger module downloads, pinned to a tag and the asset's SHA-256. Renovate bumps the tag and recomputes the digest of the same asset in the new release.",
+      "managerFilePatterns": [
+        "/^dagger/src/.+\\.ts$/"
+      ],
+      "matchStrings": [
+        "// renovate: datasource=(?<datasource>github-release-attachments) depName=(?<depName>\\S+)\\s*\\n[^\\n]*\\{\\s*version: \"(?<currentValue>[^\"]+)\",\\s*sha256: \"(?<currentDigest>[a-f0-9]{64})\""
+      ]
+    },
+    {
+      "customType": "regex",
+      "description": "The engine version the Dagger module declares.",
+      "managerFilePatterns": [
+        "/(^|/)dagger\\.json$/"
+      ],
+      "matchStrings": [
+        "\"engineVersion\":\\s*\"v(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "dagger/dagger",
+      "extractVersionTemplate": "^v(?<version>.+)$"
     }
   ]
 }
