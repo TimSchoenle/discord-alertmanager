@@ -3,10 +3,10 @@
 A Dagger module that builds this repository's container image, and can run its test suite, as
 typed functions that behave the same on a laptop and on a GitHub runner.
 
-CI builds the image through it: the `docker-build-test` job in `.github/workflows/build.yaml`, on
-a native runner per architecture. The tests stay on the `Test` job, where rust-cache on the runner
-is faster than a containerised build. Releases are still built from the `Dockerfile` by
-`release-please.yaml`; see [Before moving releases](#before-moving-releases).
+**Under evaluation.** `.github/workflows/dagger-compare.yml` builds the image through this module
+next to `build.yaml`'s `docker-build-test` job, which builds the same image from the `Dockerfile`,
+so the two can be timed against each other. Whichever loses is removed. Until then, CI gates on
+the `Dockerfile` build only.
 
 ## Layout
 
@@ -16,7 +16,7 @@ is faster than a containerised build. Releases are still built from the `Dockerf
 | `dagger/src/index.ts` | The `DiscordAlertmanager` object and its functions. |
 | `dagger/src/config.ts` | Pinned versions, image layout, and pure parsing helpers. |
 | `dagger/src/platform.ts` | Per-architecture build parameters (musl triple, UPX). |
-| `.github/workflows/build.yaml` | The `docker-build-test` job, including the cargo cache carried between runs. |
+| `.github/workflows/dagger-compare.yml` | The comparison job, including the cargo cache carried between runs. |
 | `.github/scripts/dagger-cache.sh` | Enforces the cache archive size limit before a save. |
 
 The module uses the TypeScript SDK. The Rust SDK (`dagger-sdk` on crates.io) is a client library
@@ -162,7 +162,7 @@ Renovate maintains every pin through the custom managers in `renovate.json`:
 
 | Pin | Where | How Renovate finds it |
 | --- | --- | --- |
-| Dagger CLI and engine | `DAGGER_VERSION` in `build.yaml`, `engineVersion` in `dagger.json` | `renovate:` comment, and a manager for `dagger.json`; grouped into one pull request |
+| Dagger CLI and engine | `DAGGER_VERSION` in `dagger-compare.yml`, `engineVersion` in `dagger.json` | `renovate:` comment, and a manager for `dagger.json`; grouped into one pull request |
 | Base images (`alpine`, `docker:…-dind`) | `dagger/src/config.ts` | Any `"name:tag@sha256:digest"` string in the module |
 | `cargo-chef` release binary (per architecture, with SHA-256) | `dagger/src/config.ts` | `renovate:` comment; Renovate bumps the tag and recomputes both digests |
 | Rust builder images | derived from `rust-toolchain.toml` | Renovate already updates the toolchain file |

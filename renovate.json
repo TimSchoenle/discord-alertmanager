@@ -28,7 +28,7 @@
       "enabled": true
     },
     {
-      "description": "The Dagger CLI in build.yaml and the engine version in dagger.json must be the same release, so they move in one pull request.",
+      "description": "The Dagger CLI in dagger-compare.yml and the engine version in dagger.json must be the same release, so they move in one pull request.",
       "matchDepNames": [
         "dagger/dagger"
       ],

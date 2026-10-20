@@ -18,7 +18,7 @@
  * `CARGO_HOME` (registry index, crate sources, git checkouts) and one target directory per
  * toolchain, purpose and architecture. Both survive between calls on the same engine. CI starts
  * every run on a fresh engine and carries only the cargo volumes an image build uses across, see
- * the `docker-build-test` job in `.github/workflows/build.yaml`.
+ * `.github/workflows/dagger-compare.yml`.
  */
 
 import {
