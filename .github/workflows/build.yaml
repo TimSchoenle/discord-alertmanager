@@ -337,6 +337,16 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
+      # Every build reads the layer cache of its architecture; only a push to `main` writes it.
+      #
+      # A pull request's export lands in a scope of its own, which `main` never reads, but it
+      # counts against the repository's 10 GB Actions cache all the same. Each one that rebuilt
+      # the cook layer added a compiled dependency tree per architecture, and GitHub made room by
+      # evicting the least recently used entries, `main`'s among them: a re-run of an unchanged
+      # `main` commit found its cache index naming blobs that were gone (`blob … not found`) and
+      # compiled every dependency again. Writing only from `main` keeps the one cache every pull
+      # request starts from. The cost is that a pull request changing the lockfile or the build
+      # stages cooks again on each of its pushes.
       - name: Build Docker image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
@@ -351,23 +361,28 @@ jobs:
             vendor=Tim Schönle
             VERSION=test
           cache-from: type=gha,scope=${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+          cache-to: ${{ github.event_name == 'push' && format('type=gha,mode=max,scope={0}', matrix.arch) || '' }}
 
       # Exported from the same build graph the image came from, so the generator is not run a
       # second time at a second moment and the labels cannot describe a different document than
       # the one in the image. `VERSION` matches the image build's, because it reaches the
       # document's `app.version` field and the two copies are compared below.
+      #
+      # The same cache as the step above, read and not written. The image build takes cached
+      # layers lazily: a layer it only needed to reference is never pulled onto the runner. A
+      # plain `docker buildx build` here had no cache source, so on a cached run it found none of
+      # the contract stage locally and rebuilt it, toolchain and dependencies included, which
+      # took 43 to 82 seconds and once failed the job on a download the image build never made.
       - name: Export the config contract
-        env:
-          PLATFORM: ${{ matrix.platform }}
-        run: |
-          set -euo pipefail
-          docker buildx build \
-            --target contract-export \
-            --platform "${PLATFORM}" \
-            --output "type=local,dest=./contract-out" \
-            --build-arg VERSION=test \
-            .
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          target: contract-export
+          outputs: type=local,dest=./contract-out
+          build-args: |
+            VERSION=test
+          cache-from: type=gha,scope=${{ matrix.arch }}
 
       # The image, never the Dockerfile. A source diff cannot see a base image that overrode a
       # label, a `LABEL` line deleted on a branch nobody diffed, or a build argument that

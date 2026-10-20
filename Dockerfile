@@ -10,8 +10,6 @@ FROM lukemathwalker/cargo-chef:latest-rust-alpine@sha256:917b051d1fc8e234a3aad12
 ARG EXECUTION_DIRECTORY
 
 RUN apk add --no-cache \
-    curl \
-    jq \
     musl-dev \
     openssl-dev \
     openssl-libs-static \
@@ -34,23 +32,31 @@ WORKDIR ${EXECUTION_DIRECTORY}
 # and similar). The few megabytes saved are not worth an image that cannot run.
 FROM chef-base AS chef-amd64
 ENV BUILD_TARGET=x86_64-unknown-linux-musl \
-    SENTRY_CLI_ARCH=x86_64 \
     UPX_ENABLED=1
 
 FROM chef-base AS chef-arm64
 ENV BUILD_TARGET=aarch64-unknown-linux-musl \
-    SENTRY_CLI_ARCH=aarch64 \
     UPX_ENABLED=0
 
 FROM chef-${TARGETARCH} AS chef
 
 # Debug-symbol upload is entirely opt-in (see the sentry-cli RUN in `builder` below), but the CLI
-# is fetched here unconditionally: it is a few megabytes, the layer is shared by every build of
+# is installed here unconditionally: it is a few megabytes, the layer is shared by every build of
 # every architecture, and skipping it would mean deciding *now*, at FROM time, whether a later
 # `--secret id=sentry_token` will be supplied.
-RUN LATEST_VERSION=$(curl -s https://api.github.com/repos/getsentry/sentry-cli/releases/latest | jq -r .tag_name) && \
-    curl -fsSL "https://downloads.sentry-cdn.com/sentry-cli/${LATEST_VERSION}/sentry-cli-Linux-${SENTRY_CLI_ARCH}" -o /usr/local/bin/sentry-cli && \
-    chmod +x /usr/local/bin/sentry-cli
+#
+# Copied from Sentry's own image, pinned by digest, rather than downloaded from `releases/latest`.
+# The version is then a fact of the Dockerfile that Renovate bumps in a reviewable pull request,
+# and the bytes are the ones the digest names. The download it replaces asked the GitHub API for
+# the latest tag without authentication, so a rate-limited request got `null` back and the build
+# failed on the download, and two builds of one commit could ship different CLIs. The index is multi-platform, so
+# BuildKit picks the binary for the architecture being built.
+COPY --from=getsentry/sentry-cli:3.8.0@sha256:973a77ecc96852081f946e36a8f090ed74a02249009594aff51575e593871427 \
+    /bin/sentry-cli /usr/local/bin/sentry-cli
+
+# The upload below runs only when a token is supplied, which CI never does. Without this, a CLI
+# that cannot start on the build architecture would surface only in the release job.
+RUN sentry-cli --version
 
 # The toolchain `rust-toolchain.toml` pins, installed once here so that every stage below compiles
 # with it. The base image ships whatever Rust was current when it was built. Without this, `cargo
@@ -74,9 +80,15 @@ COPY --from=planner /app/recipe.json recipe.json
 
 # Cache mounts are scoped per architecture so that multi-platform builds sharing a
 # single builder cannot overwrite each other's artifacts.
+#
+# `-p` names the same package the build below names. Without it, cook resolves features across
+# the whole workspace, `xtask` and every member included, while `cargo build -p` resolves them
+# for this one package. Every dependency whose feature set differs between the two (`tokio`,
+# `syn`, and everything built on them, `serenity` and `sqlx` among them) was compiled once here
+# and again below.
 RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry-${TARGETARCH} \
     --mount=type=cache,target=/usr/local/cargo/git,id=cargo-git-${TARGETARCH} \
-    cargo chef cook --release --target ${BUILD_TARGET} --recipe-path recipe.json
+    cargo chef cook --release --target ${BUILD_TARGET} -p discord-alertmanager --recipe-path recipe.json
 
 COPY . .
 
