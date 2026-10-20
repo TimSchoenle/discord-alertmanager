@@ -52,6 +52,14 @@ RUN LATEST_VERSION=$(curl -s https://api.github.com/repos/getsentry/sentry-cli/r
     curl -fsSL "https://downloads.sentry-cdn.com/sentry-cli/${LATEST_VERSION}/sentry-cli-Linux-${SENTRY_CLI_ARCH}" -o /usr/local/bin/sentry-cli && \
     chmod +x /usr/local/bin/sentry-cli
 
+# The toolchain `rust-toolchain.toml` pins, installed once here so that every stage below compiles
+# with it. The base image ships whatever Rust was current when it was built. Without this, `cargo
+# chef cook` sees no toolchain file and compiles the dependencies with that version, and the build
+# after `COPY . .` switches to the pinned one, which makes cargo discard and recompile every
+# dependency: the cooked layer was never used.
+COPY rust-toolchain.toml ./
+RUN rustup toolchain install
+
 FROM chef AS planner
 COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
