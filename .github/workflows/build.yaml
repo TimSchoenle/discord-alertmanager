@@ -384,14 +384,19 @@ jobs:
         with:
           version: ${{ env.DAGGER_VERSION }}
 
+      # The cache only saves time, so a restore that fails (a truncated archive, a layout the
+      # module no longer reads) falls back to a cold build instead of failing the job, and the
+      # archive step below then replaces the entry rather than leaving it to fail every run.
       - name: Restore cargo caches into the engine
+        id: engine-restore
         if: ${{ steps.restore.outputs.cache-matched-key != '' }}
+        continue-on-error: true
         env:
           ARCHIVE: ${{ steps.cache-key.outputs.archive }}
         run: |
           set -euo pipefail
+          trap 'rm -f "${ARCHIVE}"' EXIT
           dagger call --progress=plain cache-restore --archive="${ARCHIVE}"
-          rm -f "${ARCHIVE}"
 
       # Each architecture builds on a runner of its own architecture, so no emulation is
       # involved; `--platform` makes a mismatch fail rather than fall back to it silently.
@@ -496,16 +501,17 @@ jobs:
           sarif-category: trivy-${{ matrix.arch }}
           comment: summary
 
-      # Saved only when nothing for this lockfile and toolchain was restored: dependencies are
-      # what the archive is for, and the workspace crates are rebuilt every time regardless. That
-      # is one entry per dependency change and scope rather than one per push. Runs after a failed
-      # check too, so the dependency builds are not lost with it. Fork pull requests have a
+      # Saved only when nothing usable for this lockfile and toolchain was restored: dependencies
+      # are what the archive is for, and the workspace crates are rebuilt every time regardless.
+      # That is one entry per dependency change and scope rather than one per push. Runs after a
+      # failed check too, so the dependency builds are not lost with it. Fork pull requests have a
       # read-only cache token and are skipped.
       - name: Archive cargo caches
         id: archive
         if: >-
           ${{ !cancelled() && steps.build.outcome == 'success'
-          && !startsWith(steps.restore.outputs.cache-matched-key, steps.cache-key.outputs.prefix)
+          && (!startsWith(steps.restore.outputs.cache-matched-key, steps.cache-key.outputs.prefix)
+              || steps.engine-restore.outcome == 'failure')
           && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) }}
         env:
           ARCHIVE: ${{ steps.cache-key.outputs.archive }}
