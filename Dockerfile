@@ -80,9 +80,15 @@ COPY --from=planner /app/recipe.json recipe.json
 
 # Cache mounts are scoped per architecture so that multi-platform builds sharing a
 # single builder cannot overwrite each other's artifacts.
+#
+# `-p` names the same package the build below names. Without it, cook resolves features across
+# the whole workspace, `xtask` and every member included, while `cargo build -p` resolves them
+# for this one package. Every dependency whose feature set differs between the two (`tokio`,
+# `syn`, and everything built on them, `serenity` and `sqlx` among them) was compiled once here
+# and again below.
 RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry-${TARGETARCH} \
     --mount=type=cache,target=/usr/local/cargo/git,id=cargo-git-${TARGETARCH} \
-    cargo chef cook --release --target ${BUILD_TARGET} --recipe-path recipe.json
+    cargo chef cook --release --target ${BUILD_TARGET} -p discord-alertmanager --recipe-path recipe.json
 
 COPY . .
 
