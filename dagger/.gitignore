@@ -1,4 +1,0 @@
-# Written by `dagger develop` and by the engine on every load; never committed.
-/sdk
-/node_modules
-/.pnpm-store

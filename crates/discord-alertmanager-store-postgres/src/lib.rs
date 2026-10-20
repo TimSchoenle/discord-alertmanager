@@ -161,13 +161,6 @@ mod tests {
             .start()
             .await
             .expect("a PostgreSQL container starts");
-        // The daemon's host rather than a loopback literal. Locally and on a CI runner the two are
-        // the same; inside a containerised pipeline (`DOCKER_HOST=tcp://docker:2375`, a sidecar
-        // daemon) the published port lives on the daemon's host and loopback reaches nothing.
-        let host = container
-            .get_host()
-            .await
-            .expect("the container's host resolves");
         let port = container
             .get_host_port_ipv4(5432)
             .await
@@ -175,7 +168,7 @@ mod tests {
 
         let store = PostgresStore::connect(&Settings {
             url: SecretString::from(format!(
-                "postgres://postgres:postgres@{host}:{port}/postgres"
+                "postgres://postgres:postgres@127.0.0.1:{port}/postgres"
             )),
             max_connections: 4,
             acquire_timeout: Duration::from_secs(10),
@@ -198,7 +191,7 @@ mod tests {
         let legacy = sqlx::postgres::PgPoolOptions::new()
             .max_connections(1)
             .connect(&format!(
-                "postgres://postgres:postgres@{host}:{port}/legacy_keys"
+                "postgres://postgres:postgres@127.0.0.1:{port}/legacy_keys"
             ))
             .await
             .expect("the second database connects");
