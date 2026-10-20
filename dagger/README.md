@@ -13,8 +13,8 @@ run. It gates nothing and publishes nothing.
 | `dagger/src/index.ts` | The `DiscordAlertmanager` object and its functions. |
 | `dagger/src/config.ts` | Pinned versions, image layout, and pure parsing helpers. |
 | `dagger/src/platform.ts` | Per-architecture build parameters (musl triple, UPX). |
-| `.github/workflows/ci.yml` | The CI job, including the engine-state cache. |
-| `.github/scripts/dagger-engine.sh` | Starts, stops, archives and restores the engine; writes the timing report. |
+| `.github/workflows/ci.yml` | The CI job, including the cargo cache carried between runs. |
+| `.github/scripts/dagger-cache.sh` | Times each phase, enforces the archive size limit, writes the report. |
 
 The module uses the TypeScript SDK. The Rust SDK (`dagger-sdk` on crates.io) is a client library
 only: it can drive an engine from a Rust program, but it cannot define a module, so `dagger call`
@@ -31,6 +31,8 @@ cannot reach it. A Rust client would also add `reqwest` 0.11 and a second TLS st
 | `dagger call docker` | The `FROM scratch` runtime image | Dockerfile `runtime` stage |
 | `dagger call smoke-test` | The binary starts, and the contract label points at the generated document | `Test Docker image runs` and the contract checks in `Docker Build and Test` |
 | `dagger call publish --address=…` | Pushes one or more platforms as one index | `release-please.yaml` build and merge jobs |
+| `dagger call cache-archive` | Packs the cargo caches into one `tar.zst` | `Swatinem/rust-cache` save |
+| `dagger call cache-restore --archive=…` | Unpacks that archive into a fresh engine | `Swatinem/rust-cache` restore |
 
 Every function builds from the repository root, filtered to `Cargo.toml`, `Cargo.lock`,
 `rust-toolchain.toml`, `.cargo/`, `crates/` and `xtask/`. Nothing else can reach a container,
@@ -49,7 +51,9 @@ Steps that do run reuse three kinds of cache volume:
   directories lives in `CARGO_HOME` itself. Mounting only the subdirectories gives each container
   its own lock, and two concurrent builds then corrupt the shared checkout. That is the failure the
   Dockerfile's `contract-builder` stage avoids with separate cache ids.
-- One target directory per toolchain, libc and architecture, mounted at `/app/target`.
+- One target directory per toolchain, libc and architecture, mounted at `/app/target`. The test
+  build has no debug info (`CARGO_PROFILE_DEV_DEBUG=0`), which is most of a debug target
+  directory's size; a failing test still reports its file and line.
 - `/var/lib/docker` of the test sidecar, so the PostgreSQL image is pulled once.
 
 Dependencies are compiled first, from a `cargo chef` recipe. The recipe depends only on the
@@ -127,35 +131,32 @@ seconds. `dagger call -i …` opens a terminal in the failing container when a s
 
 ## How CI persists the cache
 
-A hosted runner starts with an empty engine, so `ci.yml` runs the engine itself and moves its
-state directory through `actions/cache`:
+Every run starts a fresh engine, and only cargo's caches cross from one run to the next:
 
-1. Restore the newest archive for this lockfile and toolchain, or else the newest at all.
-2. Extract it with `sudo tar` into a host directory.
-3. Start `registry.dagger.io/engine` with that directory bind-mounted at `/var/lib/dagger`, and
-   point the CLI at it with `_EXPERIMENTAL_DAGGER_RUNNER_HOST`.
-4. Run `test`, `docker` (exported as a tarball) and `smoke-test`.
-5. Prune the engine cache to `DAGGER_GC_MAX_USED_SPACE`, stop the engine gracefully, and archive
-   the directory with zstd.
-6. Save the archive under a new key, unless it exceeds `DAGGER_ARCHIVE_LIMIT_BYTES`.
+1. `actions/cache` restores the newest archive for this lockfile and toolchain, or else the newest
+   at all.
+2. `dagger call cache-restore` unpacks it into the new engine's cargo volumes.
+3. `test`, `docker` (exported as a tarball) and `smoke-test` run.
+4. `dagger call cache-archive` packs the volumes again, and the archive is saved under a new key
+   unless it exceeds `CACHE_ARCHIVE_LIMIT_BYTES`.
 
-`sudo tar` instead of letting `actions/cache` archive the directory: the state is root-owned and
-holds overlayfs whiteouts (device nodes) and `trusted.*` xattrs, none of which the runner user can
-read. Archiving a running engine would capture its metadata databases mid-write, hence the stop.
+The archive holds `CARGO_HOME` without unpacked crate sources or git working copies (cargo
+recreates both from the downloads it keeps) and the two target directories. It leaves out base
+images and Dagger's own step cache. Images are pulled again in seconds and were most of the 13 GiB
+the first version of this workflow archived by saving the whole engine. Dagger's step skipping
+therefore works within a run but not across runs; cargo's reuse of compiled dependencies does.
 
 Pushes to `main` and same-repository pull requests save. A pull request's entry is readable only
-by that pull request, so `main` never restores state a branch wrote. The job summary lists each
-phase's duration and the archive and state sizes.
+by that pull request, so `main` never restores what a branch built. The job summary lists each
+phase's duration and the archive size.
 
 ## What to watch
 
-- **The archive cost.** Download, extract, archive and upload are separate rows in the job summary.
-  The two target directories dominate the state. If those four rows together approach what a cold
-  `cargo build` costs, the cache is not paying for itself on hosted runners.
+- **The archive cost.** Download, restore and archive are separate rows in the job summary. If
+  together they approach what the cold build costs, the cache is not paying for itself.
 - **Cache eviction.** Every run that saves adds one archive to the repository's 10 GB quota, which
-  `build.yaml`'s buildx cache shares. GitHub evicts least recently used entries first, so frequent
-  pushes can push the buildx cache out. `DAGGER_ARCHIVE_LIMIT_BYTES` caps one entry; it does not
-  cap how many there are. The repository's cache usage page shows the total.
+  `build.yaml`'s buildx cache shares. GitHub evicts least recently used entries first.
+  `CACHE_ARCHIVE_LIMIT_BYTES` caps one entry; it does not cap how many there are.
 
 ## Before adopting
 
@@ -164,4 +165,5 @@ phase's duration and the archive and state sizes.
 - Signing, the contract referrer and the multi-platform index merge stay in `release-please.yaml`.
   `publish` returns the digest they need.
 - For a cache that does not ride through `actions/cache`, the alternatives are a self-hosted
-  runner with a long-lived engine (no archive at all) or Dagger Cloud's managed cache.
+  runner with a long-lived engine (no archive at all, and Dagger skips unchanged steps across
+  runs too) or Dagger Cloud's managed cache.

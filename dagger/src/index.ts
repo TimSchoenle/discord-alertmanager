@@ -10,12 +10,14 @@
  *   dagger call docker                        # the runtime image (FROM scratch)
  *   dagger call smoke-test                    # the image starts and carries its contract
  *   dagger call publish --address=…           # push one or more platforms as one index
+ *   dagger call cache-archive export --path=…  # the cargo caches as one tar.zst
+ *   dagger call cache-restore --archive=…      # and back into a fresh engine
  *
  * Two kinds of caching are in play. Dagger caches every step by its inputs, so an unchanged
  * step is skipped outright. Inside a step that does run, cargo reuses three cache volumes:
  * `CARGO_HOME` (registry index, crate sources, git checkouts) and one target directory per
- * toolchain/libc/architecture. Volumes survive between calls on the same engine; CI persists the
- * engine's whole state directory, see `.github/workflows/ci.yml`.
+ * toolchain/libc/architecture. Both survive between calls on the same engine. CI starts every
+ * run on a fresh engine and carries only the cargo volumes across, see `.github/workflows/ci.yml`.
  */
 
 import {
@@ -72,6 +74,10 @@ const SOURCE_FILTER: string[] = [
 const CARGO_HOME = "/cargo-home"
 const TARGET_DIR = `${EXECUTION_DIRECTORY}/target`
 const RECIPE = "/tmp/recipe.json"
+
+/** Where `cacheArchive` and `cacheRestore` mount the cargo caches, one subdirectory each. */
+const CACHE_ROOT = "/cache"
+const CACHE_NAMES = ["cargo-home", "target-gnu", "target-musl"] as const
 
 /** The two builder flavours: glibc for tests (as CI runs them), musl for the static release. */
 type Libc = "gnu" | "musl"
@@ -326,6 +332,98 @@ export class DiscordAlertmanager {
   }
 
   /**
+   * Packs what cargo can reuse into one `tar.zst`, for CI to carry to the next run.
+   *
+   * Only the cargo caches go in: `CARGO_HOME` and the two target directories of the engine's
+   * platform. Base images and Dagger's own step cache stay out; a fresh runner downloads the
+   * images in seconds, and they were most of the engine state. Unpacked crate sources and git
+   * working copies are left out too, since cargo recreates both from what is kept.
+   *
+   * Never cached: the result depends on the volumes' contents, which are not an input.
+   */
+  @func({ cache: "never" })
+  async cacheArchive(): Promise<File> {
+    const archive = "/out/cargo-cache.tar.zst"
+    return (await this.cacheMounts())
+      .withExec(["mkdir", "-p", "/out"])
+      .withExec([
+        "tar",
+        "--create",
+        "--file",
+        archive,
+        "--use-compress-program",
+        "zstd -3 -T0",
+        "--directory",
+        CACHE_ROOT,
+        "--exclude=./cargo-home/registry/src",
+        "--exclude=./cargo-home/git/checkouts",
+        "--exclude=./cargo-home/.package-cache*",
+        ".",
+      ])
+      .file(archive)
+  }
+
+  /**
+   * Unpacks an archive from `cacheArchive` into the cargo cache volumes.
+   *
+   * Run once on a fresh engine, before anything that builds. Files in the archive overwrite
+   * those already in the volumes; nothing else is removed.
+   *
+   * @param archive The `tar.zst` produced by `cacheArchive`.
+   * @returns the size of each restored cache.
+   */
+  @func({ cache: "never" })
+  async cacheRestore(archive: File): Promise<string> {
+    return (await this.cacheMounts())
+      .withMountedFile("/in/cargo-cache.tar.zst", archive)
+      .withExec([
+        "tar",
+        "--extract",
+        "--file",
+        "/in/cargo-cache.tar.zst",
+        "--use-compress-program",
+        "zstd -d -T0",
+        "--directory",
+        CACHE_ROOT,
+      ])
+      .withExec(["du", "-sh", ...CACHE_NAMES.map((name) => `${CACHE_ROOT}/${name}`)])
+      .stdout()
+  }
+
+  /** The pinned toolchain from `rust-toolchain.toml`; names images and target volumes. */
+  private async toolchainChannel(): Promise<string> {
+    return parseToolchainChannel(await this.source.file("rust-toolchain.toml").contents())
+  }
+
+  /**
+   * A small container with the cargo cache volumes mounted under `CACHE_ROOT`, for archiving.
+   *
+   * The volumes are the same objects `rustEnv` mounts, for the engine's own platform, which is
+   * the one CI builds.
+   */
+  private async cacheMounts(): Promise<Container> {
+    const channel = await this.toolchainChannel()
+    const { arch } = targetFor(await dag.defaultPlatform())
+    return (
+      dag
+        .container()
+        .from(ALPINE_IMAGE)
+        .withExec(["apk", "add", "--no-cache", "tar", "zstd"])
+        // An archive or a restore must run every time it is asked for, never from a cached step.
+        .withEnvVariable("CACHE_BUSTER", new Date().toISOString())
+        .withMountedCache(`${CACHE_ROOT}/cargo-home`, cargoHomeVolume(), {
+          sharing: CacheSharingMode.Shared,
+        })
+        .withMountedCache(`${CACHE_ROOT}/target-gnu`, targetVolume(channel, "gnu", arch), {
+          sharing: CacheSharingMode.Shared,
+        })
+        .withMountedCache(`${CACHE_ROOT}/target-musl`, targetVolume(channel, "musl", arch), {
+          sharing: CacheSharingMode.Shared,
+        })
+    )
+  }
+
+  /**
    * A builder container with the toolchain, the caches mounted, and dependencies precompiled.
    *
    * @param cookFlags Flags for `cargo chef cook`; they must select the same profile, target and
@@ -375,13 +473,20 @@ export class DiscordAlertmanager {
    * the Dockerfile's `contract-builder` stage works around with separate cache ids.
    */
   private async rustEnv(libc: Libc, platform: Platform): Promise<Container> {
-    const channel = parseToolchainChannel(await this.source.file("rust-toolchain.toml").contents())
+    const channel = await this.toolchainChannel()
     const spec = targetFor(platform)
     const image = libc === "musl" ? `rust:${channel}-alpine` : `rust:${channel}-trixie`
 
     let base = dag.container({ platform }).from(image)
     if (libc === "musl") {
       base = base.withExec(["apk", "add", "--no-cache", ...muslPackages(spec)])
+    } else {
+      // No debug info in the test build. It is most of a debug target directory, which is what
+      // CI archives, and a failing test still reports its file and line: the panic location is
+      // compiled in independently of debug info.
+      base = base
+        .withEnvVariable("CARGO_PROFILE_DEV_DEBUG", "0")
+        .withEnvVariable("CARGO_PROFILE_TEST_DEBUG", "0")
     }
 
     return (
@@ -408,10 +513,8 @@ export class DiscordAlertmanager {
         // is what CI has to archive and restore.
         .withEnvVariable("CARGO_INCREMENTAL", "0")
         .withEnvVariable("CARGO_NET_RETRY", "10")
-        .withMountedCache(CARGO_HOME, cacheVolume("cargo-home"), {
-          sharing: CacheSharingMode.Shared,
-        })
-        .withMountedCache(TARGET_DIR, cacheVolume(`target-${channel}-${libc}-${spec.arch}`), {
+        .withMountedCache(CARGO_HOME, cargoHomeVolume(), { sharing: CacheSharingMode.Shared })
+        .withMountedCache(TARGET_DIR, targetVolume(channel, libc, spec.arch), {
           sharing: CacheSharingMode.Shared,
         })
         .withWorkdir(EXECUTION_DIRECTORY)
@@ -430,6 +533,16 @@ function muslPackages(spec: TargetSpec): string[] {
 /** Cache volumes are global to the engine, so every name carries the project prefix. */
 function cacheVolume(name: string): CacheVolume {
   return dag.cacheVolume(`discord-alertmanager-${name}`)
+}
+
+/** Registry index, downloaded crates and git dependencies, shared by every build. */
+function cargoHomeVolume(): CacheVolume {
+  return cacheVolume("cargo-home")
+}
+
+/** One target directory per toolchain, libc and architecture: their artefacts never overlap. */
+function targetVolume(channel: string, libc: Libc, arch: string): CacheVolume {
+  return cacheVolume(`target-${channel}-${libc}-${arch}`)
 }
 
 /**
