@@ -117,8 +117,17 @@ cmd_stop() {
   # capture them mid-write, and the next run would start from a corrupt cache.
   docker stop --time 300 "${name}" > /dev/null
   docker logs --tail 50 "${name}" > "${RUNNER_TEMP}/dagger-engine.log" 2>&1 || true
+
+  # `docker stop` exits 0 even when the grace period ran out and it fell back to SIGKILL, so the
+  # exit status of the stop says nothing about whether the shutdown was clean. The engine's own
+  # exit code does: 137 is SIGKILL, and a state directory from that cannot be trusted.
+  local code
+  code="$(docker inspect --format '{{.State.ExitCode}}' "${name}")"
   docker rm "${name}" > /dev/null
-  echo "Engine ${name} stopped."
+  if [ "${code}" = "137" ]; then
+    die "engine ${name} was killed rather than stopped; its state will not be archived"
+  fi
+  echo "Engine ${name} stopped (exit code ${code})."
 }
 
 cmd_archive() {

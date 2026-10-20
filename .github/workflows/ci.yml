@@ -149,19 +149,23 @@ jobs:
           bash "${ENGINE_SCRIPT}" mark prune
 
       - name: Stop engine
+        id: stop
         if: ${{ !cancelled() && steps.engine.outcome == 'success' }}
         run: |
           set -euo pipefail
           bash "${ENGINE_SCRIPT}" stop "${DAGGER_ENGINE_NAME}"
           bash "${ENGINE_SCRIPT}" mark engine-stop
 
+      # Only after a clean stop: the state of an engine that is still running, or was killed, holds
+      # half-written metadata and would poison every run that restores it.
+      #
       # Saved on pushes to `main` and on pull requests from this repository. A pull request's
       # entry is readable only by that pull request, so `main` never restores state a branch
       # wrote. Fork pull requests have a read-only cache token and are skipped.
       - name: Archive engine state
         id: archive
         if: >-
-          ${{ !cancelled() && steps.engine.outcome == 'success' && (github.event_name == 'push' ||
+          ${{ !cancelled() && steps.stop.outcome == 'success' && (github.event_name == 'push' ||
           (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) }}
         env:
           ARCHIVE: ${{ steps.paths.outputs.archive }}
