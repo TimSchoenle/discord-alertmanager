@@ -78,7 +78,7 @@ jobs:
       # The lint set is `[workspace.lints]` in the root manifest and is inherited by every member.
       # `-D warnings` is what turns those `warn` levels into a gate.
       - name: Run Clippy
-        uses: TimSchoenle/actions/actions/rust/clippy@7e8fd61045447d321c5139eea8f2e2b766333f8b # tag=actions-rust-clippy-v1.1.12
+        uses: TimSchoenle/actions/actions/rust/clippy@ea4465fbe2bec98efad19b63849f8d1ac67b5c88 # tag=actions-rust-clippy-v1.1.13
         with:
           clippy_arguments: '--workspace --all-targets --all-features'
 
@@ -293,7 +293,7 @@ jobs:
       # `image` is empty, so the two checks needing one are skipped and this job stays the
       # cheap half.
       - name: Check the committed contract and the Dockerfile LABEL region
-        uses: TimSchoenle/actions/actions/rust/config-contract@8da2713994ba2b5f542e7e3334db287b1e22854a # tag=actions-rust-config-contract-v1.3.9
+        uses: TimSchoenle/actions/actions/rust/config-contract@ea4465fbe2bec98efad19b63849f8d1ac67b5c88 # tag=actions-rust-config-contract-v1.4.0
         with:
           example: config-schema
           package: discord-alertmanager-config
@@ -389,7 +389,7 @@ jobs:
       # a contract behind it.
       - name: Verify the image carries the contract labels
         id: contract
-        uses: TimSchoenle/actions/actions/rust/config-contract@8da2713994ba2b5f542e7e3334db287b1e22854a # tag=actions-rust-config-contract-v1.3.9
+        uses: TimSchoenle/actions/actions/rust/config-contract@ea4465fbe2bec98efad19b63849f8d1ac67b5c88 # tag=actions-rust-config-contract-v1.4.0
         with:
           example: config-schema
           package: discord-alertmanager-config
