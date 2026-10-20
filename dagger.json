@@ -1,0 +1,8 @@
+{
+  "name": "discord-alertmanager",
+  "engineVersion": "v0.21.10",
+  "sdk": {
+    "source": "typescript"
+  },
+  "source": "dagger"
+}

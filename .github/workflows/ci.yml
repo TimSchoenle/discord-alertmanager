@@ -1,0 +1,187 @@
+name: Dagger
+
+# Proof of concept: the `test` and image halves of build.yaml, run through the Dagger module in
+# `dagger/` instead of through cargo on the runner and `docker buildx`. It runs alongside
+# build.yaml on the same events so the two can be compared run for run; it gates nothing and
+# publishes nothing.
+#
+# A hosted runner starts with an empty Dagger engine. The engine's state directory is restored
+# from `actions/cache` before the pipeline and saved after it, so a warm run skips every step whose
+# inputs did not change and reuses cargo's registry and target volumes for the ones that did.
+# `.github/scripts/dagger-engine.sh` does the archiving and writes what it cost (download,
+# extract, archive, upload, and sizes) to the job summary.
+
+on:
+  push:
+    branches: [ "main" ]
+
+  pull_request:
+    branches: [ "main" ]
+
+  workflow_dispatch:
+
+permissions: { }
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pipeline:
+    name: Dagger Pipeline
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read # Required to checkout the code
+    env:
+      # The CLI and the engine must be the same release, and `engineVersion` in dagger.json names
+      # it too. Bump all three together.
+      DAGGER_VERSION: '0.21.10'
+      DAGGER_ENGINE_IMAGE: 'registry.dagger.io/engine:v0.21.10'
+      DAGGER_ENGINE_NAME: 'dagger-engine-ci'
+      DAGGER_NO_NAG: '1'
+      # Engine GC budget, applied before archiving. The uncompressed state is pruned to this.
+      DAGGER_GC_MAX_USED_SPACE: '10GB'
+      # The compressed archive is not saved above this, so one entry cannot evict the rest of the
+      # repository's 10 GB cache, which build.yaml's buildx cache also lives in.
+      DAGGER_ARCHIVE_LIMIT_BYTES: '4294967296'
+      ENGINE_SCRIPT: .github/scripts/dagger-engine.sh
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      # Paths under RUNNER_TEMP, which the workflow-level `env` cannot see, so they are computed
+      # here once and read from step outputs everywhere else.
+      - name: Prepare paths
+        id: paths
+        run: |
+          set -euo pipefail
+          {
+            echo "state=${RUNNER_TEMP}/dagger-state"
+            echo "archive=${RUNNER_TEMP}/dagger-state.tar.zst"
+            echo "config=${RUNNER_TEMP}/engine.json"
+          } >> "${GITHUB_OUTPUT}"
+          bash "${ENGINE_SCRIPT}" mark begin
+
+      # The key ends in the run, so every saved state is a new entry and the newest one with the
+      # same lockfile and toolchain is restored. Failing that, the newest one at all: a dependency
+      # bump still finds the unchanged crates and every base image in it.
+      - name: Restore engine state
+        id: restore
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ${{ steps.paths.outputs.archive }}
+          key: dagger-engine-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.DAGGER_VERSION }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            dagger-engine-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.DAGGER_VERSION }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}-
+            dagger-engine-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.DAGGER_VERSION }}-
+
+      - name: Extract engine state
+        env:
+          ARCHIVE: ${{ steps.paths.outputs.archive }}
+          STATE: ${{ steps.paths.outputs.state }}
+        run: |
+          set -euo pipefail
+          bash "${ENGINE_SCRIPT}" mark cache-download
+          bash "${ENGINE_SCRIPT}" restore "${ARCHIVE}" "${STATE}"
+          bash "${ENGINE_SCRIPT}" mark extract
+
+      - name: Start engine
+        id: engine
+        env:
+          CONFIG: ${{ steps.paths.outputs.config }}
+          STATE: ${{ steps.paths.outputs.state }}
+        run: |
+          set -euo pipefail
+          jq -n --arg max "${DAGGER_GC_MAX_USED_SPACE}" '{gc: {maxUsedSpace: $max}}' > "${CONFIG}"
+          bash "${ENGINE_SCRIPT}" start "${STATE}" "${DAGGER_ENGINE_NAME}" "${DAGGER_ENGINE_IMAGE}" "${CONFIG}"
+
+      # Installs the CLI only: no `call`, `args` or `verb` is given, so the action runs nothing.
+      - name: Install Dagger CLI
+        uses: dagger/dagger-for-github@27b130bf0f79a7f6fbbbe0fbca6760dc9bb40a77 # v8.4.1
+        with:
+          version: ${{ env.DAGGER_VERSION }}
+
+      - name: Load module
+        run: |
+          set -euo pipefail
+          bash "${ENGINE_SCRIPT}" mark engine-and-cli
+          dagger functions --progress=plain
+          bash "${ENGINE_SCRIPT}" mark module-load
+
+      - name: Test
+        run: |
+          set -euo pipefail
+          dagger call --progress=plain test
+          bash "${ENGINE_SCRIPT}" mark test
+
+      # The image as a tarball: the same artefact `publish` would push, without a registry. Its
+      # size is in the summary for comparison with the image-check job in build.yaml.
+      - name: Build image
+        run: |
+          set -euo pipefail
+          dagger call --progress=plain docker --app-version=test --release=test \
+            export --path="${RUNNER_TEMP}/image.tar"
+          bash "${ENGINE_SCRIPT}" mark docker
+          bash "${ENGINE_SCRIPT}" size image-tarball "${RUNNER_TEMP}/image.tar"
+
+      - name: Smoke test image
+        run: |
+          set -euo pipefail
+          dagger call --progress=plain smoke-test
+          bash "${ENGINE_SCRIPT}" mark smoke-test
+
+      # From here on, run whenever the engine started, so a failed test still saves the
+      # dependency builds it made. Not on cancellation: a cancelled run may have been stopped
+      # mid-write.
+      - name: Prune engine cache
+        if: ${{ !cancelled() && steps.engine.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          bash "${ENGINE_SCRIPT}" prune
+          bash "${ENGINE_SCRIPT}" mark prune
+
+      - name: Stop engine
+        if: ${{ !cancelled() && steps.engine.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          bash "${ENGINE_SCRIPT}" stop "${DAGGER_ENGINE_NAME}"
+          bash "${ENGINE_SCRIPT}" mark engine-stop
+
+      # Saved on pushes to `main` and on pull requests from this repository. A pull request's
+      # entry is readable only by that pull request, so `main` never restores state a branch
+      # wrote. Fork pull requests have a read-only cache token and are skipped.
+      - name: Archive engine state
+        id: archive
+        if: >-
+          ${{ !cancelled() && steps.engine.outcome == 'success' && (github.event_name == 'push' ||
+          (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) }}
+        env:
+          ARCHIVE: ${{ steps.paths.outputs.archive }}
+          STATE: ${{ steps.paths.outputs.state }}
+        run: |
+          set -euo pipefail
+          bash "${ENGINE_SCRIPT}" archive "${STATE}" "${ARCHIVE}" "${DAGGER_ARCHIVE_LIMIT_BYTES}"
+          bash "${ENGINE_SCRIPT}" mark archive
+
+      - name: Save engine state
+        if: ${{ !cancelled() && steps.archive.outputs.save == 'true' }}
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ${{ steps.paths.outputs.archive }}
+          # The key the restore step computed, so the two cannot disagree.
+          key: ${{ steps.restore.outputs.cache-primary-key }}
+
+      - name: Report
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          bash "${ENGINE_SCRIPT}" mark cache-save
+          bash "${ENGINE_SCRIPT}" report
