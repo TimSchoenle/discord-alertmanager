@@ -366,8 +366,8 @@ leaving a claimed row for its lease to release.
 | Alertmanager | API v2, which is the only one Alertmanager 0.27 and newer serves |
 | Storage | PostgreSQL and SQLite, one conformance suite between them |
 
-The pinned toolchain is about reproducibility and is not the floor. 1.94 is the
-floor, and it comes from `terrace-config`, which declares the highest MSRV in the tree.
+`rust-version` follows the pinned toolchain: Renovate moves both in one pull request, so the
+floor Cargo enforces is the release this repository is built and tested with.
 
 ## Documentation
 
