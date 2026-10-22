@@ -80,7 +80,7 @@ jobs:
       - name: Run Clippy
         uses: TimSchoenle/actions/actions/rust/clippy@ea4465fbe2bec98efad19b63849f8d1ac67b5c88 # tag=actions-rust-clippy-v1.1.13
         with:
-          clippy_arguments: '--workspace --all-targets --all-features'
+          clippy_arguments: '--workspace --all-targets --all-features -- -D warnings'
 
   # The `test` set again, instrumented, with the result uploaded to Codecov. It stays beside `test`
   # rather than replacing it, so a Codecov outage fails this job and leaves the test verdict
