@@ -173,8 +173,8 @@ async fn a_wrong_token_is_rejected_without_saying_why() {
         .expect("the router answers");
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    assert!(body_text(response).await.is_empty());
-    assert!(service.received().is_empty());
+    assert_eq!(body_text(response).await, "");
+    assert_eq!(service.received(), Vec::<IngestRequest>::new());
 }
 
 #[tokio::test]
@@ -186,8 +186,8 @@ async fn a_missing_token_is_rejected_the_same_way() {
         .expect("the router answers");
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    assert!(body_text(response).await.is_empty());
-    assert!(service.received().is_empty());
+    assert_eq!(body_text(response).await, "");
+    assert_eq!(service.received(), Vec::<IngestRequest>::new());
 }
 
 #[tokio::test]
@@ -217,7 +217,7 @@ async fn an_envelope_of_another_version_is_a_bad_request() {
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     assert!(body_text(response).await.contains('5'));
-    assert!(service.received().is_empty());
+    assert_eq!(service.received(), Vec::<IngestRequest>::new());
 }
 
 #[tokio::test]
@@ -229,7 +229,7 @@ async fn a_body_that_is_not_the_envelope_is_a_bad_request() {
         .expect("the router answers");
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    assert!(service.received().is_empty());
+    assert_eq!(service.received(), Vec::<IngestRequest>::new());
 }
 
 #[tokio::test]
@@ -291,7 +291,7 @@ async fn an_alert_the_domain_refuses_is_a_bad_request() {
         .expect("the router answers");
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    assert!(service.received().is_empty());
+    assert_eq!(service.received(), Vec::<IngestRequest>::new());
 }
 
 #[tokio::test]
@@ -325,7 +325,7 @@ async fn a_body_over_the_configured_limit_is_refused() {
         .expect("the router answers");
 
     assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
-    assert!(service.received().is_empty());
+    assert_eq!(service.received(), Vec::<IngestRequest>::new());
 }
 
 #[tokio::test]

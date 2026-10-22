@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use chrono::{TimeZone, Utc};
 use dam_am::AlertmanagerClient;
 use dam_config::{Alertmanager, Retry};
-use dam_core::{AlertStatus, AmState, MatcherSet};
+use dam_core::{Alert, AlertStatus, AmState, MatcherSet};
 use dam_engine::{AlertFilter, AlertmanagerApi, AmError, SilenceRequest};
 use secrecy::SecretString;
 use url::Url;
@@ -157,7 +157,7 @@ async fn a_matcher_filter_is_passed_through_as_a_repeated_query_parameter() {
         .await
         .expect("the alerts are listed");
 
-    assert!(alerts.is_empty());
+    assert_eq!(alerts, Vec::<Alert>::new());
     server.verify().await;
 }
 

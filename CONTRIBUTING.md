@@ -37,7 +37,7 @@ query.
 
 ```bash
 cargo fmt --all --check
-cargo clippy --workspace --all-targets --all-features
+cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo deny check
 cargo xtask config-docs                       # then check nothing moved

@@ -627,7 +627,7 @@ mod tests {
 
         assert_eq!(status.version, "0.27.0");
         assert!(status.cluster_ready);
-        assert!(status.peers.is_empty());
+        assert_eq!(status.peers, Vec::<String>::new());
         assert_eq!(status.uptime, Some(instant(9)));
         assert!(status.config_hash.is_some());
     }

@@ -1190,7 +1190,7 @@ mod tests {
             now(),
         );
 
-        assert!(decision.new_cards.is_empty());
+        assert_eq!(decision.new_cards, Vec::<PlannedCard>::new());
         assert_eq!(decision.updates[0].state, Some(NotificationState::Firing));
     }
 
@@ -1539,7 +1539,7 @@ mod tests {
         );
 
         assert_eq!(decision.new_cards.len(), 1);
-        assert!(decision.updates.is_empty());
+        assert_eq!(decision.updates, Vec::<CardUpdate>::new());
         assert!(decision.new_cards[0].mention);
         assert_eq!(decision.new_cards[0].card.state, NotificationState::Firing);
     }
@@ -1637,7 +1637,7 @@ mod tests {
             now(),
         );
 
-        assert!(decision.new_cards.is_empty());
+        assert_eq!(decision.new_cards, Vec::<PlannedCard>::new());
         assert_eq!(decision.updates.len(), 1);
         assert_eq!(decision.updates[0].state, None);
         assert_eq!(kinds(&decision.updates[0]), vec!["edit_card"]);
