@@ -1,0 +1,130 @@
+# yaml-language-server: $schema=https://storage.googleapis.com/coderabbit_public_assets/schema.v2.json
+tone_instructions: "Direct, no filler, no praise."
+
+reviews:
+  profile: assertive
+
+  auto_review:
+    # CodeRabbit cannot filter by head branch, so automated pull requests are
+    # skipped by author: Renovate opens `renovate/*`, the release manager app
+    # opens `release-please--*`. Both the bot login and the bare app slug are
+    # listed because the match is exact.
+    ignore_usernames:
+      - "renovate[bot]"
+      - "renovate"
+      - "automatic-release-manager[bot]"
+      - "automatic-release-manager"
+
+  # Generated or tool-owned files (see CONTRIBUTING.md). Review their sources instead.
+  path_filters:
+    - "!**/Cargo.lock"
+    - "!CHANGELOG.md"
+    - "!.release-please-manifest.json"
+    - "!README.md" # rendered from .github/templates/README.md.hbs
+    # `cargo xtask config-docs` output; the source is crates/discord-alertmanager-config.
+    - "!docs/config.md"
+    - "!docs/config.json"
+    - "!docs/config.contract.json"
+    - "!config.example.toml"
+    - "!crates/discord-alertmanager-am/tests/fixtures/**" # captured Alertmanager payloads
+
+  path_instructions:
+    - path: "crates/**/*.rs"
+      instructions: |
+        Internal workspace crates (`publish = false`); no semver obligations. Flag:
+        - `unwrap`, `expect`, `panic!`, `unreachable!` or indexing that can panic in non-test code;
+          the release profile is `panic = "abort"`, so a panic kills the bot. Fallible paths return
+          typed (`thiserror`) errors.
+        - Missing rustdoc, `# Errors` and `# Panics` sections on public items.
+        - Bare `#[allow(...)]`; the workspace requires `#[expect(..., reason = "...")]`.
+        - Secrets (bot token, webhook bearer token, DSNs) held outside `secrecy` types, or reaching
+          logs, `Debug` output, errors or Discord messages.
+        - Blocking I/O or `std::sync` locks held across `.await` on the Tokio runtime.
+        - New dependencies or features: justify them; one TLS stack (rustls + ring), no native-tls.
+        - Code that would not compile on the MSRV (`rust-version` in Cargo.toml).
+        `unsafe_code` is forbidden workspace-wide; do not suggest `unsafe`.
+    - path: "crates/discord-alertmanager-core/**"
+      instructions: |
+        Pure domain crate: no I/O, no async runtime, no Discord types. Its direct dependency set is
+        fixed by `.github/scripts/verify-architecture.sh`; flag any new dependency.
+    - path: "crates/discord-alertmanager-ingest/**"
+      instructions: |
+        Public HTTP listener for the Alertmanager webhook. Check: bearer token compared in constant
+        time, 401 without detail, request body size limits, strict payload `version` checks, no
+        Discord or other slow I/O in the handler (Alertmanager retries on timeout), and that
+        `/readyz` reflects real dependency health.
+    - path: "crates/discord-alertmanager-discord/**"
+      instructions: |
+        Label values are attacker-influenced. Check: rendered Discord markdown and URLs pass the
+        escaping filters, templates stay sandboxed (no loader, no `include`, strict undefined),
+        `custom_id` parsing rejects forged or oversized input, every command and component checks
+        authorisation, and Discord rate limits and message size limits are respected.
+    - path: "crates/discord-alertmanager-engine/**"
+      instructions: |
+        Decision pipeline and outbox. Check idempotency under at-least-once delivery, ordering and
+        deduplication, storm handling, and that every outbound effect goes through the outbox.
+    - path: "crates/discord-alertmanager-store*/**"
+      instructions: |
+        Both backends must stay behaviourally identical and pass the shared conformance suite. Use
+        checked `query!` macros with bound parameters only; no string-built SQL. Claims must stay
+        safe under concurrency (`FOR UPDATE SKIP LOCKED` / `BEGIN IMMEDIATE`). Migrations are
+        append-only: never edit a released one, add a matching migration to the other backend, and
+        avoid long table locks on PostgreSQL.
+    - path: "crates/discord-alertmanager-am/**"
+      instructions: |
+        Alertmanager API client. Require request timeouts, bounded response reading, and tolerant
+        handling of unknown fields without silently accepting malformed required ones.
+    - path: "crates/discord-alertmanager-config/**"
+      instructions: |
+        Configuration surface. A key added, renamed or removed is an operator-facing change: require
+        regenerated `docs/config*` and `config.example.toml`, validation at boot, and secret fields as
+        `secrecy` types.
+    - path: "xtask/**"
+      instructions: |
+        Build tooling, not shipped. Panics with clear messages are acceptable; focus on generator
+        correctness and on not touching anything but throwaway containers and temp files.
+    - path: "Dockerfile"
+      instructions: |
+        Base images pinned by digest, non-root user, no secrets in layers or build args, minimal
+        runtime stage. The `terrace-config:labels` region is generated; do not hand-edit it.
+    - path: ".github/workflows/**"
+      instructions: |
+        Every third-party action must be pinned to a full commit SHA with a version comment.
+        Require least-privilege `permissions:` at workflow or job level, `persist-credentials: false`
+        on checkout unless pushing, no untrusted `${{ github.event.* }}` interpolation into `run:`,
+        and no `pull_request_target` that checks out or executes PR code.
+    - path: ".github/templates/**"
+      instructions: |
+        Source of the generated README.md. Review rendered wording, links and badge URLs here.
+    - path: "**/*.sh"
+      instructions: |
+        Require `set -euo pipefail`, quoted expansions, and no reliance on GNU-only flags
+        without a comment.
+
+  pre_merge_checks:
+    title:
+      mode: error
+      requirements: |
+        Must follow Conventional Commits: `type(scope)?!?: subject`. Allowed types: feat, fix, perf,
+        revert, docs, refactor, test, style, ci, build, chore, deps. Lowercase, imperative subject,
+        no trailing period. release-please derives version bumps and the changelog from this title.
+
+  tools:
+    # Already enforced in CI (`clippy` job, `--all-targets --all-features -D warnings`).
+    clippy:
+      enabled: false
+    actionlint:
+      enabled: true
+    zizmor:
+      enabled: true
+    gitleaks:
+      enabled: true
+    shellcheck:
+      enabled: true
+    markdownlint:
+      enabled: true
+    hadolint:
+      enabled: true
+    # Lock hazards in the PostgreSQL migrations.
+    squawk:
+      enabled: true
