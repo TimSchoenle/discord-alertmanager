@@ -1,6 +1,6 @@
 [package]
 name = "discord-alertmanager-store-postgres"
-description = "PostgreSQL backend: checked queries, migrations, and the FOR UPDATE SKIP LOCKED claim."
+description = "PostgreSQL backend: runtime queries, migrations, and the FOR UPDATE SKIP LOCKED claim."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
