@@ -290,8 +290,9 @@ differs from the package name throughout, so both are listed.
 | [`discord-alertmanager-store`](crates/discord-alertmanager-store) | `dam_store` | The Store trait, its row types, and the conformance suite both backends run. |
 | [`discord-alertmanager`](crates/discord-alertmanager) | — | A Discord operator surface for Prometheus Alertmanager. |
 
-`xtask` sits beside them and is build tooling: it regenerates the configuration reference and the
-`sqlx` offline caches. `cargo xtask` is aliased in `.cargo/config.toml`.
+`xtask` sits beside them and is build tooling: it regenerates the configuration reference, and the
+`sqlx` offline caches once a query uses the `query!` macro. `cargo xtask` is aliased in
+`.cargo/config.toml`.
 
 ## Configuration
 

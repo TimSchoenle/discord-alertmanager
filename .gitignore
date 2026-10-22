@@ -2,7 +2,7 @@
 **/*.rs.bk
 Cargo.lock.orig
 
-# Local database URLs for `cargo sqlx prepare`; the checked-in `.sqlx/` caches are the artefact.
+# Local database URLs for `cargo sqlx prepare`; only the generated `.sqlx/` caches are ever committed.
 .env.local
 
 # Editor / tooling state
