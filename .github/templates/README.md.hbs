@@ -293,8 +293,9 @@ differs from the package name throughout, so both are listed.
 {{#each crates}}| [`{{ name }}`](crates/{{ name }}) | {{#if library}}`{{ library }}`{{else}}—{{/if}} | {{ mdCell purpose }} |
 {{/each}}
 
-`xtask` sits beside them and is build tooling: it regenerates the configuration reference and the
-`sqlx` offline caches. `cargo xtask` is aliased in `.cargo/config.toml`.
+`xtask` sits beside them and is build tooling: it regenerates the configuration reference, and the
+`sqlx` offline caches once a query uses the `query!` macro. `cargo xtask` is aliased in
+`.cargo/config.toml`.
 
 ## Configuration
 

@@ -8,7 +8,7 @@ pre-1.0, `fix` moves the patch, and `docs`, `chore`, `refactor` and `test` move 
 
 ## Generated files
 
-Four artefacts are committed and none of them is written by hand. Each says so in its own first
+Three artefacts are committed and none of them is written by hand. Each says so in its own first
 lines, and editing the output instead of its source is reverted by the next render.
 
 | File | Written by | Source |
@@ -16,7 +16,6 @@ lines, and editing the output instead of its source is reverted by the next rend
 | `README.md` | `.github/workflows/docs.yml` | `.github/templates/README.md.hbs` |
 | `docs/config.md`, `docs/config.json`, `docs/config.contract.json`, `config.example.toml` | `cargo xtask config-docs` | the types in `crates/discord-alertmanager-config` |
 | `CHANGELOG.md`, the version in both manifests and in `Cargo.lock` | `.github/workflows/release-please.yaml` | the conventional-commit subjects since the last tag |
-| `crates/*/.sqlx/` | `cargo xtask db-prepare` | the queries and each backend's `migrations/` |
 
 The README is rendered on every pull request and committed back to the branch, so a change to the
 template arrives already rendered. A push to `main` whose `README.md` does not match its template
@@ -27,9 +26,12 @@ committing the four files that come out. Nothing else needs touching: the README
 its table of required keys are lifted out of `docs/config.md` by
 `.github/scripts/readme-variables.sh` when the README is rendered.
 
-`cargo xtask db-prepare` needs a container runtime. It starts a throwaway PostgreSQL container and
-a temporary SQLite file, applies each backend's migrations, and records the checked queries; the
-committed caches are what let a plain `cargo build` need neither Docker nor a database.
+No query goes through the `query!` macro. Both backends issue `sqlx::query` at runtime and map
+rows by hand, so there is no `.sqlx/` offline cache to commit, and a plain `cargo build` needs
+neither Docker nor a database. `cargo xtask db-prepare` is kept for the first checked query: it
+needs a container runtime, starts a throwaway PostgreSQL container and a temporary SQLite file,
+applies each backend's migrations, and writes `crates/*/.sqlx/`, which is then committed with the
+query.
 
 ## Checks
 
