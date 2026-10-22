@@ -761,6 +761,6 @@ mod tests {
         let renderer = renderer();
         let produced = renderer.render(&card(NotificationState::Orphaned, &[]));
 
-        assert!(produced.components.is_empty());
+        assert_eq!(produced.components, Vec::<CreateActionRow>::new());
     }
 }

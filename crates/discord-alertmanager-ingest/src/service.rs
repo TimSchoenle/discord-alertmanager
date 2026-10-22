@@ -200,7 +200,7 @@ mod tests {
     #[test]
     fn a_healthy_process_reports_no_failures() {
         assert!(healthy().is_ready(MAX_POLL_AGE));
-        assert!(healthy().failures(MAX_POLL_AGE).is_empty());
+        assert_eq!(healthy().failures(MAX_POLL_AGE), Vec::<&str>::new());
     }
 
     #[test]

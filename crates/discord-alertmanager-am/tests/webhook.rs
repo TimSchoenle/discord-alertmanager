@@ -35,7 +35,7 @@ fn a_captured_payload_parses_into_the_alerts_it_carries() {
             Some(group_key.as_str())
         );
         assert_eq!(alert.am_state, AmState::Active);
-        assert!(alert.silenced_by.is_empty());
+        assert_eq!(alert.silenced_by, Vec::<String>::new());
     }
 
     assert_eq!(alerts[0].name(), "PodDown");
