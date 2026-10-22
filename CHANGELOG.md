@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.9.2](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.9.1...v0.9.2) (2026-10-22)
+
+
+### Bug Fixes
+
+* **docker:** stop compiling every dependency twice in CI ([#174](https://github.com/TimSchoenle/discord-alertmanager/issues/174)) ([2760ace](https://github.com/TimSchoenle/discord-alertmanager/commit/2760ace5faecf6774b5f9aebb1259dca2d9419db))
+
+
+### Build System
+
+* **renovate:** let rust-version follow the toolchain via rust-application ([#180](https://github.com/TimSchoenle/discord-alertmanager/issues/180)) ([bc8887f](https://github.com/TimSchoenle/discord-alertmanager/commit/bc8887fd4ff1c1266f6c198b64ef5aa7018cbc7f))
+
+
+### Dependencies
+
+* **deps:** lock file maintenance ([#173](https://github.com/TimSchoenle/discord-alertmanager/issues/173)) ([309cb18](https://github.com/TimSchoenle/discord-alertmanager/commit/309cb182eb26d4b478821058dbf15d0c3cfd08f0))
+* **deps:** update rust crate minijinja to v3 ([#155](https://github.com/TimSchoenle/discord-alertmanager/issues/155)) ([121db8c](https://github.com/TimSchoenle/discord-alertmanager/commit/121db8cd499d406a781b386752efe8694dfefc95))
+* **deps:** update rust crate rstest to 0.28 ([#179](https://github.com/TimSchoenle/discord-alertmanager/issues/179)) ([42ad39c](https://github.com/TimSchoenle/discord-alertmanager/commit/42ad39c33ff85acb32a45e344c4ea20c07ac8479))
+* **deps:** update rust crate terrace-config to v0.15.2 ([#176](https://github.com/TimSchoenle/discord-alertmanager/issues/176)) ([6045d4e](https://github.com/TimSchoenle/discord-alertmanager/commit/6045d4e187877bcb36c99dd074696510929edc26))
+* **deps:** update rust docker tag to v1.99 ([#181](https://github.com/TimSchoenle/discord-alertmanager/issues/181)) ([bfebfd1](https://github.com/TimSchoenle/discord-alertmanager/commit/bfebfd1bd52836c72a6eb4b4d7512e6bfb16b9ce))
+* **deps:** update rust to v1.99.1 ([#171](https://github.com/TimSchoenle/discord-alertmanager/issues/171)) ([bf6e365](https://github.com/TimSchoenle/discord-alertmanager/commit/bf6e365c383774ef26b29c9b069a0901e00551d9))
+
 ## [0.9.1](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.9.0...v0.9.1) (2026-10-17)
 
 
