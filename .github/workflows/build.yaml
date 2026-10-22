@@ -161,13 +161,13 @@ jobs:
       - name: Doctests
         run: cargo test --workspace --all-features --doc
 
-  # The floor, which is not the pinned toolchain. `rust-toolchain.toml` pins 1.97.1 for
-  # reproducibility; `rust-version` in `[workspace.package]` is 1.94, inherited from
-  # terrace-config, and it is a claim about what compiles rather than about what CI uses.
+  # The declared floor: `rust-version` in `[workspace.package]`, read from Cargo.toml so this job
+  # can never check a different version than the one Cargo enforces. Renovate's `rust toolchain`
+  # group (the shared `rust-application` preset) moves it together with `rust-toolchain.toml`.
   #
   # `RUSTUP_TOOLCHAIN` rather than the action's `toolchain` input alone: `rust-toolchain.toml`
   # sits in the working directory and rustup honours it over a default, so without the variable
-  # this job would silently re-download 1.97.1 and check nothing.
+  # this job would silently use the pinned toolchain and check nothing.
   #
   # No `--all-targets`. The floor is about the crates, and the dev-dependencies — proptest,
   # testcontainers, wiremock — carry MSRVs of their own that nothing depending on this workspace
@@ -177,8 +177,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read # Required to checkout the code
-    env:
-      RUSTUP_TOOLCHAIN: '1.94'
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
@@ -190,12 +188,25 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Resolve the declared MSRV from Cargo.toml
+        id: msrv
+        run: |
+          msrv=$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' Cargo.toml)
+          if ! printf '%s' "$msrv" | grep -Eq '^[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
+            echo '::error::no rust-version = "<major>.<minor>[.<patch>]" line in Cargo.toml'
+            exit 1
+          fi
+          echo "version=$msrv" >> "$GITHUB_OUTPUT"
+          echo "::notice::MSRV $msrv"
+
       - name: Install the declared MSRV toolchain
         uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
         with:
-          toolchain: '1.99'
+          toolchain: ${{ steps.msrv.outputs.version }}
 
       - name: Check
+        env:
+          RUSTUP_TOOLCHAIN: ${{ steps.msrv.outputs.version }}
         run: cargo check --workspace --all-features
 
   # The rule `discord-alertmanager-core` states about itself, asserted rather than trusted. Its
