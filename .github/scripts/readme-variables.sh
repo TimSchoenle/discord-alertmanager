@@ -7,8 +7,8 @@
 #
 # The first kind the action cannot see. It reads one manifest, and this is a virtual workspace:
 # `crates/discord-alertmanager/Cargo.toml` names the package and its description, while the
-# licence, the MSRV and the edition live in the root's `[workspace.package]` where ten other
-# crates inherit them. Pointing the action at the root instead is not an option — a virtual
+# licence, the MSRV and the edition live in the root's `[workspace.package]` where every other
+# member inherits them. Pointing the action at the root instead is not an option — a virtual
 # manifest has no `[package]` table and the action refuses it by name.
 #
 # The second kind is this repository's own generated surface: the configuration loader's

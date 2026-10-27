@@ -6,7 +6,7 @@
 //! should be doing.
 //!
 //! Every source of change ends in the same place. A webhook, a reconciler pass and a silence sync
-//! all produce a list of `AlertDelta`, and all three hand it to [`PipelineService::apply_deltas`].
+//! all produce a list of `AlertDelta`, and all three hand it to `PipelineService::apply_deltas`.
 //! Anything a card does about a change is therefore decided once, whichever way the change
 //! arrived.
 
@@ -45,7 +45,7 @@ const DEADMAN_KEY: &str = "deadman";
 ///
 /// Holds the collaborators rather than constructing them, so one instance serves every source of
 /// change: the decision is the same one whichever produced it.
-pub(crate) struct PipelineService {
+pub struct PipelineService {
     store: Arc<dyn Store>,
     alertmanager: Arc<dyn AlertmanagerApi>,
     routing: Arc<SharedRouting>,
@@ -72,7 +72,7 @@ impl PipelineService {
         reason = "the composition root hands the pipeline every collaborator it owns; folding \
                   them into a struct would move the same list one line up"
     )]
-    pub(crate) fn new(
+    pub fn new(
         store: Arc<dyn Store>,
         alertmanager: Arc<dyn AlertmanagerApi>,
         routing: Arc<SharedRouting>,
@@ -107,7 +107,7 @@ impl PipelineService {
     /// Shared rather than queried: readiness is asked far more often than the connection changes,
     /// and asking the gateway would answer a question about the network with a question about the
     /// network.
-    pub(crate) fn gateway_flag(&self) -> Arc<AtomicBool> {
+    pub fn gateway_flag(&self) -> Arc<AtomicBool> {
         Arc::clone(&self.gateway_connected)
     }
 
@@ -571,7 +571,7 @@ impl PipelineService {
     /// The process id is in it deliberately: rows claimed by a previous process must look
     /// abandoned to the janitor rather than reclaimable by whoever happens to start with the same
     /// name.
-    pub(crate) fn worker_id(index: u16) -> WorkerId {
+    pub fn worker_id(index: u16) -> WorkerId {
         WorkerId::new(format!("{}-{index}", std::process::id()))
     }
 }

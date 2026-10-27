@@ -1,0 +1,32 @@
+[package]
+name = "discord-alertmanager-runtime"
+description = "The running pipeline: the webhook service, the outbox dispatchers and the periodic tasks."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "dam_runtime"
+path = "src/lib.rs"
+
+# No backend and no `anyhow`. The store arrives as `Arc<dyn Store>` and the two clients as the
+# engine's ports, so the binary decides what this crate runs against and a test can hand it a fake.
+[dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+dam-core.workspace = true
+dam-discord.workspace = true
+dam-engine.workspace = true
+dam-ingest.workspace = true
+dam-store.workspace = true
+metrics.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }
+tokio-util.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

@@ -34,7 +34,7 @@ pub(crate) struct Assembled {
 }
 
 /// Joins the tables a card is drawn from.
-pub(crate) struct Cards {
+pub struct Cards {
     store: Arc<dyn Store>,
     routing: Arc<SharedRouting>,
     storm: Arc<SharedStorm>,
@@ -47,7 +47,7 @@ impl Cards {
     /// The renderer is here for one reason: a forum post and a thread both need a name, the name
     /// comes from the same template and fallback chain the card's title does, and computing it in
     /// two places is how the two drift apart.
-    pub(crate) fn new(
+    pub fn new(
         store: Arc<dyn Store>,
         routing: Arc<SharedRouting>,
         storm_state: Arc<SharedStorm>,

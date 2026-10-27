@@ -937,7 +937,6 @@ name = "discord-alertmanager"
 version = "0.9.2"
 dependencies = [
  "anyhow",
- "async-trait",
  "chrono",
  "discord-alertmanager-am",
  "discord-alertmanager-config",
@@ -945,15 +944,14 @@ dependencies = [
  "discord-alertmanager-discord",
  "discord-alertmanager-engine",
  "discord-alertmanager-ingest",
+ "discord-alertmanager-runtime",
  "discord-alertmanager-store",
  "discord-alertmanager-store-postgres",
  "discord-alertmanager-store-sqlite",
- "metrics",
  "metrics-exporter-prometheus",
  "secrecy 0.10.3",
  "sentry",
  "terrace-config",
- "thiserror 2.0.21",
  "tokio",
  "tokio-util",
  "tracing",
@@ -1076,6 +1074,23 @@ dependencies = [
  "tokio-util",
  "tower",
  "tower-http 0.7.1",
+ "tracing",
+]
+
+[[package]]
+name = "discord-alertmanager-runtime"
+version = "0.9.2"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "discord-alertmanager-core",
+ "discord-alertmanager-discord",
+ "discord-alertmanager-engine",
+ "discord-alertmanager-ingest",
+ "discord-alertmanager-store",
+ "metrics",
+ "tokio",
+ "tokio-util",
  "tracing",
 ]
 
