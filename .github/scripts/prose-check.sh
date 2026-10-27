@@ -55,8 +55,11 @@ em_dashes() {
         | { grep -o '—' || true; } | wc -l
 }
 
+# A fenced block or an HTML comment ends a run and counts nothing inside it, as for the dashes.
 bold_frame_run() {
-    awk '/^- \*\*.*\*\* —/{r++; if (r>m) m=r; next} /^[[:space:]][[:space:]]+[^[:space:]]/{next} {r=0} END{print m+0}' "$1"
+    awk '/^```/{f=!f; r=0; next} f{next} /<!--/{c=1; r=0} c{if (/-->/) c=0; next}
+        /^- \*\*.*\*\* —/{r++; if (r>m) m=r; next} /^[[:space:]][[:space:]]+[^[:space:]]/{next} {r=0}
+        END{print m+0}' "$1"
 }
 
 if [ "$#" -eq 0 ]; then
