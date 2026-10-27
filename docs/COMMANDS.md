@@ -5,7 +5,14 @@ Every slash command the bot registers, and the capability each one needs.
 ## Authorisation
 
 Each command checks the caller's roles against `discord.capabilities`, and every denial is written
-to the audit log. Discord's own command permissions only decide what the client shows.
+to the audit log.
+
+Discord applies its own command permissions before that check: a member without a command's
+default permission can neither see nor run it. The bot registers `/alerts`, `/subscribe`,
+`/status` and `/debug` with `View Channel`, `/ignore` and `/silence` with `Manage Messages`, and
+`/route` and `/cards` with `Manage Server`. A member holding `view` alone therefore cannot run
+`/ignore list` or `/silence list` until an administrator allows those commands for their role
+under Server Settings, Integrations.
 
 There are four capabilities, ordered from least to most: `view`, `operate`, `silence` and `admin`.
 `view` defaults to `@everyone` and the other three to nobody, so a fresh deployment can read its
