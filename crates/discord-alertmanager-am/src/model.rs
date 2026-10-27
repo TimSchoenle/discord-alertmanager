@@ -1,4 +1,4 @@
-//! The slice of Alertmanager's API v2 wire model this client actually speaks.
+//! The slice of Alertmanager's API v2 wire model this client speaks.
 //!
 //! Hand-written, and deliberately partial. Alertmanager's `openapi.yaml` describes far more than
 //! six calls need, and a generated model would carry every field of it plus a dependency tree to
@@ -180,7 +180,7 @@ pub struct WireSilenceStatus {
     ///
     /// Taken from the server rather than derived from `startsAt` and `endsAt` here. The two agree
     /// almost always, and when they do not it is because the clocks disagree, in which case the
-    /// server's answer is the one the suppression actually follows.
+    /// server's answer is the one the suppression follows.
     pub state: SilenceLifecycle,
 }
 

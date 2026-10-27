@@ -15,7 +15,7 @@
 #
 # It checks the **image**, never the Dockerfile. A source diff cannot see a base image that
 # overrode a label, a `LABEL` line deleted on a branch nobody diffed, or a build argument that
-# silently failed to interpolate. This sees what a registry will actually serve.
+# silently failed to interpolate. This sees what a registry will serve.
 #
 # Two things it refuses rather than passes, because both look like success:
 #

@@ -29,8 +29,8 @@ use dam_store::{Route, RouteId, RouteTarget};
 
 /// The most arrivals one route keeps timestamps for.
 ///
-/// A multiple of the threshold rather than the threshold itself, so the count is still honest
-/// about how far past it a route has gone, and bounded, so a route firing tens of thousands of
+/// A multiple of the threshold rather than the threshold itself, so the count still shows
+/// how far past it a route has gone, and bounded, so a route firing tens of thousands of
 /// alerts a minute costs a bounded amount of memory to describe as "storming".
 const RETAINED_PER_ROUTE: usize = 4;
 

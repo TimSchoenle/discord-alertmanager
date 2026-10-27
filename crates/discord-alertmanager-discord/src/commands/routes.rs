@@ -225,7 +225,7 @@ async fn add(
 /// Every route, in evaluation order.
 ///
 /// Read from the published snapshot rather than from the database, so what it shows is what the
-/// pipeline is actually evaluating.
+/// pipeline is evaluating.
 fn list(ctx: &CommandCtx<'_>) -> Response {
     let snapshot = ctx.bot.routing.load();
     let routes = snapshot.routes();

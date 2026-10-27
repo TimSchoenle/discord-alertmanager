@@ -357,7 +357,7 @@ impl Alert {
 /// What kind of change an ingest produced.
 ///
 /// One row per transition is stored; `Updated` is the one that is not a transition and is why the
-/// event payload is trimmed to the annotations that actually changed.
+/// event payload is trimmed to the annotations that changed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum EventKind {

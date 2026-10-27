@@ -36,7 +36,7 @@ const CHANNEL_TAG_LIMIT: usize = 20;
 /// The point past which the bot stops creating tags of its own.
 ///
 /// Two below the limit, so a channel that fills up leaves room for a person to add the tag they
-/// actually wanted. A label with unbounded cardinality would otherwise exhaust the channel in an
+/// wanted. A label with unbounded cardinality would otherwise exhaust the channel in an
 /// afternoon and take every future post's tags with it.
 const TAG_CREATION_CEILING: usize = 18;
 

@@ -278,7 +278,7 @@ impl EventHandler for Handler {
     }
 
     async fn shard_stage_update(&self, _: Context, event: ShardStageUpdateEvent) {
-        // Readiness has to report the session the bot actually holds. A shard that is
+        // Readiness has to report the session the bot holds. A shard that is
         // reconnecting is not one that can deliver a card, and saying otherwise would keep a
         // replica in service while its notifications went nowhere.
         let connected = matches!(event.new, ConnectionStage::Connected);

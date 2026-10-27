@@ -203,7 +203,7 @@
           "properties": {
             "audit_days": {
               "default": 365,
-              "description": "Days of `audit_log`.\n\nKept far longer than the rest because it is small and it is the record of what people\ndecided. Check this horizon against what an incident review actually needs.",
+              "description": "Days of `audit_log`.\n\nKept far longer than the rest because it is small and it is the record of what people\ndecided. Check this horizon against what an incident review needs.",
               "maximum": 4294967295,
               "minimum": 0,
               "type": "integer"

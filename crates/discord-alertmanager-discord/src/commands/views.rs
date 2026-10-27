@@ -5,7 +5,7 @@
 //! points to the same view: `Details` on a card and `/alerts show` have to draw the same thing, or
 //! an operator who used one and then the other has to work out which is lying.
 //!
-//! # References an operator can actually type
+//! # References an operator can type
 //!
 //! Discord has no way to hand a command a fingerprint the user did not read off a card first, so
 //! `<ref>` accepts what people have in front of them: a full fingerprint, the short one a card's
