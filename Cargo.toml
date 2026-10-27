@@ -3,9 +3,6 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "xtask"]
-# A patched third-party crate, not ours: kept out so that fmt, clippy and the workspace lints
-# leave the published source as it is. See `[patch.crates-io]` below.
-exclude = ["vendor"]
 
 # Inherited by every member with `field.workspace = true`, so a licence or an MSRV bump is one
 # edit rather than eleven.
@@ -154,9 +151,6 @@ rstest = "0.28"
 # holds `testcontainers` there until a modules release accepts 0.28.
 testcontainers = "0.27"
 testcontainers-modules = "0.15"
-# Only for the trust-store test in `dam-discord`, which proves the `[patch.crates-io]` copy below
-# is the one the graph resolves to.
-webpki-roots = "1"
 wiremock = "0.6"
 
 # Declared once and inherited by every member, so a crate cannot be held to a looser standard
@@ -197,12 +191,6 @@ missing_panics_doc = "warn"
 broken_intra_doc_links = "deny"
 private_intra_doc_links = "warn"
 unescaped_backticks = "warn"
-
-# Replaces webpki-roots 1.0.11 everywhere in the graph, including the 0.26.11 shim the gateway
-# socket reaches it through, with a copy that no longer trusts `emSign Root CA - G1`.
-# vendor/webpki-roots/Cargo.toml has the reason and the condition for removing it.
-[patch.crates-io]
-webpki-roots = { path = "vendor/webpki-roots" }
 
 [profile.release]
 codegen-units = 1
