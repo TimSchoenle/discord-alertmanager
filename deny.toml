@@ -32,10 +32,12 @@ ignore = [
     # 0.22 offers no post-quantum group, so there is no stronger exchange to fall back from.
     { id = "RUSTSEC-2026-0349", reason = "rustls 0.22 offers no post-quantum key exchange to downgrade." },
     # Paths through emSign intermediates whose private keys are public were accepted. The eight
-    # distrusted keys are P-384 intermediates of the emSign ECC hierarchy. webpki-roots removed
-    # `emSign ECC Root CA - G3` in 1.0.10 and `- C3` in 1.0.11, and the 1.0.11 store the gateway
-    # verifies against keeps only the RSA `emSign Root CA - G1`, so no path reaches them.
-    { id = "RUSTSEC-2026-0382", reason = "webpki-roots 1.0.11 trusts no emSign ECC root, which the distrusted intermediates need." },
+    # distrusted keys are P-384 intermediates (Mozilla bug 2083449) that chain to the emSign ECC
+    # G3 hierarchy, and Sectigo cross-signed each of them from `AAA Certificate Services`.
+    # webpki-roots removed `emSign ECC Root CA - G3` in 1.0.10 and `- C3` in 1.0.11, and does
+    # not carry `AAA Certificate Services`. Its only emSign root is the RSA `emSign Root CA - G1`,
+    # so no path the gateway verifies reaches those intermediates.
+    { id = "RUSTSEC-2026-0382", reason = "webpki-roots 1.0.11 trusts neither the emSign ECC roots nor AAA Certificate Services, so the distrusted intermediates have no trusted path." },
 ]
 
 [licenses]
