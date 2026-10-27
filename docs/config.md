@@ -93,7 +93,7 @@ indirection, in that order of precedence.
 | `telemetry.sentry.event_level` | `CaptureLevel`: `off` \| `error` \| `warn` \| `info` \| `debug` \| `trace` | `DAM_TELEMETRY__SENTRY__EVENT_LEVEL` | `error` | — | Level at or above which a log record is sent as an event of its own. |
 | `telemetry.sentry.breadcrumb_level` | `CaptureLevel`: `off` \| `error` \| `warn` \| `info` \| `debug` \| `trace` | `DAM_TELEMETRY__SENTRY__BREADCRUMB_LEVEL` | `info` | — | Level at or above which a log record is kept as a breadcrumb behind the next event. |
 | `telemetry.sentry.span_level` | `CaptureLevel`: `off` \| `error` \| `warn` \| `info` \| `debug` \| `trace` | `DAM_TELEMETRY__SENTRY__SPAN_LEVEL` | `info` | — | Level at or above which a span joins the trace. |
-| `telemetry.sentry.attach_stacktrace` | `bool` | `DAM_TELEMETRY__SENTRY__ATTACH_STACKTRACE` | `false` | — | Whether every event carries a stack trace, not only a panic. |
+| `telemetry.sentry.attach_stacktrace` | `bool` | `DAM_TELEMETRY__SENTRY__ATTACH_STACKTRACE` | `false` | — | Whether captured messages carry a stack trace, as panics always do. |
 | `telemetry.sentry.send_default_pii` | `bool` | `DAM_TELEMETRY__SENTRY__SEND_DEFAULT_PII` | `false` | — | Whether events carry the addresses, headers and user identifiers Sentry calls default PII. |
 | `telemetry.sentry.max_breadcrumbs` | `usize` | `DAM_TELEMETRY__SENTRY__MAX_BREADCRUMBS` | `100` | — | How many breadcrumbs are kept behind an event. |
 | `telemetry.sentry.shutdown_timeout_secs` | `u64` | `DAM_TELEMETRY__SENTRY__SHUTDOWN_TIMEOUT_SECS` | `2` | — | Seconds to spend delivering whatever is still queued during shutdown. |

@@ -657,10 +657,11 @@
 #   secrets directory
 # span_level = "info"
 
-# Whether every event carries a stack trace, not only a panic.
+# Whether captured messages carry a stack trace, as panics always do.
 #
 # Useful while a fault is being chased and expensive afterwards: it captures and symbolicates
-# a backtrace on every capture, including the ones that were only ever going to be counted.
+# a backtrace on every captured message, including the ones that were only ever going to be
+# counted.
 # Type: bool
 # Also from: DAM_TELEMETRY__SENTRY__ATTACH_STACKTRACE,
 #   DAM_TELEMETRY__SENTRY__ATTACH_STACKTRACE_FILE=/path/to/file,
