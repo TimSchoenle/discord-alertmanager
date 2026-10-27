@@ -221,10 +221,15 @@ jobs:
       - name: Install pinned toolchain
         uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
 
-      # `config-schema` gates the `Describe` derives and the generator example, and the module
-      # documentation in `discord-alertmanager-config` links items that exist only under it.
+      # Once per feature set. `config-schema` gates the `Describe` derives and the generator
+      # example, and the module documentation in `discord-alertmanager-config` links items that
+      # exist only under it, so a link that breaks with the feature off never shows in the first
+      # run.
       - name: Document
         run: cargo doc --workspace --all-features --no-deps
+
+      - name: Document with default features
+        run: cargo doc --workspace --no-deps
 
       - name: Doctests
         run: cargo test --workspace --all-features --doc

@@ -374,8 +374,6 @@ floor Cargo enforces is the release this repository is built and tested with.
 
 | Document | Purpose |
 | --- | --- |
-| [docs/config.contract.json](docs/config.contract.json) | — |
-| [docs/config.json](docs/config.json) | — |
 | [Configuration reference](docs/config.md) | Every key the service reads, and the variables that decide where those keys come from. |
 
 ## Contributing

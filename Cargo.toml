@@ -162,6 +162,8 @@ missing_docs = "warn"
 rust_2018_idioms = { level = "warn", priority = -1 }
 
 [workspace.lints.clippy]
+# A code-quality choice this workspace made for itself, not part of the documentation gate below.
+# RUST.md in TimSchoenle/actions keeps the two apart, and removing this line keeps every doc lint.
 pedantic = { level = "warn", priority = -1 }
 cargo = { level = "warn", priority = -1 }
 # `#[expect(…, reason = "…")]`, never a bare `#[allow(…)]`: an `allow` goes on silently forever,
@@ -189,7 +191,6 @@ missing_panics_doc = "warn"
 
 [workspace.lints.rustdoc]
 broken_intra_doc_links = "deny"
-private_intra_doc_links = "warn"
 unescaped_backticks = "warn"
 
 [profile.release]

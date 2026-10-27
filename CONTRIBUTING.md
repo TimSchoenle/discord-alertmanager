@@ -43,6 +43,7 @@ cargo deny check
 cargo xtask config-docs                       # then check nothing moved
 bash .github/scripts/readme-variables.sh      # the README payload, as CI will render it
 bash .github/scripts/verify-architecture.sh   # the domain crate's dependency rule
+bash .github/scripts/prose-check.sh README.md CONTRIBUTING.md SECURITY.md   # the prose budgets
 ```
 
 Clippy runs with `-D warnings`. The lint set is declared once in `[workspace.lints]` and inherited
