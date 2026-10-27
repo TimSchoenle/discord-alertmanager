@@ -367,7 +367,7 @@ impl PipelineService {
     /// Two halves. Everything Alertmanager has goes through the same ingest path a webhook uses,
     /// so anything it holds that the database does not becomes a synthetic event. Then anything
     /// the database still calls firing that Alertmanager has not mentioned since the *previous*
-    /// poll is resolved — two consecutive polls have to agree, or one failed request would resolve
+    /// poll is resolved. Two consecutive polls have to agree, or one failed request would resolve
     /// every alert at once.
     ///
     /// # Errors

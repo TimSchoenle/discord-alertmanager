@@ -78,7 +78,7 @@ impl Dispatcher {
     #[expect(
         clippy::too_many_arguments,
         reason = "the composition root hands a worker every collaborator it owns; folding them \
-                  into a struct would move the same list one line up"
+ into a struct would move the same list one line up"
     )]
     pub fn new(
         store: Arc<dyn Store>,
@@ -548,7 +548,7 @@ impl Dispatcher {
 
     /// Moves a post in or out of a forum's pinned tray.
     ///
-    /// A pin is a convenience — the "needs attention" row at the top of a forum index — and never
+    /// A pin is a convenience (the "needs attention" row at the top of a forum index) and never
     /// a reason to hold up or lose a notification, so every refusal here ends in `Ok` and the card
     /// carries on with the pin it already had.
     async fn pin(
@@ -780,16 +780,16 @@ where
 
 /// What to do about an effect that did not succeed.
 enum Failure {
-    /// Try again after this many seconds.
+    /// A failure worth another attempt, after the given number of seconds.
     Retry(String, i64),
 
-    /// Never try again, for the stated reason.
+    /// A failure no attempt can fix, for the stated reason.
     Drop(String),
 
-    /// Never try again, and tell an administrator.
+    /// A failure no attempt can fix, which an administrator has to hear about.
     ///
     /// Separate from `Drop` because the two are different problems. A dropped effect is one whose
-    /// subject has moved on — a deleted message, an alert somebody already answered. A blocked
+    /// subject has moved on, such as a deleted message or an alert somebody already answered. A blocked
     /// one is the bot being unable to do its job on this route at all, and nothing about the
     /// route will fix itself.
     Blocked(String),
@@ -797,7 +797,7 @@ enum Failure {
 
 #[expect(
     clippy::needless_pass_by_value,
-    reason = "both are used as function items in `map_err`, which hands over an owned error;               taking a reference would put a closure at every one of their call sites"
+    reason = "both are used as function items in `map_err`, which hands over an owned error; taking a reference would put a closure at every one of their call sites"
 )]
 impl Failure {
     /// Maps a Discord failure onto retry or drop.
@@ -843,8 +843,9 @@ impl Failure {
     }
 }
 
-/// Hashes a tag set, so a card that ticks over from firing to acknowledged is one tag change and
-/// an unchanged one is none.
+/// Hashes a tag set, so an unchanged set costs no tag update.
+///
+/// A card that ticks over from firing to acknowledged is one tag change.
 fn tags_hash(tags: &[dam_store::TagId]) -> String {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
 
