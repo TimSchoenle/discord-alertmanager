@@ -65,8 +65,9 @@ pub struct CardData {
     /// left believing the bot has started summarising for no reason.
     pub digest: Option<DigestNotice>,
 
-    /// The card this one replaced, when the alert came back after that card had been resolved
-    /// for longer than the regroup window.
+    /// The card this one replaced, when the alert came back after the regroup window.
+    ///
+    /// `None` unless that card had been resolved for longer than the window.
     ///
     /// The link is the whole point: without it, an alert that comes back a week later produces a
     /// card with no history and the one carrying that history is buried.
@@ -243,7 +244,9 @@ pub struct PostFlags {
     /// so locking a resolved post costs more than it looks.
     pub locked: bool,
 
-    /// Minutes of inactivity before Discord archives it. Only 60, 1440, 4320 and 10080 are legal.
+    /// Minutes of inactivity before Discord archives it.
+    ///
+    /// Only 60, 1440, 4320 and 10080 are legal.
     pub auto_archive_minutes: u32,
 }
 

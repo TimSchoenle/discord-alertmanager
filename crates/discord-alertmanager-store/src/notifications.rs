@@ -36,7 +36,9 @@ pub struct Notification {
     /// Guild the card lives in.
     pub guild_id: GuildId,
 
-    /// Channel the card lives in. For a forum post this is the post's parent forum.
+    /// Channel the card lives in.
+    ///
+    /// For a forum post this is the post's parent forum.
     pub channel_id: ChannelId,
 
     /// The message, once it has been posted.
@@ -86,8 +88,9 @@ pub struct Notification {
     /// every sweep after it.
     pub escalated_at: Option<DateTime<Utc>>,
 
-    /// The card this one replaced, when the alert came back after that card had been resolved
-    /// for longer than the regroup window.
+    /// The card this one replaced, when the alert came back after the regroup window.
+    ///
+    /// `None` unless that card had been resolved for longer than the window.
     ///
     /// Nullable and unenforced: the row it names may be pruned long before this one is, and a
     /// missing predecessor means a card without a back-reference rather than one that cannot be
@@ -275,7 +278,9 @@ pub struct ThreadReply {
     /// The thread the message arrived in.
     pub thread_id: ChannelId,
 
-    /// Who wrote it. Bot authors are filtered out before this is built.
+    /// Who wrote it.
+    ///
+    /// Bot authors are filtered out before this is built.
     pub author_id: UserId,
 
     /// When it arrived.

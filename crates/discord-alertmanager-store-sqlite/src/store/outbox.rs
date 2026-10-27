@@ -229,7 +229,7 @@ const OUTBOX_COLUMNS: &str = "id, lane, kind, dedupe_key, payload, not_before, a
 /// The card is the scope and the dedupe key is not. One alert fans out to every route that matches
 /// it, and those cards share one per-alert key across channels of their own; folding on the key
 /// alone let one card's edit overwrite another's, and left that card showing whatever it had last
-/// rendered — which for a resolved alert is the word "firing".
+/// rendered, which for a resolved alert is the word "firing".
 pub(super) async fn enqueue(
     conn: &mut SqliteConnection,
     item: &NewOutboxItem,

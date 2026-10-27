@@ -66,8 +66,9 @@ pub struct LinkButton {
     /// Text on the button. Discord truncates past 80 characters.
     pub label: String,
 
-    /// URL template, rendered with `minijinja` against `alert`, `labels`, `annotations`, `links`
-    /// and `window`.
+    /// URL template, rendered with `minijinja`.
+    ///
+    /// The template sees `alert`, `labels`, `annotations`, `links` and `window`.
     ///
     /// Every substitution in a URL is percent-encoded. A template that interpolates a value
     /// without a filter is refused when the template is compiled, not when it is rendered, so the

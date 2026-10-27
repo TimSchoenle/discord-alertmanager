@@ -41,10 +41,10 @@ pub(crate) const PAGE_SIZE: u32 = 10;
 /// round trip through a hundred-byte custom id and come back meaning the same thing.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct ListFilter {
-    /// Keep only alerts whose card is in this state.
+    /// The card state an alert must be in, or `None` for any.
     pub(crate) state: Option<NotificationState>,
 
-    /// Keep only alerts at or above this severity.
+    /// The lowest severity listed, or `None` for any.
     pub(crate) severity: Option<Severity>,
 
     /// The matcher expression, as written.
@@ -252,8 +252,9 @@ pub(crate) fn matchers_of(alert: &Alert) -> String {
     parts.join(", ")
 }
 
-/// Escapes a label value for a quoted matcher: the backslash first, or it would double the ones
-/// the quote escape adds.
+/// Escapes a label value for a quoted matcher.
+///
+/// The backslash goes first, or it would double the ones the quote escape adds.
 fn escape(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
@@ -262,7 +263,7 @@ fn escape(value: &str) -> String {
 ///
 /// # Errors
 ///
-/// Returns the offending text when it is not a duration, or when it is zero or negative — a
+/// Returns the offending text when it is not a duration, or when it is zero or negative. A
 /// silence that expires the moment it is created is a request nobody meant to make.
 pub(crate) fn parse_duration(raw: &str) -> Result<Duration, String> {
     let raw = raw.trim();

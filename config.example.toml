@@ -50,7 +50,7 @@
 # Unset by default: the value below is only the shape.
 # dev_guild_id = 0
 
-# Capture the text of thread replies, which needs the privileged `MESSAGE_CONTENT` intent.
+# Whether thread reply text is captured, which needs the privileged `MESSAGE_CONTENT` intent.
 #
 # A card marks itself responded without this: the author and channel of a reply arrive
 # without the privileged intent, and that is all the detection needs. Only the text of the
@@ -61,27 +61,27 @@
 # capture_reply_text = false
 
 [discord.capabilities]
-# Read alerts, silences and routes. Grants no mutation of any kind.
+# Roles that may read alerts, silences and routes, and change nothing.
 # Type: Vec<String>
 # Also from: DAM_DISCORD__CAPABILITIES__VIEW, DAM_DISCORD__CAPABILITIES__VIEW_FILE=/path/to/file,
 #   discord__capabilities__view in the secrets directory
 # view = ["@everyone"]
 
-# Acknowledge, assign, and add or remove bot-local ignores.
+# Roles that may acknowledge, assign, and add or remove bot-local ignores.
 # Type: Vec<String>
 # Also from: DAM_DISCORD__CAPABILITIES__OPERATE,
 #   DAM_DISCORD__CAPABILITIES__OPERATE_FILE=/path/to/file, discord__capabilities__operate in the
 #   secrets directory
 # operate = []
 
-# Create, extend and expire Alertmanager silences, which affects every receiver.
+# Roles that may create, extend and expire Alertmanager silences, which affect every receiver.
 # Type: Vec<String>
 # Also from: DAM_DISCORD__CAPABILITIES__SILENCE,
 #   DAM_DISCORD__CAPABILITIES__SILENCE_FILE=/path/to/file, discord__capabilities__silence in the
 #   secrets directory
 # silence = []
 
-# Manage routes and read the effective configuration.
+# Roles that may manage routes and read the effective configuration.
 # Type: Vec<String>
 # Also from: DAM_DISCORD__CAPABILITIES__ADMIN,
 #   DAM_DISCORD__CAPABILITIES__ADMIN_FILE=/path/to/file, discord__capabilities__admin in the
@@ -196,7 +196,7 @@
 #   storage__sqlite__acquire_timeout_secs in the secrets directory
 # acquire_timeout_secs = 5
 
-# Run pending migrations during startup.
+# Whether pending migrations run during startup.
 #
 # Set this false where a separate job owns migrations, which is what a `GitOps` deployment
 # usually wants: the bot then refuses to start against a schema it does not recognise
@@ -208,8 +208,9 @@
 # migrate_on_start = true
 
 [storage.postgres]
-# Connection URL. Supply it through `DAM_STORAGE__POSTGRES__URL_FILE` or the secrets
-# directory, since it carries the password.
+# Connection URL, which carries the password.
+#
+# Supply it through `DAM_STORAGE__POSTGRES__URL_FILE` or the secrets directory.
 # Type: SecretString
 # Also from: DAM_STORAGE__POSTGRES__URL, DAM_STORAGE__POSTGRES__URL_FILE=/path/to/file,
 #   storage__postgres__url in the secrets directory
@@ -230,7 +231,7 @@
 #   storage__postgres__acquire_timeout_secs in the secrets directory
 # acquire_timeout_secs = 5
 
-# Run pending migrations during startup.
+# Whether pending migrations run during startup.
 # Type: bool
 # Also from: DAM_STORAGE__POSTGRES__MIGRATE_ON_START,
 #   DAM_STORAGE__POSTGRES__MIGRATE_ON_START_FILE=/path/to/file,
@@ -345,8 +346,9 @@
 #   engine__prune_interval_secs in the secrets directory
 # prune_interval_secs = 3600
 
-# Seconds of webhook silence that, combined with an unreachable Alertmanager, trips the
-# deadman.
+# Seconds without a webhook delivery after which the deadman trips.
+#
+# It trips only while Alertmanager is unreachable as well.
 # Type: u64
 # Also from: DAM_ENGINE__DEADMAN_WINDOW_SECS, DAM_ENGINE__DEADMAN_WINDOW_SECS_FILE=/path/to/file,
 #   engine__deadman_window_secs in the secrets directory
@@ -376,7 +378,7 @@
 #   secrets directory
 # dedupe_ignore_labels = []
 
-# Record a row in `alert_events` for every state transition.
+# Whether every state transition writes a row to `alert_events`.
 #
 # Turning this off keeps the current `alerts` row and drops the history. The four reasons
 # the bot keeps its own alert table all rest on the current row, so nothing else changes.
@@ -472,7 +474,7 @@
 #   render__thread_archive_after_minutes in the secrets directory
 # thread_archive_after_minutes = 1440
 
-# Show a short fingerprint in the card footer.
+# Whether the card footer shows a short fingerprint.
 # Type: bool
 # Also from: DAM_RENDER__SHOW_FINGERPRINT, DAM_RENDER__SHOW_FINGERPRINT_FILE=/path/to/file,
 #   render__show_fingerprint in the secrets directory
@@ -521,7 +523,7 @@
 # buttons = []
 
 [observability]
-# Serve Prometheus metrics at `/metrics` on the ingest listener.
+# Whether Prometheus metrics are served at `/metrics` on the ingest listener.
 # Type: bool
 # Also from: DAM_OBSERVABILITY__METRICS_ENABLED,
 #   DAM_OBSERVABILITY__METRICS_ENABLED_FILE=/path/to/file, observability__metrics_enabled in the
@@ -549,8 +551,8 @@
 # reverted to its default would be discovered while reading logs that should have been there.
 #
 # A bare word is a target name and not a level, so a misspelt `waarn` is read as a directive
-# about a crate that does not exist. It parses, it stops nothing, and it filters nothing —
-# check a level change took effect rather than assuming it did.
+# about a crate that does not exist. It parses, it stops nothing, and it filters nothing.
+# Check that a level change took effect.
 # Type: String
 # Also from: DAM_TELEMETRY__LOG_LEVEL, DAM_TELEMETRY__LOG_LEVEL_FILE=/path/to/file,
 #   telemetry__log_level in the secrets directory
@@ -647,15 +649,15 @@
 #
 # Only this bot's own spans are traced, whatever this says, and there is no key to widen
 # that. A dependency instruments its internals for its own logs, and the fields it attaches
-# are debug renderings of whatever the call was holding — not something to hand to a third
-# party, and enough of them to bury the trace they surround.
+# are debug renderings of whatever the call was holding. None of that belongs with a third
+# party, and there is enough of it to bury the trace it surrounds.
 # Type: CaptureLevel — one of: off, error, warn, info, debug, trace
 # Also from: DAM_TELEMETRY__SENTRY__SPAN_LEVEL,
 #   DAM_TELEMETRY__SENTRY__SPAN_LEVEL_FILE=/path/to/file, telemetry__sentry__span_level in the
 #   secrets directory
 # span_level = "info"
 
-# Attach a stack trace to every event, not only to panics.
+# Whether every event carries a stack trace, not only a panic.
 #
 # Useful while a fault is being chased and expensive afterwards: it captures and symbolicates
 # a backtrace on every capture, including the ones that were only ever going to be counted.
@@ -665,7 +667,7 @@
 #   telemetry__sentry__attach_stacktrace in the secrets directory
 # attach_stacktrace = false
 
-# Send the IP addresses, headers and user identifiers Sentry calls default PII.
+# Whether events carry the addresses, headers and user identifiers Sentry calls default PII.
 #
 # Off, and worth leaving off. The alerts this bot handles carry infrastructure labels, and
 # the Discord side carries user identifiers; neither needs to reach a third party for an
@@ -694,7 +696,7 @@
 #   telemetry__sentry__shutdown_timeout_secs in the secrets directory
 # shutdown_timeout_secs = 2
 
-# Log what the Sentry client itself is doing.
+# Whether the Sentry client logs its own activity.
 #
 # For diagnosing reporting that is not arriving, and nothing else. It is noisy, and it prints
 # the DSN.

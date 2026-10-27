@@ -51,8 +51,9 @@ pub struct Engine {
     /// Seconds between retention sweeps.
     pub prune_interval_secs: u64,
 
-    /// Seconds of webhook silence that, combined with an unreachable Alertmanager, trips the
-    /// deadman.
+    /// Seconds without a webhook delivery after which the deadman trips.
+    ///
+    /// It trips only while Alertmanager is unreachable as well.
     pub deadman_window_secs: u64,
 
     /// Seconds a resolved card stays re-armable.
@@ -72,7 +73,7 @@ pub struct Engine {
     /// route is already keyed by Alertmanager's group.
     pub dedupe_ignore_labels: Vec<String>,
 
-    /// Record a row in `alert_events` for every state transition.
+    /// Whether every state transition writes a row to `alert_events`.
     ///
     /// Turning this off keeps the current `alerts` row and drops the history. The four reasons
     /// the bot keeps its own alert table all rest on the current row, so nothing else changes.

@@ -412,7 +412,9 @@ pub(crate) fn labels_from_wire(raw: BTreeMap<String, String>) -> Result<Labels, 
     Ok(labels)
 }
 
-/// Wraps a wire annotation map. Annotations are prose and have no grammar to violate.
+/// Wraps a wire annotation map.
+///
+/// Annotations are prose and have no grammar to violate.
 pub(crate) fn annotations_from_wire(raw: BTreeMap<String, String>) -> Annotations {
     raw.into_iter().collect()
 }

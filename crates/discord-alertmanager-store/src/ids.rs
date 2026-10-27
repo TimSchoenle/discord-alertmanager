@@ -58,8 +58,7 @@ impl From<u64> for Snowflake {
     }
 }
 
-/// Declares a newtype over [`Snowflake`], so a channel id cannot be passed where a guild id is
-/// expected.
+/// Declares a newtype over [`Snowflake`], so one kind of id cannot stand in for another.
 ///
 /// The three ids are all snowflakes and are all `i64` in the database, which makes them exactly
 /// the kind of argument that gets swapped in a call with several of them. The wrapper costs

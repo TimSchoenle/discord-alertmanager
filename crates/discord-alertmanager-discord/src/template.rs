@@ -43,7 +43,7 @@ pub fn environment() -> Environment<'static> {
 /// value that is allowed to carry `?`, `#` or `/` can rewrite that URL.
 ///
 /// Takes a whole value rather than a string, because a template that interpolates a timestamp or
-/// a count would otherwise fail to render and silently lose its button — and the rule that every
+/// a count would otherwise fail to render and silently lose its button. The rule that every
 /// substitution passes through this filter has to hold for those too.
 fn urlencode(value: &Value) -> String {
     use std::fmt::Write as _;

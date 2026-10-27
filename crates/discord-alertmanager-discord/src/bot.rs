@@ -408,8 +408,9 @@ fn shape_of<T: serde::Serialize>(command: &T) -> Option<String> {
     Some(normalise(&value).to_string())
 }
 
-/// Keeps only the keys Discord round-trips, recursively, so an id or a version does not read as a
-/// change.
+/// Keeps only the keys Discord round-trips, recursively.
+///
+/// Without this, an id or a version would read as a change.
 fn normalise(value: &serde_json::Value) -> serde_json::Value {
     const KEPT: [&str; 7] = [
         "name",

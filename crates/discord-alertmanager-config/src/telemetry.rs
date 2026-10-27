@@ -38,8 +38,8 @@ pub struct Telemetry {
     /// reverted to its default would be discovered while reading logs that should have been there.
     ///
     /// A bare word is a target name and not a level, so a misspelt `waarn` is read as a directive
-    /// about a crate that does not exist. It parses, it stops nothing, and it filters nothing —
-    /// check a level change took effect rather than assuming it did.
+    /// about a crate that does not exist. It parses, it stops nothing, and it filters nothing.
+    /// Check that a level change took effect.
     pub log_level: String,
 
     /// How each log line is written.

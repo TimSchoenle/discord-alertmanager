@@ -15,7 +15,7 @@
 //! # What it deliberately leaves alone
 //!
 //! Resolved and orphaned cards. A resolved forum post is history whose thread is usually archived,
-//! and the dispatcher reopens a thread to write to it and does not close it again — so resyncing
+//! and the dispatcher reopens a thread to write to it and does not close it again. Resyncing
 //! the archive would drag every settled incident back to the top of the forum to say nothing new.
 //! An orphaned row names a message somebody deleted. Neither is what "out of sync" means.
 

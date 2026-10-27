@@ -27,7 +27,7 @@ pub const CHECK_ALERTMANAGER: &str = "alertmanager_poll";
 /// the two sources differ only in `source` and in whether `truncated` can be above zero.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IngestRequest {
-    /// Where the batch came from. Always [`EventSource::Webhook`] on this path.
+    /// Where the batch came from, always [`EventSource::Webhook`] on this path.
     pub source: EventSource,
 
     /// The group Alertmanager delivered the batch under, when it sent one.
@@ -178,7 +178,7 @@ pub trait WebhookService: Send + Sync + 'static {
     /// The current state of the three dependencies `/readyz` reports on.
     ///
     /// Infallible by design. A readiness probe that can fail to answer has to decide what a
-    /// failure means, and the honest answer — not ready — is already expressible.
+    /// failure means, and the right answer, not ready, is already expressible.
     async fn readiness(&self) -> Readiness;
 }
 

@@ -185,8 +185,7 @@ pub(super) async fn a_poll_keeps_the_group_key_a_webhook_delivered(store: &dyn S
     assert_eq!(record.alert.group_key, Some(group));
 }
 
-/// The firing alerts under one name are one read, and nothing resolved or differently named is in
-/// it.
+/// One read returns the firing alerts under one name, and nothing resolved or differently named.
 pub(super) async fn firing_alerts_are_found_by_name(store: &dyn Store) {
     let named = |fingerprint: &str, name: Option<&str>, status: AlertStatus| {
         let mut alert = alert(fingerprint, status, "warning");

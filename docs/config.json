@@ -79,7 +79,7 @@
           "properties": {
             "admin": {
               "default": [],
-              "description": "Manage routes and read the effective configuration.",
+              "description": "Roles that may manage routes and read the effective configuration.",
               "items": {
                 "type": "string"
               },
@@ -87,7 +87,7 @@
             },
             "operate": {
               "default": [],
-              "description": "Acknowledge, assign, and add or remove bot-local ignores.",
+              "description": "Roles that may acknowledge, assign, and add or remove bot-local ignores.",
               "items": {
                 "type": "string"
               },
@@ -95,7 +95,7 @@
             },
             "silence": {
               "default": [],
-              "description": "Create, extend and expire Alertmanager silences, which affects every receiver.",
+              "description": "Roles that may create, extend and expire Alertmanager silences, which affect every receiver.",
               "items": {
                 "type": "string"
               },
@@ -105,7 +105,7 @@
               "default": [
                 "@everyone"
               ],
-              "description": "Read alerts, silences and routes. Grants no mutation of any kind.",
+              "description": "Roles that may read alerts, silences and routes, and change nothing.",
               "items": {
                 "type": "string"
               },
@@ -116,7 +116,7 @@
         },
         "capture_reply_text": {
           "default": false,
-          "description": "Capture the text of thread replies, which needs the privileged `MESSAGE_CONTENT` intent.\n\nA card marks itself responded without this: the author and channel of a reply arrive\nwithout the privileged intent, and that is all the detection needs. Only the text of the\nreply is gated, so leaving this off costs nothing except the reply preview.",
+          "description": "Whether thread reply text is captured, which needs the privileged `MESSAGE_CONTENT` intent.\n\nA card marks itself responded without this: the author and channel of a reply arrive\nwithout the privileged intent, and that is all the detection needs. Only the text of the\nreply is gated, so leaving this off costs nothing except the reply preview.",
           "type": "boolean"
         },
         "dev_guild_id": {
@@ -137,7 +137,7 @@
       "properties": {
         "deadman_window_secs": {
           "default": 1800,
-          "description": "Seconds of webhook silence that, combined with an unreachable Alertmanager, trips the\ndeadman.",
+          "description": "Seconds without a webhook delivery after which the deadman trips.\n\nIt trips only while Alertmanager is unreachable as well.",
           "minimum": 0,
           "type": "integer"
         },
@@ -177,7 +177,7 @@
         },
         "persist_events": {
           "default": true,
-          "description": "Record a row in `alert_events` for every state transition.\n\nTurning this off keeps the current `alerts` row and drops the history. The four reasons\nthe bot keeps its own alert table all rest on the current row, so nothing else changes.",
+          "description": "Whether every state transition writes a row to `alert_events`.\n\nTurning this off keeps the current `alerts` row and drops the history. The four reasons\nthe bot keeps its own alert table all rest on the current row, so nothing else changes.",
           "type": "boolean"
         },
         "prune_interval_secs": {
@@ -327,7 +327,7 @@
                 "type": "string"
               },
               "url": {
-                "description": "URL template, rendered with `minijinja` against `alert`, `labels`, `annotations`, `links`\nand `window`.\n\nEvery substitution in a URL is percent-encoded. A template that interpolates a value\nwithout a filter is refused when the template is compiled, not when it is rendered, so the\nmistake surfaces at boot.",
+                "description": "URL template, rendered with `minijinja`.\n\nThe template sees `alert`, `labels`, `annotations`, `links` and `window`.\n\nEvery substitution in a URL is percent-encoded. A template that interpolates a value\nwithout a filter is refused when the template is compiled, not when it is rendered, so the\nmistake surfaces at boot.",
                 "type": "string"
               },
               "when": {
@@ -372,7 +372,7 @@
         },
         "metrics_enabled": {
           "default": true,
-          "description": "Serve Prometheus metrics at `/metrics` on the ingest listener.",
+          "description": "Whether Prometheus metrics are served at `/metrics` on the ingest listener.",
           "type": "boolean"
         }
       },
@@ -408,7 +408,7 @@
         },
         "show_fingerprint": {
           "default": true,
-          "description": "Show a short fingerprint in the card footer.",
+          "description": "Whether the card footer shows a short fingerprint.",
           "type": "boolean"
         },
         "thread_archive_after_minutes": {
@@ -428,7 +428,7 @@
         "additionalProperties": false,
         "properties": {
           "continue_to_next": {
-            "description": "Keep evaluating later routes after this one matches.\n\nThis is Alertmanager's own `continue`, spelled out because `continue` is a Rust keyword.",
+            "description": "Whether later routes are still evaluated after this one matches.\n\nThis is Alertmanager's own `continue`, spelled out because `continue` is a Rust keyword.",
             "type": "boolean"
           },
           "enabled": {
@@ -552,7 +552,7 @@
                 "additionalProperties": false,
                 "properties": {
                   "archive_on_resolve": {
-                    "description": "Archive a forum post when its alert resolves.",
+                    "description": "Whether a forum post is archived when its alert resolves.",
                     "type": "boolean"
                   },
                   "auto_archive_minutes": {
@@ -562,7 +562,7 @@
                     "type": "integer"
                   },
                   "bump_on_state_change": {
-                    "description": "Post a one-line thread note on every state change.\n\nEditing a message does not bump a forum's activity sort; only a new message does. Without\nthis, a state change that only edits the card leaves the post buried where it was. The\nnote also gives the post the readable timeline that an edited-in-place card deliberately\ndoes not keep.",
+                    "description": "Whether every state change posts a one-line note in the thread.\n\nEditing a message does not bump a forum's activity sort; only a new message does. Without\nthis, a state change that only edits the card leaves the post buried where it was. The\nnote also gives the post the readable timeline that an edited-in-place card deliberately\ndoes not keep.",
                     "type": "boolean"
                   },
                   "default_tag": {
@@ -581,7 +581,7 @@
                     "type": "boolean"
                   },
                   "manage_tags": {
-                    "description": "Create missing forum tags, which needs `MANAGE_CHANNELS`.\n\nCreated tags are non-moderated on purpose: a moderated tag can only be applied by a member\nholding `MANAGE_THREADS`, while a non-moderated one can be set by the thread's owner,\nwhich the bot is. Without the permission the bot applies the tags that already resolve and\nreports the gap in `/route test`; a missing tag never fails a notification.",
+                    "description": "Whether missing forum tags are created, which needs `MANAGE_CHANNELS`.\n\nCreated tags are non-moderated on purpose: a moderated tag can only be applied by a member\nholding `MANAGE_THREADS`, while a non-moderated one can be set by the thread's owner,\nwhich the bot is. Without the permission the bot applies the tags that already resolve and\nreports the gap in `/route test`; a missing tag never fails a notification.",
                     "type": "boolean"
                   },
                   "max_pinned": {
@@ -600,7 +600,7 @@
                     "type": "string"
                   },
                   "severity_tags": {
-                    "description": "Apply a tag named after the alert's severity.",
+                    "description": "Whether each post gets a tag named after the alert's severity.",
                     "type": "boolean"
                   },
                   "state_tags": {
@@ -688,11 +688,11 @@
             },
             "migrate_on_start": {
               "default": true,
-              "description": "Run pending migrations during startup.",
+              "description": "Whether pending migrations run during startup.",
               "type": "boolean"
             },
             "url": {
-              "description": "Connection URL. Supply it through `DAM_STORAGE__POSTGRES__URL_FILE` or the secrets\ndirectory, since it carries the password.",
+              "description": "Connection URL, which carries the password.\n\nSupply it through `DAM_STORAGE__POSTGRES__URL_FILE` or the secrets directory.",
               "type": "string",
               "writeOnly": true
             }
@@ -717,7 +717,7 @@
             },
             "migrate_on_start": {
               "default": true,
-              "description": "Run pending migrations during startup.\n\nSet this false where a separate job owns migrations, which is what a `GitOps` deployment\nusually wants: the bot then refuses to start against a schema it does not recognise\ninstead of migrating underneath a running replica.",
+              "description": "Whether pending migrations run during startup.\n\nSet this false where a separate job owns migrations, which is what a `GitOps` deployment\nusually wants: the bot then refuses to start against a schema it does not recognise\ninstead of migrating underneath a running replica.",
               "type": "boolean"
             },
             "path": {
@@ -745,7 +745,7 @@
         },
         "log_level": {
           "default": "warn,discord_alertmanager=info,dam_=info",
-          "description": "Filter directives for the log stream, in `RUST_LOG` syntax.\n\nA comma-separated list of `target=level` directives with an optional bare level as the\ndefault, so `warn,dam_engine=debug` raises one crate and leaves the rest alone. A directive\nthat does not parse stops the process rather than being ignored: a filter that silently\nreverted to its default would be discovered while reading logs that should have been there.\n\nA bare word is a target name and not a level, so a misspelt `waarn` is read as a directive\nabout a crate that does not exist. It parses, it stops nothing, and it filters nothing —\ncheck a level change took effect rather than assuming it did.",
+          "description": "Filter directives for the log stream, in `RUST_LOG` syntax.\n\nA comma-separated list of `target=level` directives with an optional bare level as the\ndefault, so `warn,dam_engine=debug` raises one crate and leaves the rest alone. A directive\nthat does not parse stops the process rather than being ignored: a filter that silently\nreverted to its default would be discovered while reading logs that should have been there.\n\nA bare word is a target name and not a level, so a misspelt `waarn` is read as a directive\nabout a crate that does not exist. It parses, it stops nothing, and it filters nothing.\nCheck that a level change took effect.",
           "type": "string"
         },
         "sentry": {
@@ -753,7 +753,7 @@
           "properties": {
             "attach_stacktrace": {
               "default": false,
-              "description": "Attach a stack trace to every event, not only to panics.\n\nUseful while a fault is being chased and expensive afterwards: it captures and symbolicates\na backtrace on every capture, including the ones that were only ever going to be counted.",
+              "description": "Whether every event carries a stack trace, not only a panic.\n\nUseful while a fault is being chased and expensive afterwards: it captures and symbolicates\na backtrace on every capture, including the ones that were only ever going to be counted.",
               "type": "boolean"
             },
             "breadcrumb_level": {
@@ -771,7 +771,7 @@
             },
             "debug": {
               "default": false,
-              "description": "Log what the Sentry client itself is doing.\n\nFor diagnosing reporting that is not arriving, and nothing else. It is noisy, and it prints\nthe DSN.",
+              "description": "Whether the Sentry client logs its own activity.\n\nFor diagnosing reporting that is not arriving, and nothing else. It is noisy, and it prints\nthe DSN.",
               "type": "boolean"
             },
             "dsn": {
@@ -816,7 +816,7 @@
             },
             "send_default_pii": {
               "default": false,
-              "description": "Send the IP addresses, headers and user identifiers Sentry calls default PII.\n\nOff, and worth leaving off. The alerts this bot handles carry infrastructure labels, and\nthe Discord side carries user identifiers; neither needs to reach a third party for an\nerror report to be actionable.",
+              "description": "Whether events carry the addresses, headers and user identifiers Sentry calls default PII.\n\nOff, and worth leaving off. The alerts this bot handles carry infrastructure labels, and\nthe Discord side carries user identifiers; neither needs to reach a third party for an\nerror report to be actionable.",
               "type": "boolean"
             },
             "server_name": {
@@ -831,7 +831,7 @@
             },
             "span_level": {
               "default": "info",
-              "description": "Level at or above which a span joins the trace.\n\nOnly this bot's own spans are traced, whatever this says, and there is no key to widen\nthat. A dependency instruments its internals for its own logs, and the fields it attaches\nare debug renderings of whatever the call was holding — not something to hand to a third\nparty, and enough of them to bury the trace they surround.",
+              "description": "Level at or above which a span joins the trace.\n\nOnly this bot's own spans are traced, whatever this says, and there is no key to widen\nthat. A dependency instruments its internals for its own logs, and the fields it attaches\nare debug renderings of whatever the call was holding. None of that belongs with a third\nparty, and there is enough of it to bury the trace it surrounds.",
               "enum": [
                 "off",
                 "error",

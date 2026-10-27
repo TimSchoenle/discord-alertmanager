@@ -9,8 +9,7 @@ use crate::{CardUpdate, Decision, PlannedCard, Store, StoreError};
 
 use super::{alert, at, card_for, drain, ingest, record_post, route_for};
 
-/// A resync sees the cards that still describe something, on the routes it was given and no
-/// others.
+/// A resync sees the live cards on the routes it was given and on no others.
 pub(super) async fn a_resync_reads_the_live_cards_of_its_own_routes(store: &dyn Store) {
     let route = route_for(store, "resync", 130).await;
     let other = route_for(store, "resync-other", 131).await;

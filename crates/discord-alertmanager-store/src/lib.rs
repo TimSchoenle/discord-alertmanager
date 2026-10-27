@@ -114,8 +114,8 @@ pub trait Store: Send + Sync + 'static {
     /// The reconciler's half of converging after an outage: Alertmanager forgetting an alert is
     /// how a lost `resolved` webhook is detected. `cutoff` is the age an alert must exceed to
     /// count as missing, and passing the start of the *previous* poll is what makes it take two
-    /// consecutive polls to agree — which is what stops one failed request from resolving
-    /// everything at once.
+    /// consecutive polls to agree. That is what stops one failed request from resolving everything
+    /// at once.
     ///
     /// # Errors
     ///
@@ -372,8 +372,9 @@ pub trait Store: Send + Sync + 'static {
     /// As [`Store::ingest_batch`].
     async fn record_silence(&self, link: &SilenceLink) -> Result<(), StoreError>;
 
-    /// Reconciles the local silence rows against Alertmanager's, and returns the alerts whose
-    /// suppression changed.
+    /// Reconciles the local silence rows against Alertmanager's.
+    ///
+    /// Returns the alerts whose suppression changed.
     ///
     /// # Errors
     ///

@@ -19,16 +19,16 @@ use thiserror::Error;
               combination of them is a request somebody makes"
 )]
 pub struct AlertFilter {
-    /// Include alerts Alertmanager is notifying about.
+    /// Whether alerts Alertmanager is notifying about are included.
     pub active: bool,
 
-    /// Include alerts a silence is suppressing.
+    /// Whether alerts a silence is suppressing are included.
     pub silenced: bool,
 
-    /// Include alerts an inhibition rule is suppressing.
+    /// Whether alerts an inhibition rule is suppressing are included.
     pub inhibited: bool,
 
-    /// Include alerts Alertmanager has not processed yet.
+    /// Whether alerts Alertmanager has not processed yet are included.
     pub unprocessed: bool,
 
     /// Server-side label filters, in Alertmanager's matcher syntax.

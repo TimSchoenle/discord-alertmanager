@@ -25,7 +25,7 @@ pub struct Discord {
     /// Set this in development and leave it unset in production.
     pub dev_guild_id: Option<u64>,
 
-    /// Capture the text of thread replies, which needs the privileged `MESSAGE_CONTENT` intent.
+    /// Whether thread reply text is captured, which needs the privileged `MESSAGE_CONTENT` intent.
     ///
     /// A card marks itself responded without this: the author and channel of a reply arrive
     /// without the privileged intent, and that is all the detection needs. Only the text of the
@@ -50,16 +50,16 @@ pub struct Discord {
 )]
 #[serde(default, deny_unknown_fields)]
 pub struct Capabilities {
-    /// Read alerts, silences and routes. Grants no mutation of any kind.
+    /// Roles that may read alerts, silences and routes, and change nothing.
     pub view: Vec<String>,
 
-    /// Acknowledge, assign, and add or remove bot-local ignores.
+    /// Roles that may acknowledge, assign, and add or remove bot-local ignores.
     pub operate: Vec<String>,
 
-    /// Create, extend and expire Alertmanager silences, which affects every receiver.
+    /// Roles that may create, extend and expire Alertmanager silences, which affect every receiver.
     pub silence: Vec<String>,
 
-    /// Manage routes and read the effective configuration.
+    /// Roles that may manage routes and read the effective configuration.
     pub admin: Vec<String>,
 }
 

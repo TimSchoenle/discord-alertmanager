@@ -3,7 +3,7 @@
 //! Every method that writes more than one row opens `BEGIN IMMEDIATE` and closes it before
 //! returning, so no transaction ever crosses a trait boundary. `SQLite`'s default deferred
 //! transaction takes its write lock at the first write rather than at `BEGIN`, which turns two
-//! read-then-write transactions into a busy error instead of a queue — and the outbox claim is
+//! read-then-write transactions into a busy error instead of a queue. The outbox claim is
 //! exactly that shape.
 //!
 //! The `Store` impl below only forwards. Each use case is a function named after the trait method
