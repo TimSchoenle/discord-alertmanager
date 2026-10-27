@@ -36,6 +36,7 @@ url.workspace = true
 insta = { workspace = true, features = ["json"] }
 proptest.workspace = true
 rstest.workspace = true
+webpki-roots.workspace = true
 
 [lints]
 workspace = true

@@ -25,6 +25,16 @@ ignore = [
     # verifier from the webpki roots with no CRL — so neither entry point is ever called.
     { id = "RUSTSEC-2026-0049", reason = "No certificate revocation list is ever parsed." },
     { id = "RUSTSEC-2026-0104", reason = "No certificate revocation list is ever parsed." },
+    # `Debug` on a client session value printed the TLS secret it holds. Only a custom
+    # `ClientSessionStore` that formats one reaches it, and nothing in the tree implements one.
+    { id = "RUSTSEC-2026-0346", reason = "No custom ClientSessionStore exists to format a session value." },
+    # A forged ServerHello could make later handshakes skip the post-quantum key share. rustls
+    # 0.22 offers no post-quantum group, so there is no stronger exchange to fall back from.
+    { id = "RUSTSEC-2026-0349", reason = "rustls 0.22 offers no post-quantum key exchange to downgrade." },
+    # Paths through emSign intermediates whose private keys are public were accepted. They end at
+    # an emSign anchor, and the patched webpki-roots in vendor/ trusts none; the `trust_store`
+    # test in `dam-discord` fails if that patch stops applying.
+    { id = "RUSTSEC-2026-0382", reason = "The patched webpki-roots in vendor/ carries no emSign anchor." },
 ]
 
 [licenses]

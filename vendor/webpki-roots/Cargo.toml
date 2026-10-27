@@ -1,0 +1,27 @@
+# webpki-roots 1.0.11 from crates.io with one change: `emSign Root CA - G1` is removed from
+# `TLS_SERVER_ROOTS`. Everything else in `src/lib.rs` is the published file byte for byte, so
+# `diff` against the registry copy shows exactly that one anchor.
+#
+# Why: RUSTSEC-2026-0382. The private keys of several emSign intermediates are public, and the
+# fix (rejecting their keys during path building) exists only in rustls-webpki 0.103.16. The
+# gateway socket verifies with rustls-webpki 0.102.8, which serenity 0.12 pins and which has no
+# fixed release, so this store removes the anchor any such path would end at.
+#
+# Delete this directory and the `[patch.crates-io]` entry in the root Cargo.toml once a
+# webpki-roots release drops the anchor, or once serenity moves to rustls 0.23.
+[package]
+name = "webpki-roots"
+version = "1.0.11"
+edition = "2021"
+rust-version = "1.71"
+license = "CDLA-Permissive-2.0"
+description = "Mozilla's CA root certificates for use with webpki, minus emSign Root CA - G1"
+repository = "https://github.com/rustls/webpki-roots"
+publish = false
+
+[lib]
+name = "webpki_roots"
+path = "src/lib.rs"
+
+[dependencies]
+pki-types = { version = "1.8", default-features = false, package = "rustls-pki-types" }

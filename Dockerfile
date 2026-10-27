@@ -77,6 +77,9 @@ ARG BINARY_NAME
 ARG TARGETARCH
 
 COPY --from=planner /app/recipe.json recipe.json
+# The `[patch.crates-io]` crate the recipe names but does not carry; cook cannot resolve the
+# graph without it.
+COPY vendor vendor
 
 # Cache mounts are scoped per architecture so that multi-platform builds sharing a
 # single builder cannot overwrite each other's artifacts.
@@ -157,6 +160,8 @@ ARG VERSION
 ENV CARGO_PROFILE_DEV_DEBUG=0
 
 COPY --from=planner /app/recipe.json recipe.json
+# The patched crate, as in `builder`.
+COPY vendor vendor
 
 # The generator's dependencies, from the same recipe as `builder`'s, so they are cached as a layer
 # that changes only with the manifests and the lockfile. The selection must match the `cargo run`
