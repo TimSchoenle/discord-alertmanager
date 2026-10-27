@@ -1,12 +1,16 @@
-//! The parts of a store's behaviour that are not SQL.
+//! The parts of a store's behaviour that do not depend on the SQL dialect.
 //!
-//! Deciding whether an arriving alert is a re-fire, a duplicate or an annotation change is
-//! dialect-independent, and two backends deciding it separately is two chances to decide it
+//! Both backends call these rather than each writing its own. [`carry_over`] and [`classify`]
+//! decide what an arriving alert does to its stored row. [`suppression_map`] turns
+//! Alertmanager's silence snapshot into the silences in force against each fingerprint.
+//! [`needs_in_memory_filter`], [`matches_regex_matchers`], [`IN_MEMORY_SCAN_LIMIT`] and
+//! [`severities_at_or_above`] cover the parts of an alert query that neither dialect writes as
+//! plain SQL. Two backends deciding any of these separately is two chances to decide them
 //! differently. The conformance suite would catch the divergence, but only after both had been
-//! written; putting the rule here means there is one of it.
+//! written.
 //!
-//! What stays in the backends is what the dialects genuinely differ on: how a row is claimed, how
-//! a timestamp is stored, and how a driver reports a constraint violation.
+//! What stays in the backends is what the dialects differ on: how a row is claimed, how a
+//! timestamp is stored, and how a driver reports a constraint violation.
 
 use std::collections::BTreeMap;
 
