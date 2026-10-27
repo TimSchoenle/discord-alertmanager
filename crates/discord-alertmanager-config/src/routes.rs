@@ -303,7 +303,7 @@ pub struct TargetPolicy {
     /// Whether a forum post is archived when its alert resolves.
     pub archive_on_resolve: bool,
 
-    /// Lock a forum post when its alert resolves.
+    /// Whether a forum post is locked when its alert resolves.
     ///
     /// A locked thread needs `MANAGE_THREADS` to reopen, and a flap has to reopen one. Without
     /// that permission the notification is marked orphaned and a fresh card is posted, so leave

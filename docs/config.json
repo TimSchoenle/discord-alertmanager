@@ -577,7 +577,7 @@
                     "type": "array"
                   },
                   "lock_on_resolve": {
-                    "description": "Lock a forum post when its alert resolves.\n\nA locked thread needs `MANAGE_THREADS` to reopen, and a flap has to reopen one. Without\nthat permission the notification is marked orphaned and a fresh card is posted, so leave\nthis off unless the permission is held.",
+                    "description": "Whether a forum post is locked when its alert resolves.\n\nA locked thread needs `MANAGE_THREADS` to reopen, and a flap has to reopen one. Without\nthat permission the notification is marked orphaned and a fresh card is posted, so leave\nthis off unless the permission is held.",
                     "type": "boolean"
                   },
                   "manage_tags": {

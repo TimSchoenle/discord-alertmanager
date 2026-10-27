@@ -8,8 +8,9 @@ pre-1.0, `fix` moves the patch, and `docs`, `chore`, `refactor` and `test` move 
 
 ## Generated files
 
-Three artefacts are committed and none of them is written by hand. Each says so in its own first
-lines, and editing the output instead of its source is reverted by the next render.
+The files below are committed, and none of them is written by hand. Each generated document says
+so in its first lines, and editing the output instead of its source is reverted by the next
+render.
 
 | File | Written by | Source |
 | --- | --- | --- |
@@ -43,7 +44,7 @@ cargo deny check
 cargo xtask config-docs                       # then check nothing moved
 bash .github/scripts/readme-variables.sh      # the README payload, as CI will render it
 bash .github/scripts/verify-architecture.sh   # the domain crate's dependency rule
-bash .github/scripts/prose-check.sh README.md CONTRIBUTING.md SECURITY.md   # the prose budgets
+bash .github/scripts/prose-check.sh README.md CONTRIBUTING.md SECURITY.md docs/COMMANDS.md docs/ROUTES.md
 ```
 
 Clippy runs with `-D warnings`. The lint set is declared once in `[workspace.lints]` and inherited
@@ -71,7 +72,7 @@ updater throws on a manifest with no `[package]` table, which is what a virtual 
 and it expands `workspace.members` literally, so the `crates/*` glob resolves to a directory that
 does not exist and no member is bumped. The three `extra-files` entries do the same three
 substitutions the `rust` strategy would have: `[workspace.package]`, the one member that states
-its version literally, and every local package in `Cargo.lock` — selected by the absence of a
+its version literally, and every local package in `Cargo.lock`, selected by the absence of a
 `source` field, which is what distinguishes a path dependency from a registry one.
 
 ## Prose
@@ -80,12 +81,13 @@ Everything written here — README, template, `docs/` page, doc comment, commit 
 description — follows
 [TimSchoenle/actions/docs](https://github.com/TimSchoenle/actions/tree/main/docs).
 [readme/PROSE.md](https://github.com/TimSchoenle/actions/blob/main/docs/readme/PROSE.md) is the
-one to read before writing a sentence, and it is the review criteria rather than a suggestion.
+one to read before writing a sentence, and review holds every change to it.
 [readme/GUIDE.md](https://github.com/TimSchoenle/actions/blob/main/docs/readme/GUIDE.md) covers
 the README's section order and what generates each part.
 
 Doc comments follow
 [doc-comments/RUST.md](https://github.com/TimSchoenle/actions/blob/main/docs/doc-comments/RUST.md).
-The short version: a verb-first one-line summary, a blank line, and a body only where the
-signature cannot say it. Rationale a caller needs goes in `///`; rationale whoever edits the line
-needs goes in `//`; the design record goes in `//!` at the crate root.
+The short version: a one-line summary in the third person that starts with its verb, a blank
+line, and a body only where the signature cannot say it. Rationale a caller needs goes in `///`;
+rationale whoever edits the line needs goes in `//`; the design record goes in `//!` at the crate
+root.
