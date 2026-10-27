@@ -843,9 +843,11 @@ impl Failure {
     }
 }
 
-/// Hashes a tag set, so an unchanged set costs no tag update.
+/// Hashes a tag set into the fingerprint stored as `tags_hash` when tags are written.
 ///
-/// A card that ticks over from firing to acknowledged is one tag change.
+/// Planning does not compare it yet, so an unchanged set still schedules `Effect::SetTags`.
+// `Notification::needs_tag_update` is the comparison that would skip such a write, and nothing
+// calls it.
 fn tags_hash(tags: &[dam_store::TagId]) -> String {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
 
