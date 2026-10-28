@@ -14,10 +14,10 @@ name = "dam_config"
 path = "src/lib.rs"
 
 [features]
-# Per docs/SCHEMA.md, three things are gated together: the `Describe` derive, the
-# `#[config(...)]` helper attributes it defines, and `derive(Serialize)`, which the loader never
-# needs and `with_defaults_from` does. Leaving `Serialize` ungated would link serde's serialiser
-# into the shipped image for nothing.
+# Per rust/docs/SCHEMA.md in terrace-config, three things are gated together: the `Describe`
+# derive, the `#[config(...)]` helper attributes it defines, and `derive(Serialize)`, which the
+# loader never needs and `with_defaults_from` does. Leaving `Serialize` ungated would link serde's
+# serialiser into the shipped image for nothing.
 config-schema = ["terrace-config/schema-cli"]
 
 [dependencies]

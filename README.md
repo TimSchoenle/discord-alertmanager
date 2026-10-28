@@ -34,7 +34,7 @@ Alertmanager posts an alert to a webhook. This service turns it into a live stat
 Discord channel and lets an operator acknowledge it, mute it, silence it or open its graph without
 leaving the client. A silence goes to Alertmanager and stops every receiver, the pager included.
 An ignore is bot-local and stops only Discord, which is what "stop pinging #ops at 3am but keep
-paging" actually asks for.
+paging" asks for.
 
 Each release is a signed image on Docker Hub and GHCR and a Helm chart pinned to that image's
 digest. [CHANGELOG.md](CHANGELOG.md) lists what every release changed.
@@ -68,7 +68,7 @@ role in `discord.capabilities.admin` and add one with `/route add`.
 - [Documentation](#documentation)
 - [Contributing](#contributing)
 - [Security](#security)
-- [Licence](#licence)
+- [License](#license)
 
 ## Features
 
@@ -84,8 +84,8 @@ role in `discord.capabilities.admin` and add one with `/route add`.
 - Every outbound Discord action is a row before it is a request. A dispatcher claims a batch under
   a lease, and the claim is the one query the two backends implement differently:
   `FOR UPDATE SKIP LOCKED` on PostgreSQL, `BEGIN IMMEDIATE` on SQLite.
-- One `Store` trait, one conformance suite, and both backends run it. A behaviour that holds on
-  SQLite and not on PostgreSQL is a failing test rather than a production surprise.
+- Both backends implement one `Store` trait and run one conformance suite against it, so a
+  behaviour that holds on SQLite and not on PostgreSQL fails CI before it reaches a deployment.
 - A route past its alert threshold rolls one digest card per window instead of one card per
   alert, and says on the card why. An unthrottled storm meets Discord's per-channel rate limits
   and produces rejected requests, not notifications.
@@ -202,75 +202,22 @@ themselves; `Create Public Threads` and `Send Messages in Threads` for the reply
 each one; and `Manage Threads` for pinning, archiving, locking and retagging a forum post. A route
 that lacks one of these reports it in the administrative channel rather than retrying forever.
 
-`Manage Channels` is optional and only used to create a forum's tags the first time a route names
-one that does not exist yet; without it, the tags that already resolve are used and the rest are
-left off a post, which is worse than a missing tag but not worse than not starting. The bot never
+`Manage Channels` is optional. It is used only to create a forum route's missing state, severity
+and default tags when the gateway connects. Without it, the bot applies the tags that already exist
+and leaves the rest off the post. A forum set to require a tag rejects a post that carries none, so
+in such a forum create the route's state tags or its `default_tag` by hand first. The bot never
 asks for `Mention Everyone`: an escalation pings only the roles and users its route names.
 
-`discord.capture_reply_text` additionally asks the gateway for the privileged `Message Content`
+`discord.capture_reply_text` also asks the gateway for the privileged `Message Content`
 intent, which has to be turned on for the application in the Discord developer portal before the
 bot can use it.
 
-### Slash commands
+### Slash commands and forum routes
 
-Each command checks the caller's roles against `discord.capabilities`, and every denial is written
-to the audit log. Discord's own command permissions only decide what the client shows.
-
-| Command | Subcommands | Capability |
-| --- | --- | --- |
-| `/alerts` | `list`, `show` / `ack`, `unack`, `assign` | view / operate |
-| `/ignore` | `list` / `add`, `remove` | view / operate |
-| `/silence` | `list` / `create`, `extend`, `expire` | view / silence |
-| `/subscribe` | `add`, `list`, `remove` | view |
-| `/status` | `alertmanager`, `bot` / `config` | view / admin |
-| `/route` | `add`, `list`, `remove`, `test` | admin |
-| `/cards` | `resync` | admin |
-| `/debug` | `merge` | view |
-
-`view` defaults to `@everyone` and the other three to nobody, so a fresh deployment can read its
-alerts and cannot silence a page.
-
-### Forum route example
-
-A forum route needs `target.kind = "forum"`, `target.id` set to the forum channel, and
-`target.policy` for the tag and lifecycle behaviour that only a forum has. Everything else — the
-matcher, the mentions, the escalation — works exactly as it does for a text channel:
-
-```toml
-[[routes]]
-name = "prod-forum"
-guild_id = 111111111111111111
-matchers = "namespace=~prod-.*"
-min_severity = "warning"
-priority = 10
-
-[routes.target]
-kind = "forum"
-id = 222222222222222222
-
-[routes.target.policy]
-title_template = "{{ labels.alertname }} — {{ labels.namespace }}"
-manage_tags = true
-label_tags = ["namespace"]
-default_tag = "unclassified"
-
-[routes.mentions]
-roles = [333333333333333333]
-min_severity = "critical"
-
-[routes.escalation]
-after_secs = 900
-roles = [333333333333333333]
-```
-
-Each firing alert becomes its own post, titled from `title_template` and tagged with its
-severity, its state and its `namespace` label's value. `manage_tags = true` lets the bot create
-`unclassified`, a state tag, or a not-yet-seen `namespace` value the first time a post needs one,
-which is why this route also wants `Manage Channels` from
-[Discord permissions](#discord-permissions); leave it `false` to only ever apply tags that already
-exist. The policy keys left out keep their defaults: the post is pinned once it turns critical,
-archived the moment its alert resolves, and never locked, so a flap can still reopen it without
-`Manage Threads` on hand.
+Every command checks the caller's roles against `discord.capabilities` before it runs, and `view`
+is the only capability granted by default. [docs/COMMANDS.md](docs/COMMANDS.md) lists each
+command with the capability it needs. [docs/ROUTES.md](docs/ROUTES.md) walks through a route that
+posts each alert into a forum channel, with the forum policy keys and their defaults.
 
 ### The workspace
 
@@ -375,11 +322,13 @@ floor Cargo enforces is the release this repository is built and tested with.
 
 | Document | Purpose |
 | --- | --- |
+| [Slash commands](docs/COMMANDS.md) | Every slash command the bot registers, and the capability each one needs. |
+| [Forum routes](docs/ROUTES.md) | How a route posts each alert as its own post in a Discord forum channel, with a complete example. |
 | [Configuration reference](docs/config.md) | Every key the service reads, and the variables that decide where those keys come from. |
 
 ## Contributing
 
-[CONTRIBUTING.md](CONTRIBUTING.md) covers the commit convention, the four generated artefacts and
+[CONTRIBUTING.md](CONTRIBUTING.md) covers the commit convention, the generated files and
 the checks to run before opening a pull request.
 
 Several files here are generated, this one included. Each says so in its first lines, and editing
@@ -391,6 +340,6 @@ Do not open a public issue for a vulnerability. [SECURITY.md](SECURITY.md) has t
 instructions and says which failures matter most: a credential reaching a log, and a user reaching
 past the capability they hold.
 
-## Licence
+## License
 
 `MIT`. [LICENSE](LICENSE) has the terms.

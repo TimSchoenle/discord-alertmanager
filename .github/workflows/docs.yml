@@ -271,4 +271,4 @@ jobs:
       # reports both.
       - name: Check the prose budgets
         if: ${{ !cancelled() }}
-        run: bash .github/scripts/prose-check.sh README.md CONTRIBUTING.md SECURITY.md
+        run: bash .github/scripts/prose-check.sh README.md CONTRIBUTING.md SECURITY.md docs/COMMANDS.md docs/ROUTES.md

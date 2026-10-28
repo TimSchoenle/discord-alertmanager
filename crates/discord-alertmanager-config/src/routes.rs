@@ -259,18 +259,18 @@ pub struct TargetPolicy {
     #[cfg_attr(feature = "config-schema", config(values))]
     pub thread_kind: ThreadKind,
 
-    /// Title template for a forum post, rendered with `minijinja`.
+    /// Title template for a forum post, stored but not applied yet.
     ///
-    /// A forum post title is mandatory and 1 to 100 characters, so this falls back to the alert
-    /// name and then to the fingerprint. An empty title fails post creation outright.
+    /// Post titles are `[SEVERITY] alertname` followed by the first non-empty `render.key_labels`
+    /// value. `/route test` still reports an empty template.
     pub title_template: String,
 
-    /// Whether missing forum tags are created, which needs `MANAGE_CHANNELS`.
+    /// Whether missing forum tags are created, stored but not checked yet.
     ///
-    /// Created tags are non-moderated on purpose: a moderated tag can only be applied by a member
-    /// holding `MANAGE_THREADS`, while a non-moderated one can be set by the thread's owner,
-    /// which the bot is. Without the permission the bot applies the tags that already resolve and
-    /// reports the gap in `/route test`; a missing tag never fails a notification.
+    /// When the gateway connects, the bot creates the missing state, severity and default tags
+    /// whenever it holds `MANAGE_CHANNELS`, whatever this says. Created tags are non-moderated,
+    /// so the bot can apply them as the thread's owner. Without the permission the bot applies
+    /// the tags that already resolve and reports the gap in `/route test`.
     pub manage_tags: bool,
 
     /// Names of the four mutually exclusive state tags.
@@ -282,9 +282,8 @@ pub struct TargetPolicy {
 
     /// Labels whose values become tags, at most three.
     ///
-    /// Use low-cardinality labels only. A forum channel holds 20 tags and a post holds 5; the bot
-    /// refuses to create a new tag once the channel reaches 18, so an unbounded label exhausts
-    /// the budget in an afternoon and later posts lose their tags.
+    /// A value is applied only when a tag with that name already exists; the bot does not create
+    /// label tags. Use low-cardinality labels: a forum channel holds 20 tags and a post holds 5.
     pub label_tags: Vec<String>,
 
     /// Tag applied when nothing else resolves, for a channel with `REQUIRE_TAG` set.
@@ -303,7 +302,7 @@ pub struct TargetPolicy {
     /// Whether a forum post is archived when its alert resolves.
     pub archive_on_resolve: bool,
 
-    /// Lock a forum post when its alert resolves.
+    /// Whether a forum post is locked when its alert resolves.
     ///
     /// A locked thread needs `MANAGE_THREADS` to reopen, and a flap has to reopen one. Without
     /// that permission the notification is marked orphaned and a fresh card is posted, so leave
@@ -318,7 +317,9 @@ pub struct TargetPolicy {
     #[cfg_attr(feature = "config-schema", config(values))]
     pub pin_min_severity: Option<Severity>,
 
-    /// Most posts pinned at once.
+    /// Most posts pinned at once, stored but not enforced.
+    ///
+    /// Discord allows one pinned post per forum, which is the effective limit.
     pub max_pinned: u32,
 
     /// Whether every state change posts a one-line note in the thread.

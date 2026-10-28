@@ -7,9 +7,9 @@ the Security tab, which opens an advisory only the maintainers can read:
 
 <https://github.com/TimSchoenle/discord-alertmanager/security/advisories/new>
 
-Include what you did, what happened, and which features the binary was built with. `--features
-sqlite` and `--features postgres` select different backends with different claim strategies, so a
-report against one is not a report against the other.
+Include what you did, what happened, the release tag, and the `storage.backend` in use. Both
+backends are in every build, but they claim work with different queries, so a report against one
+is not a report against the other.
 
 ## Supported versions
 
@@ -28,7 +28,7 @@ A log line, a `Debug` output, a panic message or a Discord message carrying one 
 
 **A user doing something their capability does not permit.** Authorisation happens bot-side in
 `CommandCtx` before any handler body runs; `default_member_permissions` only decides what Discord
-draws. The four capabilities are ordered — `view`, `operate`, `silence`, `admin` — and `silence`
+draws. The four capabilities are ordered (`view`, `operate`, `silence`, `admin`), and `silence`
 is the one that reaches past Discord, because an Alertmanager silence stops every receiver
 including the pager. A path that mutates Alertmanager without a `silence` check is the highest
 severity report this repository can receive.
