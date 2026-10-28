@@ -303,7 +303,7 @@ pub(super) async fn orphan_notification(
     // (channel_id, dedupe_key) is what a fresh card needs freed, and the row is what the
     // alert's history hangs off.
     let affected = sqlx::query(
-        "UPDATE notifications SET state = 'orphaned', message_id = NULL, \
+        "UPDATE notifications SET state = 'orphaned', message_id = NULL, pinned = FALSE, \
          dedupe_key = 'orphaned:' || id || ':' || dedupe_key, updated_at = $1 WHERE id = $2",
     )
     .bind(now)
@@ -318,6 +318,22 @@ pub(super) async fn orphan_notification(
     }
 
     Ok(())
+}
+
+pub(super) async fn pinned_posts(
+    store: &PostgresStore,
+    channel: ChannelId,
+) -> Result<u32, StoreError> {
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM notifications WHERE channel_id = $1 AND pinned = TRUE",
+    )
+    .bind(channel.to_db())
+    .fetch_one(&store.pool)
+    .await
+    .map_err(backend)?;
+
+    // A count is never negative, and a channel cannot hold four billion posts.
+    Ok(u32::try_from(count).unwrap_or(u32::MAX))
 }
 
 pub(super) async fn live_cards(

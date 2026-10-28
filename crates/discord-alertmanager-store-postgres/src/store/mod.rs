@@ -175,6 +175,10 @@ impl Store for PostgresStore {
         notifications::orphan_notification(self, id, now).await
     }
 
+    async fn pinned_posts(&self, channel: ChannelId) -> Result<u32, StoreError> {
+        notifications::pinned_posts(self, channel).await
+    }
+
     async fn live_cards(
         &self,
         routes: &[RouteId],

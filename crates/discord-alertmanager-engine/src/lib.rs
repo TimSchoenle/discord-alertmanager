@@ -37,7 +37,7 @@ pub mod storm;
 
 pub use decide::{
     AlertContext, DecisionSettings, ExistingCards, decide, dedupe_key, dedupe_keys,
-    delivery_channel, desired_tags, identity_siblings,
+    delivery_channel, desired_tags, identity_siblings, label_tag_names,
 };
 pub use explain::{CardFacts, LabelDifference, Separation, Strategy, explain_separation};
 pub use ports::{

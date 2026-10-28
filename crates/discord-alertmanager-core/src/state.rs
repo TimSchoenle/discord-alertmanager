@@ -65,6 +65,15 @@ impl NotificationState {
         self.is_open() || self == Self::Ignored
     }
 
+    /// Whether a card in this state holds its thread open for Discord's longest window.
+    ///
+    /// Everything short of resolution does: a thread that archives during an incident takes the
+    /// discussion with it, so a route's shorter window applies only to the quiet afterwards.
+    #[must_use]
+    pub fn holds_thread_open(self) -> bool {
+        !matches!(self, Self::Resolved | Self::Orphaned)
+    }
+
     /// Whether an unacknowledged card in this state should be pinned.
     ///
     /// Pinning is the "needs attention" tray, so it survives neither an acknowledgement nor a

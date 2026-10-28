@@ -439,7 +439,8 @@ fn normalise(value: &serde_json::Value) -> serde_json::Value {
     }
 }
 
-/// Reads every forum route's tags into the cache, creating the ones its policy asks for.
+/// Reads every forum route's tags into the cache, creating the missing ones where its policy
+/// sets `manage_tags`.
 ///
 /// Done once per session rather than per notification: the hot path applies tags by name and
 /// Discord's API takes ids, so without the cache every state change would cost a channel fetch.
@@ -452,9 +453,15 @@ async fn sync_forum_tags(bot: &Arc<BotContext>) {
             continue;
         };
 
-        let want = wanted_tags(policy);
+        let read = if policy.manage_tags {
+            bot.sink
+                .ensure_forum_tags(*channel, &wanted_tags(policy))
+                .await
+        } else {
+            bot.sink.forum_tags(*channel).await
+        };
 
-        match bot.sink.ensure_forum_tags(*channel, &want).await {
+        match read {
             Ok(tags) => match bot.store.sync_forum_tags(*channel, &tags).await {
                 Ok(()) => changed = true,
                 Err(error) => warn!(%error, channel = channel.get(), "cannot cache forum tags"),

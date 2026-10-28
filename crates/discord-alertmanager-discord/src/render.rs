@@ -17,9 +17,11 @@ use chrono::{DateTime, Utc};
 use dam_config::Render;
 use dam_core::{Alert, NotificationState, Severity};
 use dam_engine::{CardData, Mention, PreviousCard};
+use minijinja::Environment;
 use serenity::all::{
     ButtonStyle, Colour, CreateActionRow, CreateButton, CreateEmbed, CreateEmbedFooter,
 };
+use tracing::warn;
 
 use crate::custom_id::{Action, CustomId};
 use crate::links::{LinkRenderer, RenderedLink};
@@ -71,13 +73,18 @@ pub struct RenderedCard {
 pub struct Renderer {
     config: Render,
     links: LinkRenderer,
+    templates: Environment<'static>,
 }
 
 impl Renderer {
     /// Builds a renderer around the layout configuration and the compiled link templates.
     #[must_use]
     pub fn new(config: Render, links: LinkRenderer) -> Self {
-        Self { config, links }
+        Self {
+            config,
+            links,
+            templates: crate::template::environment(),
+        }
     }
 
     /// Renders one card.
@@ -148,6 +155,26 @@ impl Renderer {
         truncate(&name, NAME_LIMIT)
     }
 
+    /// The title a forum post takes, rendered from its route's `title_template`.
+    ///
+    /// Falls back to [`Renderer::name`] when the template fails to render or renders to nothing
+    /// but whitespace. Discord rejects a post without a title, and a template naming a label the
+    /// alert does not carry fails under strict undefined behaviour, so the fallback is what keeps
+    /// such a post deliverable. The result is cut to Discord's hundred characters.
+    #[must_use]
+    pub fn forum_title(&self, card: &CardData, template: &str) -> String {
+        let context = crate::template::context(&card.alert, &[], None, card.rendered_at);
+
+        match self.templates.render_str(template, context) {
+            Ok(title) if !title.trim().is_empty() => truncate(title.trim(), NAME_LIMIT),
+            Ok(_) => self.name(card),
+            Err(error) => {
+                warn!(%error, "the title template did not render; using the default name");
+                self.name(card)
+            }
+        }
+    }
+
     /// The link buttons an alert produces, for the detail views that draw them outside a card.
     ///
     /// Exposed rather than duplicated: `/alerts show` and the `Details` button both want the same
@@ -174,7 +201,7 @@ impl Renderer {
 
         let budget = self.config.description_budget.min(DESCRIPTION_LIMIT);
 
-        if text.len() > budget {
+        if discord_len(&text) > budget {
             // The marker names the command that has the rest, because a truncated description
             // without one reads as a bug in the bot rather than as a budget.
             text = truncate(&text, budget.saturating_sub(24));
@@ -467,17 +494,17 @@ pub(crate) fn mention_text(mentions: &[Mention]) -> String {
 /// status and the age survive, a twenty-first label does not. The marker says what happened, so a
 /// card that lost fields does not look like a card that never had them.
 fn budget(title: &str, description: &str, footer: &str, fields: &mut Vec<(String, String, bool)>) {
-    let fixed = title.len() + description.len() + footer.len();
+    let fixed = discord_len(title) + discord_len(description) + discord_len(footer);
     let mut total = fixed
         + fields
             .iter()
-            .map(|(k, v, _)| k.len() + v.len())
+            .map(|(k, v, _)| discord_len(k) + discord_len(v))
             .sum::<usize>();
     let mut dropped = false;
 
     while fields.len() > FIELD_COUNT_LIMIT || (total > EMBED_BUDGET && !fields.is_empty()) {
         if let Some((label, value, _)) = fields.pop() {
-            total -= label.len() + value.len();
+            total -= discord_len(&label) + discord_len(&value);
             dropped = true;
         }
     }
@@ -548,21 +575,37 @@ impl Fnv {
     }
 }
 
-/// Cuts a string to a byte budget on a character boundary, marker included.
+/// The length of a string as counted against Discord's limits, in UTF-16 code units.
 ///
-/// The marker counts against the budget rather than being added to it. Discord measures the limit
-/// on what it receives, so a truncation that lands exactly on the cap and then appends three bytes
+/// Discord states its limits in characters, which a byte count overstates for any non-ASCII text:
+/// fifty CJK characters are 150 bytes and would be cut against a hundred-character cap. UTF-16
+/// units equal code points for every character outside the astral planes and exceed them only for
+/// the rest, such as emoji, so this count never undercounts whichever of the two Discord applies.
+fn discord_len(value: &str) -> usize {
+    value.encode_utf16().count()
+}
+
+/// Cuts a string to a limit measured by [`discord_len`], on a character boundary, marker included.
+///
+/// The marker counts against the limit rather than being added to it. Discord measures the limit
+/// on what it receives, so a truncation that lands exactly on the cap and then appends the marker
 /// produces the rejected request it was meant to prevent.
 fn truncate(value: &str, limit: usize) -> String {
     const MARKER: char = '…';
 
-    if value.len() <= limit {
+    if discord_len(value) <= limit {
         return value.to_owned();
     }
 
-    let mut end = limit.saturating_sub(MARKER.len_utf8()).min(value.len());
-    while end > 0 && !value.is_char_boundary(end) {
-        end -= 1;
+    let budget = limit.saturating_sub(MARKER.len_utf16());
+    let mut used = 0;
+    let mut end = 0;
+    for (index, character) in value.char_indices() {
+        used += character.len_utf16();
+        if used > budget {
+            break;
+        }
+        end = index + character.len_utf8();
     }
 
     let mut cut = value[..end].to_owned();
@@ -700,20 +743,24 @@ mod tests {
         let description = json["description"].as_str().unwrap_or_default();
         let fields = json["fields"].as_array().map(Vec::len).unwrap_or_default();
 
-        assert!(title.len() <= TITLE_LIMIT, "title is {} bytes", title.len());
-        assert!(description.len() <= DESCRIPTION_LIMIT);
+        assert!(
+            discord_len(title) <= TITLE_LIMIT,
+            "title is {}",
+            discord_len(title)
+        );
+        assert!(discord_len(description) <= DESCRIPTION_LIMIT);
         assert!(fields <= FIELD_COUNT_LIMIT, "{fields} fields");
 
-        let total: usize = title.len()
-            + description.len()
+        let total: usize = discord_len(title)
+            + discord_len(description)
             + json["fields"]
                 .as_array()
                 .map(|fields| {
                     fields
                         .iter()
                         .map(|field| {
-                            field["name"].as_str().unwrap_or_default().len()
-                                + field["value"].as_str().unwrap_or_default().len()
+                            discord_len(field["name"].as_str().unwrap_or_default())
+                                + discord_len(field["value"].as_str().unwrap_or_default())
                         })
                         .sum::<usize>()
                 })
@@ -742,9 +789,9 @@ mod tests {
         ));
 
         assert!(
-            long.len() <= NAME_LIMIT,
-            "the marker counts against the budget, not on top of it: {} bytes",
-            long.len()
+            discord_len(&long) <= NAME_LIMIT,
+            "the marker counts against the budget, not on top of it: {}",
+            discord_len(&long)
         );
     }
 
@@ -762,5 +809,68 @@ mod tests {
         let produced = renderer.render(&card(NotificationState::Orphaned, &[]));
 
         assert_eq!(produced.components, Vec::<CreateActionRow>::new());
+    }
+
+    #[test]
+    fn a_forum_title_comes_from_the_route_template() {
+        let renderer = renderer();
+        let card = card(
+            NotificationState::Firing,
+            &[("alertname", "PodDown"), ("namespace", "payments")],
+        );
+
+        assert_eq!(
+            renderer.forum_title(&card, "{{ labels.alertname }} in {{ labels.namespace }}"),
+            "PodDown in payments"
+        );
+    }
+
+    #[test]
+    fn a_template_that_cannot_render_falls_back_to_the_thread_name() {
+        let renderer = renderer();
+        let card = card(NotificationState::Firing, &[("alertname", "PodDown")]);
+
+        assert_eq!(
+            renderer.forum_title(&card, "{{ labels.absent }}"),
+            renderer.name(&card),
+            "a missing label fails under strict undefined behaviour, and Discord rejects a post \
+             without a title"
+        );
+        assert_eq!(
+            renderer.forum_title(&card, "   "),
+            renderer.name(&card),
+            "a title of only whitespace is no title"
+        );
+        assert_eq!(
+            renderer.forum_title(&card, "{{ unclosed"),
+            renderer.name(&card)
+        );
+    }
+
+    #[test]
+    fn a_forum_title_is_cut_to_discords_limit() {
+        let renderer = renderer();
+        let card = card(NotificationState::Firing, &[("alertname", "PodDown")]);
+
+        let title = renderer.forum_title(&card, &"x".repeat(300));
+
+        assert!(discord_len(&title) <= NAME_LIMIT, "{}", discord_len(&title));
+    }
+
+    #[test]
+    fn a_forum_title_counts_characters_not_bytes() {
+        let renderer = renderer();
+        let card = card(NotificationState::Firing, &[("alertname", "PodDown")]);
+        let fifty = "警".repeat(50);
+
+        assert_eq!(
+            renderer.forum_title(&card, &fifty),
+            fifty,
+            "fifty CJK characters are 150 bytes but fit Discord's hundred characters"
+        );
+
+        let cut = renderer.forum_title(&card, &"警".repeat(150));
+        assert_eq!(discord_len(&cut), NAME_LIMIT);
+        assert!(cut.ends_with('…'));
     }
 }

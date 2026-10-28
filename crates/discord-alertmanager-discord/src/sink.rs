@@ -196,8 +196,15 @@ impl DiscordSink for SerenitySink {
             return Err(SinkError::WrongChannelType { expected: "forum" });
         };
 
+        // A live alert holds Discord's longest window whatever the route asks for, by the rule the
+        // engine applies when a card changes state. The route's window is for the quiet after it.
+        let archive = if card.state.holds_thread_open() {
+            AutoArchiveDuration::OneWeek
+        } else {
+            auto_archive(policy.auto_archive_minutes)
+        };
         let mut post = CreateForumPost::new(target.title.clone(), self.message(card))
-            .auto_archive_duration(auto_archive(policy.auto_archive_minutes));
+            .auto_archive_duration(archive);
 
         for tag in tag_ids(&target.tags) {
             post = post.add_applied_tag(tag);

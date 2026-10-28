@@ -587,7 +587,11 @@ fn a_card_stays_firing_while_another_alert_behind_it_still_fires() {
         update.fingerprint, live.fingerprint,
         "it shows the one still firing"
     );
-    assert_eq!(kinds(update), vec!["edit_card"]);
+    assert_eq!(
+        kinds(update),
+        vec!["edit_card", "set_tags"],
+        "and takes that alert's tags, with no note or pin for a move that did not happen"
+    );
 
     let alone = decide(
         &gone,
@@ -705,6 +709,105 @@ fn a_resolved_forum_post_archives_on_the_configured_window() {
     assert_eq!(
         archive, 10_080,
         "the route's own window wins over the deployment's default"
+    );
+}
+
+#[test]
+fn a_resolved_post_left_open_drops_to_the_route_window_unlocked() {
+    let mut route = forum_route();
+    if let RouteTarget::Forum { policy, .. } = &mut route.target {
+        policy.archive_on_resolve = false;
+        policy.lock_on_resolve = true;
+        policy.auto_archive_minutes = 60;
+    }
+    let channel = ChannelId::new(200);
+    let snapshot = RoutingSnapshot::new(vec![route], Vec::new(), forum_tags());
+
+    let key =
+        DedupeKey::per_alert(&Fingerprint::new("0123456789abcdef").expect("hex is a fingerprint"));
+    let mut existing = ExistingCards::new();
+    existing.insert(
+        (channel, key.clone()),
+        card(NotificationState::Firing, channel, &key),
+    );
+
+    let decision = decide(
+        &delta(EventKind::Resolved, AlertStatus::Resolved, AmState::Active),
+        &snapshot,
+        &quiet(),
+        &existing,
+        &known(false),
+        &DecisionSettings::default(),
+        now(),
+    );
+
+    let flags: Vec<_> = decision.updates[0]
+        .effects
+        .iter()
+        .filter_map(|item| match item.effect {
+            Effect::SetFlags {
+                archived,
+                locked,
+                auto_archive_minutes,
+                ..
+            } => Some((archived, locked, auto_archive_minutes)),
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(
+        flags,
+        vec![(false, false, 60)],
+        "the post stays open and editable, but no longer holds the week it held while firing"
+    );
+}
+
+#[test]
+fn a_re_fired_post_left_open_takes_back_the_maximum_window() {
+    let mut route = forum_route();
+    if let RouteTarget::Forum { policy, .. } = &mut route.target {
+        policy.archive_on_resolve = false;
+        policy.auto_archive_minutes = 60;
+    }
+    let channel = ChannelId::new(200);
+    let snapshot = RoutingSnapshot::new(vec![route], Vec::new(), forum_tags());
+
+    let key =
+        DedupeKey::per_alert(&Fingerprint::new("0123456789abcdef").expect("hex is a fingerprint"));
+    let mut existing = ExistingCards::new();
+    existing.insert(
+        (channel, key.clone()),
+        card(NotificationState::Resolved, channel, &key),
+    );
+
+    let decision = decide(
+        &delta(EventKind::Fired, AlertStatus::Firing, AmState::Active),
+        &snapshot,
+        &quiet(),
+        &existing,
+        &known(false),
+        &DecisionSettings::default(),
+        now(),
+    );
+
+    let flags: Vec<_> = decision.updates[0]
+        .effects
+        .iter()
+        .filter_map(|item| match item.effect {
+            Effect::SetFlags {
+                archived,
+                locked,
+                auto_archive_minutes,
+                ..
+            } => Some((archived, locked, auto_archive_minutes)),
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(
+        flags,
+        vec![(false, false, 10_080)],
+        "the post never archived, so only the window changes, back to Discord's maximum"
     );
 }
 
@@ -991,11 +1094,10 @@ fn an_update_that_changes_no_state_asks_for_no_pin() {
     let route = forum_route();
     let delta = delta(EventKind::Updated, AlertStatus::Firing, AmState::Active);
     let key = key_of(&delta);
+    let mut shown = card(NotificationState::Firing, ChannelId::new(200), &key);
+    shown.fingerprint = delta.alert.fingerprint.clone();
     let mut existing = ExistingCards::new();
-    existing.insert(
-        (ChannelId::new(200), key.clone()),
-        card(NotificationState::Firing, ChannelId::new(200), &key),
-    );
+    existing.insert((ChannelId::new(200), key.clone()), shown);
     let snapshot = RoutingSnapshot::new(vec![route], Vec::new(), forum_tags());
 
     let decision = decide(
@@ -1016,6 +1118,65 @@ fn an_update_that_changes_no_state_asks_for_no_pin() {
     // alert lasts.
     assert_eq!(update.state, None);
     assert_eq!(kinds(update), vec!["edit_card"]);
+}
+
+#[test]
+fn a_card_switching_to_another_alert_is_retagged_without_moving() {
+    let mut route = forum_route();
+    if let RouteTarget::Forum { policy, .. } = &mut route.target {
+        policy.label_tags = vec!["namespace".to_owned()];
+    }
+
+    let mut tags = forum_tags();
+    for (id, name) in [(10, "billing"), (11, "payments")] {
+        tags.push(ForumTag {
+            channel_id: ChannelId::new(200),
+            name: name.to_owned(),
+            id: TagId::new(id),
+            moderated: false,
+            synced_at: now(),
+        });
+    }
+
+    // The card was showing an alert from `billing`, which is the tag it carries; the alert now on
+    // show is from `payments`.
+    let mut delta = delta(EventKind::Updated, AlertStatus::Firing, AmState::Active);
+    delta.alert.labels = labels(&[
+        ("alertname", "PodDown"),
+        ("severity", "critical"),
+        ("namespace", "payments"),
+    ]);
+    let key = key_of(&delta);
+    let mut shown = card(NotificationState::Firing, ChannelId::new(200), &key);
+    shown.applied_tags = vec![TagId::new(1), TagId::new(5), TagId::new(10)];
+    let mut existing = ExistingCards::new();
+    existing.insert((ChannelId::new(200), key.clone()), shown);
+    let snapshot = RoutingSnapshot::new(vec![route], Vec::new(), tags);
+
+    let decision = decide(
+        &delta,
+        &snapshot,
+        &quiet(),
+        &existing,
+        &known(false),
+        &DecisionSettings::default(),
+        now(),
+    );
+
+    let update = &decision.updates[0];
+
+    // Nothing moves, so there is no note and no pin; only the tags follow the new alert.
+    assert_eq!(update.state, None);
+    assert_eq!(kinds(update), vec!["edit_card", "set_tags"]);
+
+    let Effect::SetTags { tags, .. } = &update.effects[1].effect else {
+        unreachable!("the second effect is the retag");
+    };
+    assert_eq!(
+        tags,
+        &vec![TagId::new(1), TagId::new(5), TagId::new(11)],
+        "the state and severity tags stay, and the label tag is the new alert's"
+    );
 }
 
 #[test]
@@ -1143,4 +1304,32 @@ fn a_newly_matching_ignore_mutes_a_card_that_already_exists() {
     );
 
     assert_eq!(decision.updates[0].state, Some(NotificationState::Ignored));
+}
+
+#[test]
+fn label_tags_follow_the_policy_order_and_skip_absent_values() {
+    let RouteTarget::Forum { mut policy, .. } = forum_route().target else {
+        unreachable!("the fixture is a forum route");
+    };
+    policy.label_tags = vec![
+        "team".to_owned(),
+        "missing".to_owned(),
+        "namespace".to_owned(),
+    ];
+
+    let names = label_tag_names(
+        &policy,
+        &labels(&[
+            ("namespace", "payments api"),
+            ("team", "a-very-long-team-name-indeed"),
+            ("missing", ""),
+        ]),
+    );
+
+    assert_eq!(
+        names,
+        vec!["a-very-long-team-nam".to_owned(), "payments-api".to_owned()],
+        "values are cut to Discord's twenty characters, whitespace becomes a hyphen, and an \
+         empty value names no tag"
+    );
 }

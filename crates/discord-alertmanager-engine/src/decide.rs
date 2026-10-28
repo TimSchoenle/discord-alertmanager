@@ -387,10 +387,15 @@ fn update_for(
                 archived: false,
                 locked: false,
                 auto_archive_minutes: auto_archive_minutes(route, effective, settings),
+                planned_for: Some(effective),
             },
             card,
             now,
         ));
+    }
+
+    if let RouteTarget::Forum { .. } = &route.target {
+        effects.extend(reopened_post_window(route, card, effective, settings, now));
     }
 
     effects.push(NewOutboxItem {
@@ -417,31 +422,8 @@ fn update_for(
             now,
         ));
 
-        if let RouteTarget::Forum { policy, .. } = &route.target
-            && policy.archive_on_resolve
-        {
-            effects.push(NewOutboxItem {
-                effect: Effect::SetFlags {
-                    notification: card.id,
-                    archived: true,
-                    locked: policy.lock_on_resolve,
-                    // The route's own window rather than a week: the incident is over, and a
-                    // resolved post that lingers at the top of the index buries the ones that
-                    // are not.
-                    auto_archive_minutes: auto_archive_minutes(
-                        route,
-                        NotificationState::Resolved,
-                        settings,
-                    ),
-                },
-                dedupe_key: card.dedupe_key.clone(),
-                // Behind the edit's debounce, and queued after it, so that the claim order —
-                // `not_before` then insertion — re-renders the card before the post is sealed.
-                // Archiving first left the edit fighting the archive it had just caused: a locked
-                // post refuses the edit outright and the card keeps saying "firing" for good,
-                // while an unlocked one is reopened to carry it and stops being archived at all.
-                not_before: now + settings.debounce,
-            });
+        if let RouteTarget::Forum { policy, .. } = &route.target {
+            effects.extend(resolved_post_flags(route, policy, card, settings, now));
         }
     }
 
@@ -450,6 +432,81 @@ fn update_for(
         fingerprint: shown.fingerprint.clone(),
         state,
         effects,
+    })
+}
+
+/// The archive, lock and window a forum post takes when its alert resolves.
+///
+/// A post archived on resolve is sealed with the route's window. One left open still drops from
+/// the week it held while firing to that window, or it would sit at the top of the index for a
+/// week; an archived card needs nothing, as reopening it above already set that window.
+fn resolved_post_flags(
+    route: &Route,
+    policy: &ForumPolicy,
+    card: &Notification,
+    settings: &DecisionSettings,
+    now: DateTime<Utc>,
+) -> Option<NewOutboxItem> {
+    if !policy.archive_on_resolve && card.archived {
+        return None;
+    }
+
+    Some(NewOutboxItem {
+        effect: Effect::SetFlags {
+            notification: card.id,
+            archived: policy.archive_on_resolve,
+            // A lock comes only with the archive: a re-fire reopens an archived post, which is
+            // what lifts the lock, while one left open would stay locked against its edits.
+            locked: policy.archive_on_resolve && policy.lock_on_resolve,
+            // The route's own window rather than a week: the incident is over, and a resolved
+            // post that lingers at the top of the index buries the ones that are not.
+            auto_archive_minutes: auto_archive_minutes(
+                route,
+                NotificationState::Resolved,
+                settings,
+            ),
+            planned_for: Some(NotificationState::Resolved),
+        },
+        dedupe_key: card.dedupe_key.clone(),
+        // Behind the edit's debounce, and queued after it, so that the claim order — `not_before`
+        // then insertion — re-renders the card before the post is sealed. Archiving first left
+        // the edit fighting the archive it had just caused: a locked post refuses the edit
+        // outright and the card keeps saying "firing" for good, while an unlocked one is reopened
+        // to carry it and stops being archived at all.
+        not_before: now + settings.debounce,
+    })
+}
+
+/// The window a forum post left open on resolve takes back when its alert fires again.
+///
+/// [`resolved_post_flags`] drops such a post to the route's window, and nothing else restores the
+/// week: the reopening above runs only for an archived post. Without this, a re-fired alert
+/// keeps the short window and Discord archives its post mid-incident, taking it off the active
+/// list until the next edit happens to reopen it.
+fn reopened_post_window(
+    route: &Route,
+    card: &Notification,
+    effective: NotificationState,
+    settings: &DecisionSettings,
+    now: DateTime<Utc>,
+) -> Option<NewOutboxItem> {
+    if card.archived || card.state != NotificationState::Resolved || !effective.holds_thread_open()
+    {
+        return None;
+    }
+
+    Some(NewOutboxItem {
+        effect: Effect::SetFlags {
+            notification: card.id,
+            archived: false,
+            locked: false,
+            auto_archive_minutes: auto_archive_minutes(route, effective, settings),
+            planned_for: Some(effective),
+        },
+        dedupe_key: card.dedupe_key.clone(),
+        // Behind the debounce, like the resolve's own flags: a re-fire inside that debounce
+        // finds the resolve's seal still queued and unapplied, and must land after it to undo it.
+        not_before: now + settings.debounce,
     })
 }
 
@@ -472,7 +529,12 @@ fn forum_effects(
 ) -> Vec<NewOutboxItem> {
     let mut effects = Vec::new();
 
-    if state.is_some() {
+    // The tags follow the state and the labels of the alert on show. A card can switch to
+    // another alert without moving, when a churned label or a second member of its identity takes
+    // over, and that alert's labels can want different label tags. Asked for only on a state
+    // change or a switch, so a repeat of the same alert queues nothing; the worker skips a set
+    // the post already carries.
+    if state.is_some() || shown.fingerprint != card.fingerprint {
         let tags = desired_tags(
             snapshot,
             channel,
@@ -490,7 +552,9 @@ fn forum_effects(
             card,
             now,
         ));
+    }
 
+    if state.is_some() {
         // Editing a message does not bump a forum's activity sort; only a new message does.
         // Without this note a state change leaves the post buried exactly where it was.
         if policy.bump_on_state_change {
@@ -654,7 +718,7 @@ fn auto_archive_minutes(
     state: NotificationState,
     settings: &DecisionSettings,
 ) -> u32 {
-    if state != NotificationState::Resolved && state != NotificationState::Orphaned {
+    if state.holds_thread_open() {
         return MAX_AUTO_ARCHIVE;
     }
 
@@ -691,12 +755,7 @@ pub fn desired_tags(
         names.push(severity.as_str().to_owned());
     }
 
-    for label in &policy.label_tags {
-        let value = labels.get_or_empty(label);
-        if !value.is_empty() {
-            names.push(slug(value));
-        }
-    }
+    names.extend(label_tag_names(policy, labels));
 
     let mut tags = Vec::new();
     for name in names {
@@ -726,6 +785,21 @@ pub fn desired_tags(
     }
 
     tags
+}
+
+/// The tag names a forum policy derives from an alert's labels, in the policy's order.
+///
+/// One per label in `label_tags` that the alert carries with a non-empty value, cut to the
+/// twenty characters Discord allows a tag name, with whitespace replaced by hyphens.
+#[must_use]
+pub fn label_tag_names(policy: &ForumPolicy, labels: &Labels) -> Vec<String> {
+    policy
+        .label_tags
+        .iter()
+        .map(|label| labels.get_or_empty(label))
+        .filter(|value| !value.is_empty())
+        .map(slug)
+        .collect()
 }
 
 /// Truncates a label value to something Discord will accept as a tag name.

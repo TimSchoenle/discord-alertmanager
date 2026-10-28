@@ -64,6 +64,7 @@ pub async fn run(store: &dyn Store) {
     notifications::two_acknowledgements_produce_one(store).await;
     notifications::only_the_first_reply_changes_the_card(store).await;
     notifications::a_deleted_card_releases_its_key(store).await;
+    notifications::pinned_posts_are_counted_per_channel(store).await;
     outbox::an_edit_is_coalesced_and_a_note_is_not(store).await;
     outbox::two_cards_sharing_a_key_keep_their_own_edits(store).await;
     routing::ignore_rules_expire_and_revoke(store).await;
@@ -209,6 +210,24 @@ const FIXTURE_KEYS: [&str; 2] = ["a:super", "a:escalate"];
 /// When the card has no post queued, which would mean [`Store::apply_decision`] wrote a row
 /// without the effect that shows it.
 async fn record_post(store: &dyn Store, worker: &str, key: &DedupeKey, message: MessageId) {
+    record_applied(
+        store,
+        worker,
+        key,
+        &AppliedEffect {
+            message_id: Some(message),
+            ..AppliedEffect::default()
+        },
+    )
+    .await;
+}
+
+/// Records `applied` against the card queued under `key`, as [`record_post`] does a post.
+///
+/// # Panics
+///
+/// As [`record_post`].
+async fn record_applied(store: &dyn Store, worker: &str, key: &DedupeKey, applied: &AppliedEffect) {
     let worker = WorkerId::new(worker);
 
     let claimed = store
@@ -229,14 +248,7 @@ async fn record_post(store: &dyn Store, worker: &str, key: &DedupeKey, message: 
     for item in claimed {
         if !recorded && item.dedupe_key == *key {
             store
-                .complete_outbox(
-                    &worker,
-                    item.id,
-                    &AppliedEffect {
-                        message_id: Some(message),
-                        ..AppliedEffect::default()
-                    },
-                )
+                .complete_outbox(&worker, item.id, applied)
                 .await
                 .expect("the post is recorded");
 

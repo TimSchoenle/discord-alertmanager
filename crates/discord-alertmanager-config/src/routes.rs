@@ -259,18 +259,21 @@ pub struct TargetPolicy {
     #[cfg_attr(feature = "config-schema", config(values))]
     pub thread_kind: ThreadKind,
 
-    /// Title template for a forum post, stored but not applied yet.
+    /// Title template for a forum post, rendered with `minijinja` against the alert.
     ///
-    /// Post titles are `[SEVERITY] alertname` followed by the first non-empty `render.key_labels`
-    /// value. `/route test` still reports an empty template.
+    /// A forum post title is mandatory and 1 to 100 characters. A template that fails to render,
+    /// such as one naming a label the alert does not carry, or that renders to only whitespace,
+    /// falls back to the thread name: `[SEVERITY] alertname` and the first non-empty
+    /// `render.key_labels` value. The title is set when the post is created.
     pub title_template: String,
 
-    /// Whether missing forum tags are created, stored but not checked yet.
+    /// Whether missing forum tags are created, which needs `MANAGE_CHANNELS`.
     ///
-    /// When the gateway connects, the bot creates the missing state, severity and default tags
-    /// whenever it holds `MANAGE_CHANNELS`, whatever this says. Created tags are non-moderated,
-    /// so the bot can apply them as the thread's owner. Without the permission the bot applies
-    /// the tags that already resolve and reports the gap in `/route test`.
+    /// The state, severity and default tags are created when the gateway connects, and a label
+    /// tag the first time a post carries its value. Created tags are non-moderated, so the bot
+    /// can apply them as the thread's owner. Off, or without the permission, the bot applies the
+    /// tags that already resolve and reports the gap in `/route test`; a missing tag never fails
+    /// a notification.
     pub manage_tags: bool,
 
     /// Names of the four mutually exclusive state tags.
@@ -282,8 +285,11 @@ pub struct TargetPolicy {
 
     /// Labels whose values become tags, at most three.
     ///
-    /// A value is applied only when a tag with that name already exists; the bot does not create
-    /// label tags. Use low-cardinality labels: a forum channel holds 20 tags and a post holds 5.
+    /// With `manage_tags`, a value's tag is created the first time a post carries it; without,
+    /// a value is applied only when a tag of that name already exists. Use low-cardinality labels
+    /// only. A forum channel holds 20 tags and a post holds 5, and the bot refuses to create a new
+    /// tag once the channel reaches 18, so an unbounded label exhausts the budget and later posts
+    /// lose their tags.
     pub label_tags: Vec<String>,
 
     /// Tag applied when nothing else resolves, for a channel with `REQUIRE_TAG` set.
@@ -302,8 +308,9 @@ pub struct TargetPolicy {
     /// Whether a forum post is archived when its alert resolves.
     pub archive_on_resolve: bool,
 
-    /// Whether a forum post is locked when its alert resolves.
+    /// Whether a forum post is locked when its alert resolves and is archived.
     ///
+    /// Ignored when `archive_on_resolve` is off: a post left open has to stay editable.
     /// A locked thread needs `MANAGE_THREADS` to reopen, and a flap has to reopen one. Without
     /// that permission the notification is marked orphaned and a fresh card is posted, so leave
     /// this off unless the permission is held.
@@ -311,15 +318,16 @@ pub struct TargetPolicy {
 
     /// Lowest severity that pins an unacknowledged post.
     ///
-    /// Pinned posts are a free "needs attention" tray at the top of the index. The pin is dropped
-    /// on acknowledgement or resolution, and a pin that fails is a warning that never blocks the
-    /// notification.
+    /// Pinned posts are a free "needs attention" tray at the top of the index. Checked when the
+    /// post is created and at each state change, so a severity that rises without one waits for
+    /// the next. The pin is dropped on acknowledgement or resolution, and a pin that fails is a
+    /// warning that never blocks the notification.
     #[cfg_attr(feature = "config-schema", config(values))]
     pub pin_min_severity: Option<Severity>,
 
-    /// Most posts pinned at once, stored but not enforced.
+    /// Most of the bot's posts pinned at once in the channel. Zero turns pinning off.
     ///
-    /// Discord allows one pinned post per forum, which is the effective limit.
+    /// Discord allows one pinned post per forum, so a value above one has no further effect.
     pub max_pinned: u32,
 
     /// Whether every state change posts a one-line note in the thread.
@@ -346,7 +354,7 @@ impl Default for TargetPolicy {
             archive_on_resolve: true,
             lock_on_resolve: false,
             pin_min_severity: Some(Severity::Critical),
-            max_pinned: 5,
+            max_pinned: 1,
             bump_on_state_change: true,
         }
     }
