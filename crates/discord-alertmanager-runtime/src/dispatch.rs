@@ -59,7 +59,7 @@ const MAX_ATTEMPTS: u32 = 10;
 const REOPENED_AUTO_ARCHIVE_MINUTES: u32 = 10_080;
 
 /// One dispatcher worker.
-pub(crate) struct Dispatcher {
+pub struct Dispatcher {
     store: Arc<dyn Store>,
     sink: Arc<dyn DiscordSink>,
     alertmanager: Arc<dyn AlertmanagerApi>,
@@ -80,7 +80,7 @@ impl Dispatcher {
         reason = "the composition root hands a worker every collaborator it owns; folding them \
                   into a struct would move the same list one line up"
     )]
-    pub(crate) fn new(
+    pub fn new(
         store: Arc<dyn Store>,
         sink: Arc<dyn DiscordSink>,
         alertmanager: Arc<dyn AlertmanagerApi>,
@@ -109,7 +109,12 @@ impl Dispatcher {
     }
 
     /// Claims and runs work until the token is cancelled.
-    pub(crate) async fn run(self, shutdown: CancellationToken) {
+    ///
+    /// # Panics
+    ///
+    /// Panics if polled outside a Tokio runtime with the time driver enabled, once the queue
+    /// is empty and the loop waits before claiming again.
+    pub async fn run(self, shutdown: CancellationToken) {
         info!(worker = %self.worker, "dispatcher started");
 
         loop {

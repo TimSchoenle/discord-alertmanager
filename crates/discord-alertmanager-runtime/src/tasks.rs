@@ -22,7 +22,7 @@ use crate::service::PipelineService;
 /// An enum rather than five near-identical spawn functions, so the cadence, the cancellation and
 /// the "a failure is logged and the next tick is the retry" rule are written once.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Job {
+pub enum Job {
     /// Poll Alertmanager and converge the local state onto it.
     Reconcile,
 
@@ -82,7 +82,11 @@ impl Job {
 ///
 /// A failed pass is logged and not retried early: the next tick is the retry, and hammering an
 /// Alertmanager that is already struggling helps nobody.
-pub(crate) async fn run(
+///
+/// # Panics
+///
+/// Panics if polled outside a Tokio runtime with the time driver enabled.
+pub async fn run(
     job: Job,
     service: Arc<PipelineService>,
     interval: Duration,

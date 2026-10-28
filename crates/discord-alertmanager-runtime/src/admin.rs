@@ -33,7 +33,7 @@ use tracing::warn;
 const ADMIN_LANE: &str = "admin";
 
 /// Where the bot reports on itself, and what it has already said.
-pub(crate) struct AdminChannel {
+pub struct AdminChannel {
     channel: Option<ChannelId>,
     store: Arc<dyn Store>,
     said: Mutex<HashSet<String>>,
@@ -45,7 +45,7 @@ impl AdminChannel {
     /// A deployment that configures none is not an error and not a warning on every notice: the
     /// channel is optional, and a bot in a server whose operators watch it another way has
     /// nowhere sensible to put these.
-    pub(crate) fn new(channel: Option<u64>, store: Arc<dyn Store>) -> Self {
+    pub fn new(channel: Option<u64>, store: Arc<dyn Store>) -> Self {
         Self {
             channel: channel.map(ChannelId::new),
             store,

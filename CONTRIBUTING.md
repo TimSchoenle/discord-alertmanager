@@ -54,7 +54,7 @@ forever, an `expect` warns the moment its claim stops holding.
 The version appears in two manifests, because the README payload action cannot read a version a
 crate inherits from its workspace. `readme-variables.sh` fails when `[workspace.package]` in
 `Cargo.toml` and `[package]` in `crates/discord-alertmanager/Cargo.toml` disagree. Neither is
-edited by hand: the release pull request writes both, along with the eleven member versions in
+edited by hand: the release pull request writes both, along with every member version in
 `Cargo.lock`.
 
 ## Releases

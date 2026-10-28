@@ -27,7 +27,6 @@ path = "src/main.rs"
 # runs in.
 [dependencies]
 anyhow.workspace = true
-async-trait.workspace = true
 chrono.workspace = true
 dam-am.workspace = true
 dam-config.workspace = true
@@ -35,10 +34,10 @@ dam-core.workspace = true
 dam-discord.workspace = true
 dam-engine.workspace = true
 dam-ingest.workspace = true
+dam-runtime.workspace = true
 dam-store.workspace = true
 dam-store-postgres.workspace = true
 dam-store-sqlite.workspace = true
-metrics.workspace = true
 # The recorder is global state, so it is installed here and in no library.
 metrics-exporter-prometheus.workspace = true
 secrecy.workspace = true
@@ -47,7 +46,6 @@ secrecy.workspace = true
 # key in its configuration, not a property of the image it was given.
 sentry.workspace = true
 terrace-config = { workspace = true, features = ["explain", "reload"] }
-thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal", "sync", "time"] }
 tokio-util.workspace = true
 tracing.workspace = true

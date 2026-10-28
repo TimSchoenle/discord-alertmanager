@@ -78,6 +78,9 @@ component_management:
     - component_id: ingest
       name: ingest
       paths: ['crates/discord-alertmanager-ingest/**']
+    - component_id: runtime
+      name: runtime
+      paths: ['crates/discord-alertmanager-runtime/**']
     - component_id: store
       name: store
       paths: ['crates/discord-alertmanager-store/**']

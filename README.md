@@ -274,8 +274,8 @@ archived the moment its alert resolves, and never locked, so a flap can still re
 
 ### The workspace
 
-Ten crates, each written against a trait rather than against its neighbour. The import name
-differs from the package name throughout, so both are listed.
+The workspace has 11 crates, each written against a trait rather than against its
+neighbour. The import name differs from the package name throughout, so both are listed.
 
 | Crate | Import | Purpose |
 | --- | --- | --- |
@@ -285,6 +285,7 @@ differs from the package name throughout, so both are listed.
 | [`discord-alertmanager-discord`](crates/discord-alertmanager-discord) | `dam_discord` | The serenity layer: command registry, component handlers, card renderer, DiscordSink. |
 | [`discord-alertmanager-engine`](crates/discord-alertmanager-engine) | `dam_engine` | The decision pipeline: ingest, route, decide, outbox. Owns the two outbound ports. |
 | [`discord-alertmanager-ingest`](crates/discord-alertmanager-ingest) | `dam_ingest` | The axum listener: the Alertmanager webhook, the health probes, and /metrics. |
+| [`discord-alertmanager-runtime`](crates/discord-alertmanager-runtime) | `dam_runtime` | The running pipeline: the webhook service, the outbox dispatchers and the periodic tasks. |
 | [`discord-alertmanager-store-postgres`](crates/discord-alertmanager-store-postgres) | `dam_store_postgres` | PostgreSQL backend: runtime queries, migrations, and the FOR UPDATE SKIP LOCKED claim. |
 | [`discord-alertmanager-store-sqlite`](crates/discord-alertmanager-store-sqlite) | `dam_store_sqlite` | SQLite backend: runtime queries, migrations, and the BEGIN IMMEDIATE claim. |
 | [`discord-alertmanager-store`](crates/discord-alertmanager-store) | `dam_store` | The Store trait, its row types, and the conformance suite both backends run. |

@@ -32,17 +32,13 @@ use dam_config::{Backend, Config};
 use dam_core::IdentityPolicy;
 use dam_discord::{Bot, LinkRenderer, Renderer, SerenitySink};
 use dam_engine::{AlertmanagerApi, DecisionSettings, DiscordSink, RoutingSnapshot, SharedRouting};
+use dam_runtime::{admin, cards, dispatch, service, tasks};
 use dam_store::{LaneAssignment, RetentionPolicy, RouteSource, Store};
 use tokio::signal;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
 
-mod admin;
-mod cards;
-mod dispatch;
-mod service;
-mod tasks;
 mod telemetry;
 
 #[tokio::main]
