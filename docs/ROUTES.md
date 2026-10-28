@@ -61,11 +61,11 @@ adds every missing tag in one request, up to 20, so the forum can still end up f
 stops creating tags, `Manage Channels` changes nothing: create the state tags and `default_tag` by
 hand before the gateway connects.
 
-The policy keys left out keep their defaults. An unacknowledged critical post is pinned, whether
-it is created critical or becomes so later, it is archived as soon as the alert resolves, and it
-is never locked, so a flap can reopen it without `Manage Threads`. Discord allows one pinned post
-per forum, so while one critical post holds the pin, the next one stays unpinned and the bot asks
-again at its next state change.
+The policy keys left out keep their defaults. An unacknowledged critical post is pinned when it is
+created and at each later state change, so a post whose alert turns critical without changing state
+waits for its next one. It is archived as soon as the alert resolves and never locked, so a flap can
+reopen it without `Manage Threads`. Discord allows one pinned post per forum, so while one critical
+post holds the pin, the next one stays unpinned and the bot asks again at its next state change.
 
 ## Forum policy keys
 

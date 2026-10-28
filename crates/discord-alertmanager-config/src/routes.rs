@@ -318,9 +318,10 @@ pub struct TargetPolicy {
 
     /// Lowest severity that pins an unacknowledged post.
     ///
-    /// Pinned posts are a free "needs attention" tray at the top of the index. The pin is dropped
-    /// on acknowledgement or resolution, and a pin that fails is a warning that never blocks the
-    /// notification.
+    /// Pinned posts are a free "needs attention" tray at the top of the index. Checked when the
+    /// post is created and at each state change, so a severity that rises without one waits for
+    /// the next. The pin is dropped on acknowledgement or resolution, and a pin that fails is a
+    /// warning that never blocks the notification.
     #[cfg_attr(feature = "config-schema", config(values))]
     pub pin_min_severity: Option<Severity>,
 

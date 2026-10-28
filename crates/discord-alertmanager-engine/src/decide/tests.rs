@@ -763,6 +763,55 @@ fn a_resolved_post_left_open_drops_to_the_route_window_unlocked() {
 }
 
 #[test]
+fn a_re_fired_post_left_open_takes_back_the_maximum_window() {
+    let mut route = forum_route();
+    if let RouteTarget::Forum { policy, .. } = &mut route.target {
+        policy.archive_on_resolve = false;
+        policy.auto_archive_minutes = 60;
+    }
+    let channel = ChannelId::new(200);
+    let snapshot = RoutingSnapshot::new(vec![route], Vec::new(), forum_tags());
+
+    let key =
+        DedupeKey::per_alert(&Fingerprint::new("0123456789abcdef").expect("hex is a fingerprint"));
+    let mut existing = ExistingCards::new();
+    existing.insert(
+        (channel, key.clone()),
+        card(NotificationState::Resolved, channel, &key),
+    );
+
+    let decision = decide(
+        &delta(EventKind::Fired, AlertStatus::Firing, AmState::Active),
+        &snapshot,
+        &quiet(),
+        &existing,
+        &known(false),
+        &DecisionSettings::default(),
+        now(),
+    );
+
+    let flags: Vec<_> = decision.updates[0]
+        .effects
+        .iter()
+        .filter_map(|item| match item.effect {
+            Effect::SetFlags {
+                archived,
+                locked,
+                auto_archive_minutes,
+                ..
+            } => Some((archived, locked, auto_archive_minutes)),
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(
+        flags,
+        vec![(false, false, 10_080)],
+        "the post never archived, so only the window changes, back to Discord's maximum"
+    );
+}
+
+#[test]
 fn a_reopened_card_holds_the_maximum_archive_window() {
     let route = text_route();
     let channel = ChannelId::new(100);
