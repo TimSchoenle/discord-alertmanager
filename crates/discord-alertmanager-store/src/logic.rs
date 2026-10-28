@@ -296,6 +296,79 @@ pub fn needs_in_memory_filter(query: &AlertQuery) -> bool {
 /// alert set reaches it and low enough that reaching it costs nothing.
 pub const IN_MEMORY_SCAN_LIMIT: u32 = 5_000;
 
+/// The part of an [`AlertQuery`] SQL can express, flattened into the lists a query binds.
+///
+/// Every list empty means "no constraint", so one statically checked query serves every filter
+/// shape instead of one assembled per call. The label matchers are kept as three parallel lists
+/// (name, value, whether the label must equal the value) because that is the shape both dialects
+/// can turn back into rows: `unnest` over three arrays in one, `json_each` over the encoded lists
+/// in the other. A regex matcher is not included; [`matches_regex_matchers`] applies it after the
+/// read.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SqlAlertFilter {
+    /// The statuses an alert must have one of, or empty for any.
+    pub statuses: Vec<String>,
+
+    /// The severities an alert must have one of, or empty for any.
+    pub severities: Vec<String>,
+
+    /// The label each equality matcher reads.
+    pub label_names: Vec<String>,
+
+    /// The value each equality matcher compares against.
+    pub label_values: Vec<String>,
+
+    /// Whether each equality matcher requires the label to equal its value, or to differ from it.
+    pub label_equal: Vec<bool>,
+
+    /// The state an alert's notification must be in, or `None` for any.
+    pub notification_state: Option<String>,
+}
+
+impl SqlAlertFilter {
+    /// Flattens the SQL-expressible part of `query`.
+    ///
+    /// A matcher that does not compile is left out rather than refused; the backends compile every
+    /// matcher first and refuse the query there, so none reaches this point.
+    #[must_use]
+    pub fn from_query(query: &AlertQuery) -> Self {
+        let mut filter = Self {
+            statuses: query
+                .statuses
+                .iter()
+                .map(|status| status.as_str().to_owned())
+                .collect(),
+            severities: query
+                .min_severity
+                .map(severities_at_or_above)
+                .unwrap_or_default()
+                .into_iter()
+                .map(str::to_owned)
+                .collect(),
+            notification_state: query
+                .notification_state
+                .map(|state| state.as_str().to_owned()),
+            ..Self::default()
+        };
+
+        for matcher in query
+            .matchers
+            .iter()
+            .filter(|matcher| matcher.is_sql_expressible())
+        {
+            let Ok(compiled) = matcher.compile() else {
+                continue;
+            };
+
+            filter.label_names.push(compiled.name().as_str().to_owned());
+            filter.label_values.push(matcher.value.clone());
+            filter.label_equal.push(compiled.op().is_equal());
+        }
+
+        filter
+    }
+}
+
 /// The severities at or above a floor, for a backend turning `min_severity` into a SQL `IN`.
 ///
 /// Severity is stored as a word rather than a rank, so the comparison the domain expresses as
@@ -531,6 +604,51 @@ mod tests {
         assert_eq!(
             severities_at_or_above(Severity::Warning),
             vec!["warning", "critical"]
+        );
+    }
+
+    #[test]
+    fn a_sql_filter_flattens_what_sql_can_express_and_leaves_regexes_out() {
+        use dam_core::{MatchOp, NotificationState};
+
+        use crate::alerts::{AlertQuery, QueryMatcher};
+
+        let matcher = |name: &str, op, value: &str| QueryMatcher {
+            name: name.to_owned(),
+            op,
+            value: value.to_owned(),
+        };
+        let query = AlertQuery {
+            statuses: vec![AlertStatus::Firing],
+            min_severity: Some(Severity::Warning),
+            matchers: vec![
+                matcher("team", MatchOp::Equal, "sre"),
+                matcher("env", MatchOp::NotEqual, "dev"),
+                matcher("job", MatchOp::RegexMatch, "api.*"),
+            ],
+            notification_state: Some(NotificationState::Acked),
+            ..AlertQuery::default()
+        };
+
+        assert_eq!(
+            SqlAlertFilter::from_query(&query),
+            SqlAlertFilter {
+                statuses: vec!["firing".to_owned()],
+                severities: vec!["warning".to_owned(), "critical".to_owned()],
+                label_names: vec!["team".to_owned(), "env".to_owned()],
+                label_values: vec!["sre".to_owned(), "dev".to_owned()],
+                label_equal: vec![true, false],
+                notification_state: Some("acked".to_owned()),
+            },
+            "the regex matcher is applied after the read, so it is not part of the SQL filter"
+        );
+    }
+
+    #[test]
+    fn an_empty_query_constrains_nothing() {
+        assert_eq!(
+            SqlAlertFilter::from_query(&AlertQuery::default()),
+            SqlAlertFilter::default()
         );
     }
 }

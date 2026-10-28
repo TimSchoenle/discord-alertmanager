@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO silences (am_id, matchers, starts_at, ends_at, created_by, discord_user_id, origin_message, comment, state, synced_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (am_id) DO UPDATE SET matchers = excluded.matchers, starts_at = excluded.starts_at, ends_at = excluded.ends_at, created_by = excluded.created_by, discord_user_id = excluded.discord_user_id, origin_message = excluded.origin_message, comment = excluded.comment, state = excluded.state, synced_at = excluded.synced_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Timestamptz",
+        "Timestamptz",
+        "Text",
+        "Int8",
+        "Text",
+        "Text",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "45e02543812d105c64add992d684ff2c2ea588cdcfc5dbeb38f3c8fc696c6678"
+}

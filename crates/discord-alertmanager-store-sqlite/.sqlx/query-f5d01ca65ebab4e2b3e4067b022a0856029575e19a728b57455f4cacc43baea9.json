@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT payload, claimed_by FROM outbox WHERE id = ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "payload",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "outbox",
+            "name": "payload"
+          }
+        }
+      },
+      {
+        "name": "claimed_by",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "outbox",
+            "name": "claimed_by"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "f5d01ca65ebab4e2b3e4067b022a0856029575e19a728b57455f4cacc43baea9"
+}

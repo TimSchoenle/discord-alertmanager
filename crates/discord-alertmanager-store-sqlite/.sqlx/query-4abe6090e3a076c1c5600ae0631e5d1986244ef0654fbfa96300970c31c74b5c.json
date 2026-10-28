@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id FROM outbox WHERE claimed_at IS NULL AND not_before <= ?1 AND lane % ?2 = ?3 ORDER BY not_before, id LIMIT ?4",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "outbox",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "4abe6090e3a076c1c5600ae0631e5d1986244ef0654fbfa96300970c31c74b5c"
+}

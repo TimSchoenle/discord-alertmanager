@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE silences SET state = 'expired', synced_at = $1 WHERE am_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e43159a896804a1c3d351328587d01de51c554b035c78fe59e3da530ae7f2e17"
+}

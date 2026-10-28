@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE acknowledgements SET revoked_at = ?1 WHERE fingerprint = ?2 AND revoked_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "769cdfe59f700ce60e5e33b5f5ca32224cc67b2e9e90d3edce59c66612e13e2c"
+}

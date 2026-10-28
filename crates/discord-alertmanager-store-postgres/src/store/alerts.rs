@@ -6,14 +6,51 @@ use chrono::{DateTime, Utc};
 use dam_core::{Alert, AlertDelta, AmState, EventKind, EventSource, Fingerprint};
 use dam_store::{
     AlertQuery, AlertRecord, IngestBatch, IngestOutcome, Page, SilenceLink, SilenceState,
-    StoreError, Transition, carry_over, classify, matches_regex_matchers, needs_in_memory_filter,
-    severities_at_or_above, suppression_map,
+    SqlAlertFilter, StoreError, Transition, carry_over, classify, matches_regex_matchers,
+    needs_in_memory_filter, suppression_map,
 };
-use sqlx::{PgConnection, Postgres, QueryBuilder};
+use sqlx::PgConnection;
 
-use super::const_format;
 use crate::PostgresStore;
-use crate::convert::{alert_record, backend, json, silence_link};
+use crate::convert::{AlertRow, backend, decode_all, json};
+
+/// Selects the `alerts` rows an [`SqlAlertFilter`] admits.
+///
+/// `$head` is everything before the `WHERE` and `$tail` everything after the filter; the filter
+/// binds `$1` to `$6`, so a caller's own parameters start at `$7`. Each list that is empty
+/// constrains nothing, which is what lets one checked statement serve every filter a command can
+/// build. The label matchers come back as rows through `unnest`, and an alert passes when none of
+/// them disagrees with it; Alertmanager matches an absent label against the empty string, so the
+/// extraction produces one rather than a null that no comparison is true of.
+macro_rules! filtered_alerts {
+    ($row:path, $head:literal, $tail:literal, $filter:expr $(, $arg:expr)* $(,)?) => {{
+        let filter: &SqlAlertFilter = $filter;
+        sqlx::query_as!(
+            $row,
+            $head + " WHERE (cardinality($1::text[]) = 0 OR status = ANY($1)) \
+             AND (cardinality($2::text[]) = 0 OR severity = ANY($2)) \
+             AND NOT EXISTS (SELECT 1 FROM unnest($3::text[], $4::text[], $5::bool[]) \
+                 AS matcher (name, value, equal) \
+                 WHERE (COALESCE(alerts.labels ->> matcher.name, '') = matcher.value) \
+                     <> matcher.equal) \
+             AND ($6::text IS NULL OR EXISTS (SELECT 1 FROM notifications \
+                 WHERE notifications.dedupe_key = 'a:' || alerts.fingerprint \
+                 AND notifications.state = $6)) " + $tail,
+            &filter.statuses,
+            &filter.severities,
+            &filter.label_names,
+            &filter.label_values,
+            &filter.label_equal,
+            filter.notification_state.as_deref()
+            $(, $arg)*
+        )
+    }};
+}
+
+/// The count a filtered read reports alongside its page.
+struct AlertCount {
+    total: i64,
+}
 
 pub(super) async fn ingest_batch(
     store: &PostgresStore,
@@ -77,20 +114,12 @@ pub(super) async fn alert(
     store: &PostgresStore,
     fingerprint: &Fingerprint,
 ) -> Result<Option<AlertRecord>, StoreError> {
-    let sql = const_format(&[
-        "SELECT ",
-        ALERT_COLUMNS,
-        " FROM alerts WHERE fingerprint = ",
-    ]);
-
-    let row = QueryBuilder::<Postgres>::new(sql)
-        .push_bind(fingerprint.as_str().to_owned())
-        .build()
+    select_alerts!("WHERE fingerprint = $1", fingerprint.as_str())
         .fetch_optional(&store.pool)
         .await
-        .map_err(backend)?;
-
-    row.as_ref().map(alert_record).transpose()
+        .map_err(backend)?
+        .map(AlertRecord::try_from)
+        .transpose()
 }
 
 pub(super) async fn query_alerts(
@@ -110,36 +139,35 @@ pub(super) async fn query_alerts(
         return store.scan_alerts(query).await;
     }
 
-    let mut counter = QueryBuilder::<Postgres>::new("SELECT count(*) FROM alerts WHERE 1 = 1");
-    push_alert_filter(&mut counter, query);
-    let total: i64 = counter
-        .build_query_scalar()
-        .fetch_one(&store.pool)
-        .await
-        .map_err(backend)?;
+    let filter = SqlAlertFilter::from_query(query);
 
-    let mut reader = QueryBuilder::<Postgres>::new(const_format(&[
-        "SELECT ",
-        ALERT_COLUMNS,
-        " FROM alerts WHERE 1 = 1",
-    ]));
-    push_alert_filter(&mut reader, query);
-    reader.push(" ORDER BY last_seen_at DESC, fingerprint LIMIT ");
-    reader.push_bind(i64::from(query.limit));
-    reader.push(" OFFSET ");
-    reader.push_bind(i64::from(query.offset));
+    let total = filtered_alerts!(
+        AlertCount,
+        "SELECT count(*) AS \"total!\" FROM alerts",
+        "",
+        &filter
+    )
+    .fetch_one(&store.pool)
+    .await
+    .map_err(backend)?
+    .total;
 
-    let rows = reader
-        .build()
-        .fetch_all(&store.pool)
-        .await
-        .map_err(backend)?;
+    let rows = filtered_alerts!(
+        AlertRow,
+        "SELECT fingerprint, labels_hash, group_key, labels, annotations, starts_at, ends_at, \
+         generator_url, status, am_state, silenced_by, inhibited_by, first_seen_at, \
+         last_seen_at, resolved_at, flap_count, updated_at FROM alerts",
+        "ORDER BY last_seen_at DESC, fingerprint LIMIT $7 OFFSET $8",
+        &filter,
+        i64::from(query.limit),
+        i64::from(query.offset),
+    )
+    .fetch_all(&store.pool)
+    .await
+    .map_err(backend)?;
 
     Ok(Page {
-        items: rows
-            .iter()
-            .map(alert_record)
-            .collect::<Result<Vec<_>, _>>()?,
+        items: decode_all(rows)?,
         total: u64::try_from(total).unwrap_or(0),
         offset: query.offset,
         limit: query.limit,
@@ -151,33 +179,27 @@ pub(super) async fn firing_alerts_named(
     alertname: Option<&str>,
 ) -> Result<Vec<AlertRecord>, StoreError> {
     // Spelled exactly as the partial index `alerts_firing_by_name` spells it, which is what
-    // lets the planner answer this from the index rather than from the firing set.
-    let sql = const_format(&[
-        "SELECT ",
-        ALERT_COLUMNS,
-        " FROM alerts WHERE status = 'firing' AND labels ->> 'alertname'",
-    ]);
-
-    let mut builder = QueryBuilder::<Postgres>::new(sql);
-    match alertname {
-        Some(name) => {
-            builder.push(" = ");
-            builder.push_bind(name.to_owned());
+    // lets the planner answer this from the index rather than from the firing set. Two
+    // statements rather than one with an `IS NOT DISTINCT FROM`, which no index can serve.
+    let rows =
+        match alertname {
+            Some(name) => {
+                select_alerts!(
+                    "WHERE status = 'firing' AND labels ->> 'alertname' = $1 ORDER BY fingerprint",
+                    name
+                )
+                .fetch_all(&store.pool)
+                .await
+            }
+            None => select_alerts!(
+                "WHERE status = 'firing' AND labels ->> 'alertname' IS NULL ORDER BY fingerprint"
+            )
+            .fetch_all(&store.pool)
+            .await,
         }
-        None => {
-            builder.push(" IS NULL");
-        }
-    }
+        .map_err(backend)?;
 
-    builder
-        .push(" ORDER BY fingerprint")
-        .build()
-        .fetch_all(&store.pool)
-        .await
-        .map_err(backend)?
-        .iter()
-        .map(alert_record)
-        .collect()
+    decode_all(rows)
 }
 
 pub(super) async fn firing_not_in(
@@ -185,15 +207,7 @@ pub(super) async fn firing_not_in(
     present: &[Fingerprint],
     cutoff: DateTime<Utc>,
 ) -> Result<Vec<AlertRecord>, StoreError> {
-    let sql = const_format(&[
-        "SELECT ",
-        ALERT_COLUMNS,
-        " FROM alerts WHERE status = 'firing' AND last_seen_at < ",
-    ]);
-
-    let rows = QueryBuilder::<Postgres>::new(sql)
-        .push_bind(cutoff)
-        .build()
+    let rows = select_alerts!("WHERE status = 'firing' AND last_seen_at < $1", cutoff)
         .fetch_all(&store.pool)
         .await
         .map_err(backend)?;
@@ -204,8 +218,8 @@ pub(super) async fn firing_not_in(
     let present: HashSet<&str> = present.iter().map(Fingerprint::as_str).collect();
     let mut missing = Vec::new();
 
-    for row in &rows {
-        let record = alert_record(row)?;
+    for row in rows {
+        let record = AlertRecord::try_from(row)?;
 
         if !present.contains(record.fingerprint().as_str()) {
             missing.push(record);
@@ -234,13 +248,13 @@ pub(super) async fn sync_silences(
     let stamp = now;
 
     for silence in snapshot {
-        sqlx::query(
+        sqlx::query!(
             "UPDATE silences SET state = $1, ends_at = $2, synced_at = $3 WHERE am_id = $4",
+            silence.state.as_str(),
+            silence.ends_at,
+            stamp,
+            silence.am_id,
         )
-        .bind(silence.state.as_str())
-        .bind(silence.ends_at)
-        .bind(stamp)
-        .bind(silence.am_id.clone())
         .execute(&mut *tx)
         .await
         .map_err(backend)?;
@@ -251,19 +265,12 @@ pub(super) async fn sync_silences(
     // Only two kinds of alert can have changed: one Alertmanager now suppresses, and one this
     // database still thinks is suppressed. Reading the whole table to find them would make the
     // syncer's cost a function of history rather than of what is silenced.
-    let sql = const_format(&[
-        "SELECT ",
-        ALERT_COLUMNS,
-        " FROM alerts WHERE silenced_by <> '[]'",
-    ]);
-    let mut candidates: Vec<AlertRecord> = QueryBuilder::<Postgres>::new(sql)
-        .build()
-        .fetch_all(&mut *tx)
-        .await
-        .map_err(backend)?
-        .iter()
-        .map(alert_record)
-        .collect::<Result<_, _>>()?;
+    let mut candidates: Vec<AlertRecord> = decode_all(
+        select_alerts!("WHERE silenced_by <> '[]'")
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(backend)?,
+    )?;
 
     let known: HashSet<String> = candidates
         .iter()
@@ -300,14 +307,14 @@ pub(super) async fn sync_silences(
             AmState::Active
         };
 
-        sqlx::query(
+        sqlx::query!(
             "UPDATE alerts SET silenced_by = $1, am_state = $2, updated_at = $3 \
              WHERE fingerprint = $4",
+            json(&record.alert.silenced_by),
+            record.alert.am_state.as_str(),
+            stamp,
+            record.fingerprint().as_str(),
         )
-        .bind(json(&record.alert.silenced_by))
-        .bind(record.alert.am_state.as_str())
-        .bind(stamp)
-        .bind(record.fingerprint().as_str().to_owned())
         .execute(&mut *tx)
         .await
         .map_err(backend)?;
@@ -338,56 +345,31 @@ pub(super) async fn silences(
     store: &PostgresStore,
     active_only: bool,
 ) -> Result<Vec<SilenceLink>, StoreError> {
-    let mut builder = QueryBuilder::<Postgres>::new(const_format(&[
-        "SELECT ",
-        SILENCE_COLUMNS,
-        " FROM silences",
-    ]));
-
-    if active_only {
-        builder.push(" WHERE state = 'active'");
+    let rows = if active_only {
+        select_silences!("WHERE state = 'active' ORDER BY starts_at DESC")
+            .fetch_all(&store.pool)
+            .await
+    } else {
+        select_silences!("ORDER BY starts_at DESC")
+            .fetch_all(&store.pool)
+            .await
     }
+    .map_err(backend)?;
 
-    builder.push(" ORDER BY starts_at DESC");
-
-    builder
-        .build()
-        .fetch_all(&store.pool)
-        .await
-        .map_err(backend)?
-        .iter()
-        .map(silence_link)
-        .collect()
+    decode_all(rows)
 }
-
-/// Every column of `alerts`, in the order the mapper expects to find them by name.
-const ALERT_COLUMNS: &str = "fingerprint, labels_hash, group_key, labels, annotations, starts_at, \
-     ends_at, generator_url, status, am_state, severity, silenced_by, inhibited_by, \
-     first_seen_at, last_seen_at, resolved_at, flap_count, updated_at";
-
-/// Every column of `silences`.
-const SILENCE_COLUMNS: &str = "am_id, matchers, starts_at, ends_at, created_by, discord_user_id, \
-     origin_message, comment, state, synced_at";
 
 /// Reads one alert row inside a transaction.
 async fn read_alert(
     conn: &mut PgConnection,
     fingerprint: &Fingerprint,
 ) -> Result<Option<AlertRecord>, StoreError> {
-    let sql = const_format(&[
-        "SELECT ",
-        ALERT_COLUMNS,
-        " FROM alerts WHERE fingerprint = ",
-    ]);
-
-    let row = QueryBuilder::<Postgres>::new(sql)
-        .push_bind(fingerprint.as_str().to_owned())
-        .build()
+    select_alerts!("WHERE fingerprint = $1", fingerprint.as_str())
         .fetch_optional(conn)
         .await
-        .map_err(backend)?;
-
-    row.as_ref().map(alert_record).transpose()
+        .map_err(backend)?
+        .map(AlertRecord::try_from)
+        .transpose()
 }
 
 /// Moves `last_seen_at` for a delivery that changed nothing else.
@@ -400,12 +382,14 @@ async fn touch_alert(
     fingerprint: &Fingerprint,
     at: DateTime<Utc>,
 ) -> Result<(), StoreError> {
-    sqlx::query("UPDATE alerts SET last_seen_at = $1 WHERE fingerprint = $2")
-        .bind(at)
-        .bind(fingerprint.as_str().to_owned())
-        .execute(conn)
-        .await
-        .map_err(backend)?;
+    sqlx::query!(
+        "UPDATE alerts SET last_seen_at = $1 WHERE fingerprint = $2",
+        at,
+        fingerprint.as_str(),
+    )
+    .execute(conn)
+    .await
+    .map_err(backend)?;
 
     Ok(())
 }
@@ -417,7 +401,9 @@ async fn upsert_alert(
     transition: &Transition,
     at: DateTime<Utc>,
 ) -> Result<(), StoreError> {
-    sqlx::query(
+    let labels_hash = alert.labels_hash();
+
+    sqlx::query!(
         "INSERT INTO alerts (fingerprint, labels_hash, group_key, labels, annotations, starts_at, \
          ends_at, generator_url, status, am_state, severity, silenced_by, inhibited_by, \
          first_seen_at, last_seen_at, resolved_at, flap_count, updated_at) \
@@ -432,25 +418,25 @@ async fn upsert_alert(
          last_seen_at = excluded.last_seen_at, resolved_at = excluded.resolved_at, \
          flap_count = excluded.flap_count, \
          updated_at = excluded.updated_at",
+        alert.fingerprint.as_str(),
+        labels_hash.as_str(),
+        alert.group_key.as_ref().map(dam_core::GroupKey::as_str),
+        json(&alert.labels),
+        json(&alert.annotations),
+        alert.starts_at,
+        alert.ends_at,
+        alert.generator_url.as_deref(),
+        alert.status.as_str(),
+        alert.am_state.as_str(),
+        alert.severity().as_str(),
+        json(&alert.silenced_by),
+        json(&alert.inhibited_by),
+        transition.first_seen_at,
+        at,
+        transition.resolved_at,
+        i32::try_from(transition.flap_count).unwrap_or(i32::MAX),
+        at,
     )
-    .bind(alert.fingerprint.as_str().to_owned())
-    .bind(alert.labels_hash().as_str().to_owned())
-    .bind(alert.group_key.as_ref().map(|key| key.as_str().to_owned()))
-    .bind(json(&alert.labels))
-    .bind(json(&alert.annotations))
-    .bind(alert.starts_at)
-    .bind(alert.ends_at)
-    .bind(alert.generator_url.clone())
-    .bind(alert.status.as_str())
-    .bind(alert.am_state.as_str())
-    .bind(alert.severity().as_str())
-    .bind(json(&alert.silenced_by))
-    .bind(json(&alert.inhibited_by))
-    .bind(transition.first_seen_at)
-    .bind(at)
-    .bind(transition.resolved_at)
-    .bind(i32::try_from(transition.flap_count).unwrap_or(i32::MAX))
-    .bind(at)
     .execute(conn)
     .await
     .map_err(backend)?;
@@ -487,19 +473,19 @@ async fn append_event(
         })
     };
 
-    sqlx::query(
+    sqlx::query!(
         "INSERT INTO alert_events \
          (fingerprint, kind, source, starts_at, ends_at, payload, received_at) \
          VALUES ($1, $2, $3, $4, $5, $6, $7) \
          ON CONFLICT (fingerprint, kind, starts_at, \n         COALESCE(ends_at, '1970-01-01T00:00:00Z')) DO NOTHING",
+        alert.fingerprint.as_str(),
+        transition.kind.as_str(),
+        source.as_str(),
+        alert.starts_at,
+        alert.ends_at,
+        json(&payload),
+        at,
     )
-    .bind(alert.fingerprint.as_str().to_owned())
-    .bind(transition.kind.as_str())
-    .bind(source.as_str())
-    .bind(alert.starts_at)
-    .bind(alert.ends_at)
-    .bind(json(&payload))
-    .bind(at)
     .execute(conn)
     .await
     .map_err(backend)?;
@@ -512,7 +498,7 @@ pub(super) async fn write_silence(
     conn: &mut PgConnection,
     link: &SilenceLink,
 ) -> Result<(), StoreError> {
-    sqlx::query(
+    sqlx::query!(
         "INSERT INTO silences (am_id, matchers, starts_at, ends_at, created_by, discord_user_id, \
          origin_message, comment, state, synced_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) \
          ON CONFLICT (am_id) DO UPDATE SET matchers = excluded.matchers, \
@@ -520,78 +506,22 @@ pub(super) async fn write_silence(
          created_by = excluded.created_by, discord_user_id = excluded.discord_user_id, \
          origin_message = excluded.origin_message, comment = excluded.comment, \
          state = excluded.state, synced_at = excluded.synced_at",
+        link.am_id,
+        link.matchers,
+        link.starts_at,
+        link.ends_at,
+        link.created_by,
+        link.discord_user_id.map(dam_store::UserId::to_db),
+        link.origin_message.as_deref(),
+        link.comment,
+        link.state.as_str(),
+        link.synced_at,
     )
-    .bind(link.am_id.clone())
-    .bind(link.matchers.clone())
-    .bind(link.starts_at)
-    .bind(link.ends_at)
-    .bind(link.created_by.clone())
-    .bind(link.discord_user_id.map(dam_store::UserId::to_db))
-    .bind(link.origin_message.clone())
-    .bind(link.comment.clone())
-    .bind(link.state.as_str())
-    .bind(link.synced_at)
     .execute(conn)
     .await
     .map_err(backend)?;
 
     Ok(())
-}
-
-/// Adds every part of a query that SQL can express to a builder already holding a `WHERE`.
-///
-/// Label names reach the SQL text rather than a bind parameter, because a JSON path is not a
-/// parameter position in either dialect. They are safe there and only there: every name has been
-/// through [`dam_core::LabelName`], whose grammar is `[a-zA-Z_][a-zA-Z0-9_]*`, so nothing that
-/// could close the quoted path can survive to this point.
-fn push_alert_filter(builder: &mut QueryBuilder<Postgres>, query: &AlertQuery) {
-    if !query.statuses.is_empty() {
-        builder.push(" AND status IN (");
-        let mut list = builder.separated(", ");
-        for status in &query.statuses {
-            list.push_bind(status.as_str());
-        }
-        builder.push(")");
-    }
-
-    if let Some(floor) = query.min_severity {
-        builder.push(" AND severity IN (");
-        let mut list = builder.separated(", ");
-        for severity in severities_at_or_above(floor) {
-            list.push_bind(severity);
-        }
-        builder.push(")");
-    }
-
-    for matcher in &query.matchers {
-        let Ok(compiled) = matcher.compile() else {
-            continue;
-        };
-        if !matcher.is_sql_expressible() {
-            continue;
-        }
-
-        // Alertmanager matches an absent label against the empty string, so the extraction has to
-        // produce one rather than a null that no comparison is true of.
-        builder.push(" AND COALESCE(labels->>'");
-        builder.push(compiled.name().as_str());
-        builder.push("', '') ");
-        builder.push(if compiled.op().is_equal() {
-            "= "
-        } else {
-            "<> "
-        });
-        builder.push_bind(matcher.value.clone());
-    }
-
-    if let Some(state) = query.notification_state {
-        builder.push(
-            " AND EXISTS (SELECT 1 FROM notifications WHERE \
-             notifications.dedupe_key = 'a:' || alerts.fingerprint AND notifications.state = ",
-        );
-        builder.push_bind(state.as_str());
-        builder.push(")");
-    }
 }
 
 impl PostgresStore {
@@ -601,23 +531,20 @@ impl PostgresStore {
     /// paginated here. The read is capped, because a regex that matches everything would
     /// otherwise pull the whole table into the process to serve one page of it.
     async fn scan_alerts(&self, query: &AlertQuery) -> Result<Page<AlertRecord>, StoreError> {
-        let mut builder = QueryBuilder::<Postgres>::new(const_format(&[
-            "SELECT ",
-            ALERT_COLUMNS,
-            " FROM alerts WHERE 1 = 1",
-        ]));
-        push_alert_filter(&mut builder, query);
-        builder.push(" ORDER BY last_seen_at DESC, fingerprint LIMIT ");
-        builder.push_bind(i64::from(dam_store::IN_MEMORY_SCAN_LIMIT));
+        let rows = filtered_alerts!(
+            AlertRow,
+            "SELECT fingerprint, labels_hash, group_key, labels, annotations, starts_at, ends_at, \
+             generator_url, status, am_state, silenced_by, inhibited_by, first_seen_at, \
+             last_seen_at, resolved_at, flap_count, updated_at FROM alerts",
+            "ORDER BY last_seen_at DESC, fingerprint LIMIT $7",
+            &SqlAlertFilter::from_query(query),
+            i64::from(dam_store::IN_MEMORY_SCAN_LIMIT),
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(backend)?;
 
-        let matched: Vec<AlertRecord> = builder
-            .build()
-            .fetch_all(&self.pool)
-            .await
-            .map_err(backend)?
-            .iter()
-            .map(alert_record)
-            .collect::<Result<Vec<_>, _>>()?
+        let matched: Vec<AlertRecord> = decode_all::<_, AlertRecord>(rows)?
             .into_iter()
             .filter(|record| matches_regex_matchers(record, query))
             .collect();

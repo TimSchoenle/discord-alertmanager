@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE notifications SET updated_at = ?1, message_id = COALESCE(?2, message_id), thread_id = COALESCE(?3, thread_id), render_hash = COALESCE(?4, render_hash), applied_tags = COALESCE(?5, applied_tags), tags_hash = COALESCE(?6, tags_hash), pinned = COALESCE(?7, pinned), archived = COALESCE(?8, archived) WHERE id = ?9",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 9
+    },
+    "nullable": []
+  },
+  "hash": "9e36c0ee90dad1aeebb9eb4b8d050bcd76e4a4922636460b6268eaab4df44e04"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE alerts SET silenced_by = ?, am_state = ?, updated_at = ? WHERE fingerprint = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "c36de1744327410a28ca263f01e509d803a26a7d65372706d056c98118f305fd"
+}

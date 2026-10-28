@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM alert_events WHERE id IN (SELECT id FROM alert_events WHERE received_at < ?1 ORDER BY id LIMIT ?2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "a312d8987da4d9c6a762ef6f72c5966306992a6def470b474f9b06bd512d11c2"
+}

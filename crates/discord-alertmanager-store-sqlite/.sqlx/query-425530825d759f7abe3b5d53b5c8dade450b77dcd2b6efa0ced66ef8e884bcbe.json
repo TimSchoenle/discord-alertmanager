@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE outbox SET claimed_by = NULL, claimed_at = NULL, not_before = ?1 WHERE claimed_at IS NOT NULL AND claimed_at < ?2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "425530825d759f7abe3b5d53b5c8dade450b77dcd2b6efa0ced66ef8e884bcbe"
+}

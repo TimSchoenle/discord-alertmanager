@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM subscriptions WHERE id = ?1 AND user_id = ?2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "5d2ed9f88986bcbbaae6b6bd68f65a88e4f2d0ad9e16aaa772d8e77695950b0a"
+}

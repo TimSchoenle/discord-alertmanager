@@ -10,6 +10,61 @@
 //! it implements, in the module for its concern: `alerts`, `notifications`, `outbox`, `routing`
 //! or `audit`, the same split as `dam_store`. `health` is the exception, as it touches no table.
 
+/// Selects `alerts` rows into [`crate::convert::AlertRow`], with `$tail` appended after the table.
+///
+/// The column list lives here once. The query macros take only string literals, so a `const`
+/// cannot be spliced in; a literal passed through `macro_rules!` can, and the result is still
+/// checked against the schema like any other query.
+macro_rules! select_alerts {
+    ($tail:literal $(, $arg:expr)* $(,)?) => {
+        sqlx::query_as!(
+            crate::convert::AlertRow,
+            "SELECT fingerprint AS \"fingerprint!\", labels_hash, group_key, labels, annotations, starts_at, ends_at, \
+             generator_url, status, am_state, silenced_by, inhibited_by, first_seen_at, \
+             last_seen_at, resolved_at, flap_count, updated_at FROM alerts " + $tail
+            $(, $arg)*
+        )
+    };
+}
+
+/// Selects `notifications` rows into [`crate::convert::NotificationRow`].
+macro_rules! select_notifications {
+    ($tail:literal $(, $arg:expr)* $(,)?) => {
+        sqlx::query_as!(
+            crate::convert::NotificationRow,
+            "SELECT id, dedupe_key, fingerprint, route_id, guild_id, channel_id, message_id, \
+             thread_id, state, render_hash, applied_tags, tags_hash, pinned, archived, \
+             responded_at, escalated_at, supersedes, resolved_at, reply_count, created_at, \
+             updated_at FROM notifications " + $tail
+            $(, $arg)*
+        )
+    };
+}
+
+/// Selects `outbox` rows into [`crate::convert::OutboxRow`].
+macro_rules! select_outbox {
+    ($tail:literal $(, $arg:expr)* $(,)?) => {
+        sqlx::query_as!(
+            crate::convert::OutboxRow,
+            "SELECT id, lane, dedupe_key, payload, not_before, attempts, claimed_by, claimed_at, \
+             last_error, created_at FROM outbox " + $tail
+            $(, $arg)*
+        )
+    };
+}
+
+/// Selects `silences` rows into [`crate::convert::SilenceRow`].
+macro_rules! select_silences {
+    ($tail:literal $(, $arg:expr)* $(,)?) => {
+        sqlx::query_as!(
+            crate::convert::SilenceRow,
+            "SELECT am_id AS \"am_id!\", matchers, starts_at, ends_at, created_by, discord_user_id, \
+             origin_message, comment, state, synced_at FROM silences " + $tail
+            $(, $arg)*
+        )
+    };
+}
+
 mod alerts;
 mod audit;
 mod notifications;
@@ -298,33 +353,11 @@ impl Store for SqliteStore {
     }
 
     async fn health(&self) -> Result<(), StoreError> {
-        sqlx::query("SELECT 1")
+        sqlx::query!("SELECT 1 AS alive")
             .fetch_one(&self.pool)
             .await
             .map_err(backend)?;
 
         Ok(())
-    }
-}
-
-/// Joins fragments into one query string.
-///
-/// The column lists are constants and the fragments around them are literals, so the result never
-/// contains anything a caller supplied. It exists because `concat!` cannot take a `const` and the
-/// alternative is writing every column list out once per query that reads the table.
-fn const_format(parts: &[&str]) -> String {
-    parts.concat()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_column_list_is_joined_without_separators() {
-        assert_eq!(
-            const_format(&["SELECT ", "a, b", " FROM t"]),
-            "SELECT a, b FROM t"
-        );
     }
 }

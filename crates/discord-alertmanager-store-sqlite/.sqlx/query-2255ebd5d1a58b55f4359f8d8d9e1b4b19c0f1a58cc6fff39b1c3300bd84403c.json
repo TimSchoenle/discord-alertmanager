@@ -1,0 +1,134 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT am_id AS \"am_id!\", matchers, starts_at, ends_at, created_by, discord_user_id, origin_message, comment, state, synced_at FROM silences WHERE state = 'active' ORDER BY starts_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "am_id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "silences",
+            "name": "am_id"
+          }
+        }
+      },
+      {
+        "name": "matchers",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "silences",
+            "name": "matchers"
+          }
+        }
+      },
+      {
+        "name": "starts_at",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "silences",
+            "name": "starts_at"
+          }
+        }
+      },
+      {
+        "name": "ends_at",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "silences",
+            "name": "ends_at"
+          }
+        }
+      },
+      {
+        "name": "created_by",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "silences",
+            "name": "created_by"
+          }
+        }
+      },
+      {
+        "name": "discord_user_id",
+        "ordinal": 5,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "silences",
+            "name": "discord_user_id"
+          }
+        }
+      },
+      {
+        "name": "origin_message",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "silences",
+            "name": "origin_message"
+          }
+        }
+      },
+      {
+        "name": "comment",
+        "ordinal": 7,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "silences",
+            "name": "comment"
+          }
+        }
+      },
+      {
+        "name": "state",
+        "ordinal": 8,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "silences",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "name": "synced_at",
+        "ordinal": 9,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "silences",
+            "name": "synced_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "2255ebd5d1a58b55f4359f8d8d9e1b4b19c0f1a58cc6fff39b1c3300bd84403c"
+}

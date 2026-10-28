@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE silences SET state = ?, ends_at = ?, synced_at = ? WHERE am_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "34aa08be6d19a0312cd834141532a533257232087ca071fc0fd83613ec097f7a"
+}

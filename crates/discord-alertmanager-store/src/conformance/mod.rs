@@ -72,6 +72,7 @@ pub async fn run(store: &dyn Store) {
     alerts::silences_sync_into_deltas(store).await;
     routing::forum_tags_are_replaced_wholesale(store).await;
     alerts::queries_filter_paginate_and_match(store).await;
+    alerts::a_query_on_card_state_joins_the_cards(store).await;
     alerts::the_reconciler_finds_what_alertmanager_dropped(store).await;
     audit::pruning_is_bounded_and_says_so(store).await;
     routing::a_subscription_belongs_to_its_owner(store).await;

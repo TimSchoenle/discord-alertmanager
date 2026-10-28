@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE routes SET enabled = 0 WHERE source = 'config' AND enabled = 1 AND NOT (name IN (SELECT value FROM json_each(?1)))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "ca8b1f0dba8f4fe9c771f24359324bafaa3bb0fb22fe62ced9419f7a228cc103"
+}

@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO acknowledgements (fingerprint, user_id, kind, note, created_at) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (fingerprint) WHERE revoked_at IS NULL DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Text",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c591507ec6dd2a39dfb3b6301ecdf5b2ef28872fd6fa3212ea31aa625032d59d"
+}

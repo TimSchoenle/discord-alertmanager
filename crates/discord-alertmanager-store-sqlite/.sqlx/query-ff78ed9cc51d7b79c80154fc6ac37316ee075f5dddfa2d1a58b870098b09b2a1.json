@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE notifications SET state = ?1, updated_at = ?2, resolved_at = CASE WHEN ?1 = 'resolved' THEN COALESCE(resolved_at, ?2) ELSE NULL END WHERE id = ?3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "ff78ed9cc51d7b79c80154fc6ac37316ee075f5dddfa2d1a58b870098b09b2a1"
+}

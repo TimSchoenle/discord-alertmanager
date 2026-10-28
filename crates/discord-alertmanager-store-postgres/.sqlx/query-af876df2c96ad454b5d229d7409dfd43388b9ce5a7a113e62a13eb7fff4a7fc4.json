@@ -1,0 +1,218 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT fingerprint, labels_hash, group_key, labels, annotations, starts_at, ends_at, generator_url, status, am_state, silenced_by, inhibited_by, first_seen_at, last_seen_at, resolved_at, flap_count, updated_at FROM alerts WHERE silenced_by <> '[]'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "fingerprint",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "fingerprint"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "labels_hash",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "labels_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "group_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "group_key"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "labels",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "labels"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "annotations",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "annotations"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "starts_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "starts_at"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "ends_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "ends_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "generator_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "generator_url"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "am_state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "am_state"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "silenced_by",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "silenced_by"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "inhibited_by",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "inhibited_by"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "first_seen_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "first_seen_at"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "last_seen_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "last_seen_at"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "resolved_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "resolved_at"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "flap_count",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "flap_count"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "updated_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "af876df2c96ad454b5d229d7409dfd43388b9ce5a7a113e62a13eb7fff4a7fc4"
+}

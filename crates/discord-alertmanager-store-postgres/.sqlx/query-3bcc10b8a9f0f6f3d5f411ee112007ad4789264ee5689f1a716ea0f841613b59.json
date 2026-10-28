@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE notifications SET reply_count = reply_count + 1, responded_at = COALESCE(responded_at, $1), updated_at = $2 WHERE id = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Timestamptz",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3bcc10b8a9f0f6f3d5f411ee112007ad4789264ee5689f1a716ea0f841613b59"
+}

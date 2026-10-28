@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO alert_events (fingerprint, kind, source, starts_at, ends_at, payload, received_at) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (fingerprint, kind, starts_at, \n         COALESCE(ends_at, '1970-01-01T00:00:00Z')) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Timestamptz",
+        "Timestamptz",
+        "Jsonb",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "35c2144539e78ffd317d37011bba65a889a895e5c35feb4fb94880f6e151eebc"
+}

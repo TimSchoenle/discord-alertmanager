@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM alerts WHERE fingerprint IN (SELECT fingerprint FROM alerts WHERE status = 'resolved' AND resolved_at < ?1 ORDER BY fingerprint LIMIT ?2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "c5929a7a816d63b583e1e6126e74684da8776fc3ed4a7bf45f5b594656ff0277"
+}
