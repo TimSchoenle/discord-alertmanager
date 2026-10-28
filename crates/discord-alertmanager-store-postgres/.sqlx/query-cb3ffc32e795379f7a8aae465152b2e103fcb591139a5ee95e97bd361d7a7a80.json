@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO routes (guild_id, name, matcher_source, min_severity, target, group_strategy, mentions, escalation, priority, continue_to_next, source, enabled, created_by, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) ON CONFLICT (guild_id, name) DO UPDATE SET matcher_source = excluded.matcher_source, min_severity = excluded.min_severity, target = excluded.target, group_strategy = excluded.group_strategy, mentions = excluded.mentions, escalation = excluded.escalation, priority = excluded.priority, continue_to_next = excluded.continue_to_next, source = excluded.source, enabled = excluded.enabled RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "routes",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Text",
+        "Jsonb",
+        "Jsonb",
+        "Int4",
+        "Bool",
+        "Text",
+        "Bool",
+        "Int8",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "cb3ffc32e795379f7a8aae465152b2e103fcb591139a5ee95e97bd361d7a7a80"
+}

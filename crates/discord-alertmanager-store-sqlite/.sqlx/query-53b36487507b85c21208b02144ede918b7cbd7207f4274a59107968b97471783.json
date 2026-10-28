@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE ignore_rules SET revoked_at = ?1 WHERE id = ?2 AND guild_id = ?3 AND revoked_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "53b36487507b85c21208b02144ede918b7cbd7207f4274a59107968b97471783"
+}

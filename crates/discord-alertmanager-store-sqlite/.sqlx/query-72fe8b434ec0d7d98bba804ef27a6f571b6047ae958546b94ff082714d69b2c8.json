@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT user_id, kind, note, created_at FROM acknowledgements WHERE fingerprint = ?1 AND revoked_at IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "name": "user_id",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "acknowledgements",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "name": "kind",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "acknowledgements",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "name": "note",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "acknowledgements",
+            "name": "note"
+          }
+        }
+      },
+      {
+        "name": "created_at",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "acknowledgements",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "72fe8b434ec0d7d98bba804ef27a6f571b6047ae958546b94ff082714d69b2c8"
+}

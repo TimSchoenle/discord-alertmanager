@@ -6,13 +6,11 @@ use dam_store::{
     AckCommand, AckOutcome, Acknowledgement, ChannelId, Decision, Effect, NewNotification,
     NewOutboxItem, Notification, NotificationId, RouteId, StoreError, ThreadReply,
 };
-use sqlx::{PgConnection, Postgres, QueryBuilder, Row};
+use sqlx::PgConnection;
 
-use super::const_format;
 use super::outbox::enqueue;
 use crate::PostgresStore;
-use crate::convert;
-use crate::convert::{Timestamp, backend};
+use crate::convert::{AckRow, backend, decode_all};
 
 pub(super) async fn apply_decision(
     store: &PostgresStore,
@@ -70,16 +68,16 @@ pub(super) async fn acknowledge(
     command: &AckCommand,
 ) -> Result<AckOutcome, StoreError> {
     let mut tx = store.write().await?;
-    let fingerprint = command.fingerprint.as_str().to_owned();
+    let fingerprint = command.fingerprint.as_str();
     let at = command.at;
 
     let changed = if command.revoke {
-        sqlx::query(
+        sqlx::query!(
             "UPDATE acknowledgements SET revoked_at = $1 \
              WHERE fingerprint = $2 AND revoked_at IS NULL",
+            at,
+            fingerprint,
         )
-        .bind(at)
-        .bind(fingerprint.clone())
         .execute(&mut *tx)
         .await
         .map_err(backend)?
@@ -89,16 +87,16 @@ pub(super) async fn acknowledge(
         // The partial unique index is what makes a double-click one acknowledgement. The
         // loser is told it changed nothing and is handed the holder, so it can say who has it
         // rather than posting a second identical card.
-        sqlx::query(
+        sqlx::query!(
             "INSERT INTO acknowledgements (fingerprint, user_id, kind, note, created_at) \
              VALUES ($1, $2, $3, $4, $5) \
              ON CONFLICT (fingerprint) WHERE revoked_at IS NULL DO NOTHING",
+            fingerprint,
+            command.user_id.to_db(),
+            command.kind.as_str(),
+            command.note.as_deref(),
+            at,
         )
-        .bind(fingerprint.clone())
-        .bind(command.user_id.to_db())
-        .bind(command.kind.as_str())
-        .bind(command.note.clone())
-        .bind(at)
         .execute(&mut *tx)
         .await
         .map_err(backend)?
@@ -106,24 +104,21 @@ pub(super) async fn acknowledge(
             > 0
     };
 
-    let holder = sqlx::query(
+    let holder = sqlx::query!(
         "SELECT user_id, created_at FROM acknowledgements \
          WHERE fingerprint = $1 AND revoked_at IS NULL",
+        fingerprint,
     )
-    .bind(fingerprint.clone())
     .fetch_optional(&mut *tx)
     .await
     .map_err(backend)?;
 
-    let (holder, acknowledged_at) = match holder {
-        Some(row) => {
-            let user: i64 = row.try_get("user_id").map_err(backend)?;
-            let created: Timestamp = row.try_get("created_at").map_err(backend)?;
-
-            (Some(dam_store::UserId::from_db(user)), Some(created))
-        }
-        None => (None, None),
-    };
+    let (holder, acknowledged_at) = holder.map_or((None, None), |row| {
+        (
+            Some(dam_store::UserId::from_db(row.user_id)),
+            Some(row.created_at),
+        )
+    });
 
     let acknowledged = holder.is_some();
     let trigger = if command.revoke {
@@ -158,15 +153,17 @@ pub(super) async fn acknowledgement(
     store: &PostgresStore,
     fingerprint: &Fingerprint,
 ) -> Result<Option<Acknowledgement>, StoreError> {
-    let row = sqlx::query(
-        "SELECT user_id, kind, note, created_at FROM acknowledgements              WHERE fingerprint = $1 AND revoked_at IS NULL",
+    sqlx::query_as!(
+        AckRow,
+        "SELECT user_id, kind, note, created_at FROM acknowledgements \
+         WHERE fingerprint = $1 AND revoked_at IS NULL",
+        fingerprint.as_str(),
     )
-    .bind(fingerprint.as_str().to_owned())
     .fetch_optional(&store.pool)
     .await
-    .map_err(backend)?;
-
-    row.as_ref().map(convert::acknowledgement).transpose()
+    .map_err(backend)?
+    .map(Acknowledgement::try_from)
+    .transpose()
 }
 
 pub(super) async fn record_reply(
@@ -175,14 +172,7 @@ pub(super) async fn record_reply(
 ) -> Result<Option<Notification>, StoreError> {
     let mut tx = store.write().await?;
 
-    let sql = const_format(&[
-        "SELECT ",
-        NOTIFICATION_COLUMNS,
-        " FROM notifications WHERE thread_id = ",
-    ]);
-    let row = QueryBuilder::<Postgres>::new(sql)
-        .push_bind(reply.thread_id.to_db())
-        .build()
+    let row = select_notifications!("WHERE thread_id = $1", reply.thread_id.to_db())
         .fetch_optional(&mut *tx)
         .await
         .map_err(backend)?;
@@ -192,16 +182,16 @@ pub(super) async fn record_reply(
         return Ok(None);
     };
 
-    let mut card = convert::notification(&row)?;
+    let mut card = Notification::try_from(row)?;
     let first = card.responded_at.is_none();
 
-    sqlx::query(
+    sqlx::query!(
         "UPDATE notifications SET reply_count = reply_count + 1, \
          responded_at = COALESCE(responded_at, $1), updated_at = $2 WHERE id = $3",
+        reply.at,
+        reply.at,
+        card.id.get(),
     )
-    .bind(reply.at)
-    .bind(reply.at)
-    .bind(card.id.get())
     .execute(&mut *tx)
     .await
     .map_err(backend)?;
@@ -224,62 +214,40 @@ pub(super) async fn notification_for(
     key: &DedupeKey,
     channel: ChannelId,
 ) -> Result<Option<Notification>, StoreError> {
-    let sql = const_format(&[
-        "SELECT ",
-        NOTIFICATION_COLUMNS,
-        " FROM notifications WHERE dedupe_key = ",
-    ]);
-
-    let row = QueryBuilder::<Postgres>::new(sql)
-        .push_bind(key.as_str().to_owned())
-        .push(" AND channel_id = ")
-        .push_bind(channel.to_db())
-        .build()
-        .fetch_optional(&store.pool)
-        .await
-        .map_err(backend)?;
-
-    row.as_ref().map(convert::notification).transpose()
+    select_notifications!(
+        "WHERE dedupe_key = $1 AND channel_id = $2",
+        key.as_str(),
+        channel.to_db(),
+    )
+    .fetch_optional(&store.pool)
+    .await
+    .map_err(backend)?
+    .map(Notification::try_from)
+    .transpose()
 }
 
 pub(super) async fn notification_for_thread(
     store: &PostgresStore,
     thread: ChannelId,
 ) -> Result<Option<Notification>, StoreError> {
-    let sql = const_format(&[
-        "SELECT ",
-        NOTIFICATION_COLUMNS,
-        " FROM notifications WHERE thread_id = ",
-    ]);
-
-    let row = QueryBuilder::<Postgres>::new(sql)
-        .push_bind(thread.to_db())
-        .build()
+    select_notifications!("WHERE thread_id = $1", thread.to_db())
         .fetch_optional(&store.pool)
         .await
-        .map_err(backend)?;
-
-    row.as_ref().map(convert::notification).transpose()
+        .map_err(backend)?
+        .map(Notification::try_from)
+        .transpose()
 }
 
 pub(super) async fn notification(
     store: &PostgresStore,
     id: NotificationId,
 ) -> Result<Option<Notification>, StoreError> {
-    let sql = const_format(&[
-        "SELECT ",
-        NOTIFICATION_COLUMNS,
-        " FROM notifications WHERE id = ",
-    ]);
-
-    let row = QueryBuilder::<Postgres>::new(sql)
-        .push_bind(id.get())
-        .build()
+    select_notifications!("WHERE id = $1", id.get())
         .fetch_optional(&store.pool)
         .await
-        .map_err(backend)?;
-
-    row.as_ref().map(convert::notification).transpose()
+        .map_err(backend)?
+        .map(Notification::try_from)
+        .transpose()
 }
 
 pub(super) async fn set_notification_state(
@@ -302,12 +270,12 @@ pub(super) async fn orphan_notification(
     // The key is rewritten rather than the row deleted: the unique index on
     // (channel_id, dedupe_key) is what a fresh card needs freed, and the row is what the
     // alert's history hangs off.
-    let affected = sqlx::query(
+    let affected = sqlx::query!(
         "UPDATE notifications SET state = 'orphaned', message_id = NULL, pinned = FALSE, \
          dedupe_key = 'orphaned:' || id || ':' || dedupe_key, updated_at = $1 WHERE id = $2",
+        now,
+        id.get(),
     )
-    .bind(now)
-    .bind(id.get())
     .execute(&store.pool)
     .await
     .map_err(backend)?
@@ -324,10 +292,10 @@ pub(super) async fn pinned_posts(
     store: &PostgresStore,
     channel: ChannelId,
 ) -> Result<u32, StoreError> {
-    let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM notifications WHERE channel_id = $1 AND pinned = TRUE",
+    let count = sqlx::query_scalar!(
+        r#"SELECT COUNT(*) AS "count!" FROM notifications WHERE channel_id = $1 AND pinned = TRUE"#,
+        channel.to_db(),
     )
-    .bind(channel.to_db())
     .fetch_one(&store.pool)
     .await
     .map_err(backend)?;
@@ -341,43 +309,28 @@ pub(super) async fn live_cards(
     routes: &[RouteId],
     limit: u32,
 ) -> Result<Vec<Notification>, StoreError> {
-    // An empty `IN ()` is a syntax error in both dialects, and the answer is knowable without
-    // asking: no route owns no card.
+    // The answer is knowable without asking: no route owns no card.
     if routes.is_empty() {
         return Ok(Vec::new());
     }
 
-    let sql = const_format(&[
-        "SELECT ",
-        NOTIFICATION_COLUMNS,
-        " FROM notifications WHERE message_id IS NOT NULL AND state NOT IN (",
-    ]);
+    let routes: Vec<i64> = routes.iter().map(|route| route.get()).collect();
 
-    let mut builder = QueryBuilder::<Postgres>::new(sql);
-    builder.push_bind(NotificationState::Resolved.as_str());
-    builder.push(", ");
-    builder.push_bind(NotificationState::Orphaned.as_str());
-    builder.push(") AND route_id IN (");
-
-    for (index, route) in routes.iter().enumerate() {
-        if index > 0 {
-            builder.push(", ");
-        }
-        builder.push_bind(route.get());
-    }
-
-    // Oldest first, so a run that hits its ceiling repairs the cards that have been wrong
-    // longest rather than an arbitrary slice of them.
-    builder
-        .push(") ORDER BY created_at, id LIMIT ")
-        .push_bind(i64::from(limit))
-        .build()
+    // The state list is spelled as literals, exactly as the partial index
+    // `notifications_live_by_route` spells it, so the planner can prove the index applies; bound
+    // values would hide that from it. Oldest first, so a run that hits its ceiling repairs the
+    // cards that have been wrong longest rather than an arbitrary slice of them.
+    decode_all(
+        select_notifications!(
+            "WHERE message_id IS NOT NULL AND state NOT IN ('resolved', 'orphaned') \
+             AND route_id = ANY($1) ORDER BY created_at, id LIMIT $2",
+            &routes,
+            i64::from(limit),
+        )
         .fetch_all(&store.pool)
         .await
-        .map_err(backend)?
-        .iter()
-        .map(convert::notification)
-        .collect()
+        .map_err(backend)?,
+    )
 }
 
 pub(super) async fn pending_escalations(
@@ -385,28 +338,20 @@ pub(super) async fn pending_escalations(
     created_before: DateTime<Utc>,
     limit: u32,
 ) -> Result<Vec<Notification>, StoreError> {
-    let sql = const_format(&[
-        "SELECT ",
-        NOTIFICATION_COLUMNS,
-        " FROM notifications WHERE escalated_at IS NULL AND message_id IS NOT NULL \
-         AND state = ",
-    ]);
-
     // Oldest first, so a sweep that hits its limit during a storm escalates the cards that
     // have been waiting longest rather than an arbitrary slice of them.
-    QueryBuilder::<Postgres>::new(sql)
-        .push_bind(NotificationState::Firing.as_str())
-        .push(" AND created_at <= ")
-        .push_bind(created_before)
-        .push(" ORDER BY created_at, id LIMIT ")
-        .push_bind(i64::from(limit))
-        .build()
+    decode_all(
+        select_notifications!(
+            "WHERE escalated_at IS NULL AND message_id IS NOT NULL AND state = $1 \
+             AND created_at <= $2 ORDER BY created_at, id LIMIT $3",
+            NotificationState::Firing.as_str(),
+            created_before,
+            i64::from(limit),
+        )
         .fetch_all(&store.pool)
         .await
-        .map_err(backend)?
-        .iter()
-        .map(convert::notification)
-        .collect()
+        .map_err(backend)?,
+    )
 }
 
 pub(super) async fn mark_escalated(
@@ -414,13 +359,13 @@ pub(super) async fn mark_escalated(
     id: NotificationId,
     at: DateTime<Utc>,
 ) -> Result<bool, StoreError> {
-    let claimed = sqlx::query(
+    let claimed = sqlx::query!(
         "UPDATE notifications SET escalated_at = $1, updated_at = $2 \
          WHERE id = $3 AND escalated_at IS NULL",
+        at,
+        at,
+        id.get(),
     )
-    .bind(at)
-    .bind(at)
-    .bind(id.get())
     .execute(&store.pool)
     .await
     .map_err(backend)?
@@ -433,12 +378,14 @@ pub(super) async fn mark_escalated(
 
     // Nothing was claimed for one of two reasons, and they are not the same answer: another
     // sweep got there first, or there is no such card at all.
-    let exists = sqlx::query("SELECT 1 AS present FROM notifications WHERE id = $1")
-        .bind(id.get())
-        .fetch_optional(&store.pool)
-        .await
-        .map_err(backend)?
-        .is_some();
+    let exists = sqlx::query!(
+        "SELECT 1 AS present FROM notifications WHERE id = $1",
+        id.get()
+    )
+    .fetch_optional(&store.pool)
+    .await
+    .map_err(backend)?
+    .is_some();
 
     if exists {
         Ok(false)
@@ -447,37 +394,30 @@ pub(super) async fn mark_escalated(
     }
 }
 
-/// Every column of `notifications`.
-const NOTIFICATION_COLUMNS: &str = "id, dedupe_key, fingerprint, route_id, guild_id, channel_id, message_id, \
-     thread_id, state, render_hash, applied_tags, tags_hash, pinned, archived, responded_at, \
-     escalated_at, supersedes, resolved_at, reply_count, created_at, updated_at";
-
 /// Inserts a card row and hands back the key a button will carry.
 async fn insert_notification(
     conn: &mut PgConnection,
     card: &NewNotification,
 ) -> Result<NotificationId, StoreError> {
-    let row = sqlx::query(
+    let id = sqlx::query_scalar!(
         "INSERT INTO notifications \
          (dedupe_key, fingerprint, route_id, guild_id, channel_id, state, supersedes, \
           created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id",
+        card.dedupe_key.as_str(),
+        card.fingerprint.as_str(),
+        card.route_id.get(),
+        card.guild_id.to_db(),
+        card.channel_id.to_db(),
+        card.state.as_str(),
+        card.supersedes.map(NotificationId::get),
+        card.created_at,
+        card.created_at,
     )
-    .bind(card.dedupe_key.as_str().to_owned())
-    .bind(card.fingerprint.as_str().to_owned())
-    .bind(card.route_id.get())
-    .bind(card.guild_id.to_db())
-    .bind(card.channel_id.to_db())
-    .bind(card.state.as_str())
-    .bind(card.supersedes.map(NotificationId::get))
-    .bind(card.created_at)
-    .bind(card.created_at)
     .fetch_one(conn)
     .await
     .map_err(backend)?;
 
-    Ok(NotificationId::new(
-        row.try_get::<i64, _>("id").map_err(backend)?,
-    ))
+    Ok(NotificationId::new(id))
 }
 
 /// Records the alert a card is now showing.
@@ -487,15 +427,16 @@ async fn set_card_alert(
     fingerprint: &Fingerprint,
     now: DateTime<Utc>,
 ) -> Result<(), StoreError> {
-    let affected =
-        sqlx::query("UPDATE notifications SET fingerprint = $1, updated_at = $2 WHERE id = $3")
-            .bind(fingerprint.as_str().to_owned())
-            .bind(now)
-            .bind(id.get())
-            .execute(conn)
-            .await
-            .map_err(backend)?
-            .rows_affected();
+    let affected = sqlx::query!(
+        "UPDATE notifications SET fingerprint = $1, updated_at = $2 WHERE id = $3",
+        fingerprint.as_str(),
+        now,
+        id.get(),
+    )
+    .execute(conn)
+    .await
+    .map_err(backend)?
+    .rows_affected();
 
     if affected == 0 {
         return Err(StoreError::no_such_notification(id));
@@ -514,12 +455,12 @@ async fn retire_key(
     id: NotificationId,
     key: &DedupeKey,
 ) -> Result<(), StoreError> {
-    sqlx::query(
+    sqlx::query!(
         "UPDATE notifications SET dedupe_key = 'superseded:' || id || ':' || dedupe_key \
          WHERE id = $1 AND dedupe_key = $2",
+        id.get(),
+        key.as_str(),
     )
-    .bind(id.get())
-    .bind(key.as_str().to_owned())
     .execute(conn)
     .await
     .map_err(backend)?;
@@ -536,13 +477,13 @@ async fn move_state(
 ) -> Result<(), StoreError> {
     // The resolution time is kept while the card stays resolved and forgotten the moment it
     // leaves, so it always answers "resolved since when" for the card as it stands.
-    let affected = sqlx::query(
+    let affected = sqlx::query!(
         "UPDATE notifications SET state = $1, updated_at = $2, resolved_at = CASE \
          WHEN $1 = 'resolved' THEN COALESCE(resolved_at, $2) ELSE NULL END WHERE id = $3",
+        state.as_str(),
+        now,
+        id.get(),
     )
-    .bind(state.as_str())
-    .bind(now)
-    .bind(id.get())
     .execute(conn)
     .await
     .map_err(backend)?
@@ -564,22 +505,16 @@ async fn read_cards_for(
     // fingerprints is keyed by none of them, and a card that was replaced keeps showing the alert
     // under a retired key while it is still on somebody's screen; acknowledging answers both. An
     // orphaned row names a message that is gone, so there is nothing of it to re-render.
-    let sql = const_format(&[
-        "SELECT ",
-        NOTIFICATION_COLUMNS,
-        " FROM notifications WHERE state <> 'orphaned' AND (fingerprint = ",
-    ]);
+    let key = DedupeKey::per_alert(fingerprint);
 
-    QueryBuilder::<Postgres>::new(sql)
-        .push_bind(fingerprint.as_str().to_owned())
-        .push(" OR dedupe_key = ")
-        .push_bind(DedupeKey::per_alert(fingerprint).as_str().to_owned())
-        .push(") ORDER BY id")
-        .build()
+    decode_all(
+        select_notifications!(
+            "WHERE state <> 'orphaned' AND (fingerprint = $1 OR dedupe_key = $2) ORDER BY id",
+            fingerprint.as_str(),
+            key.as_str(),
+        )
         .fetch_all(conn)
         .await
-        .map_err(backend)?
-        .iter()
-        .map(convert::notification)
-        .collect()
+        .map_err(backend)?,
+    )
 }

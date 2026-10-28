@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO silences (am_id, matchers, starts_at, ends_at, created_by, discord_user_id, origin_message, comment, state, synced_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (am_id) DO UPDATE SET matchers = excluded.matchers, starts_at = excluded.starts_at, ends_at = excluded.ends_at, created_by = excluded.created_by, discord_user_id = excluded.discord_user_id, origin_message = excluded.origin_message, comment = excluded.comment, state = excluded.state, synced_at = excluded.synced_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 10
+    },
+    "nullable": []
+  },
+  "hash": "d9e3b77ea4c1d5fb44a1d96e702701a3762e0185a9815d983343229fdcc2462e"
+}

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM alert_events WHERE id IN (SELECT id FROM alert_events WHERE received_at < $1 ORDER BY id LIMIT $2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4a39e74c14d5558603ea0492843e087164be3f918b552ab9f11e5e6872570a20"
+}

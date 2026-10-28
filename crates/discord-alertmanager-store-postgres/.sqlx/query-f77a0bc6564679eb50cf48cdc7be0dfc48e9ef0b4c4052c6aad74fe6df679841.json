@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE notifications SET dedupe_key = 'superseded:' || id || ':' || dedupe_key WHERE id = $1 AND dedupe_key = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f77a0bc6564679eb50cf48cdc7be0dfc48e9ef0b4c4052c6aad74fe6df679841"
+}

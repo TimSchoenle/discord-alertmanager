@@ -15,6 +15,7 @@ hand: the next render replaces any change made to the output instead of its sour
 | --- | --- | --- |
 | `README.md` | `.github/workflows/docs.yml` | `.github/templates/README.md.hbs` |
 | `docs/config.md`, `docs/config.json`, `docs/config.contract.json`, `config.example.toml` | `cargo xtask config-docs` | the types in `crates/discord-alertmanager-config` |
+| `crates/discord-alertmanager-store-postgres/.sqlx/`, `crates/discord-alertmanager-store-sqlite/.sqlx/` | `cargo xtask db-prepare` | each backend's queries and `migrations/` |
 | `CHANGELOG.md`, the version in both manifests and in `Cargo.lock` | `.github/workflows/release-please.yaml` | the conventional-commit subjects since the last tag |
 
 The README is rendered on every pull request and committed back to the branch, so a change to the
@@ -26,12 +27,40 @@ committing the four files that come out. Nothing else needs touching: the README
 its table of required keys are lifted out of `docs/config.md` by
 `.github/scripts/readme-variables.sh` when the README is rendered.
 
-No query goes through the `query!` macro. Both backends issue `sqlx::query` at runtime and map
-rows by hand, so there is no `.sqlx/` offline cache to commit, and a plain `cargo build` needs
-neither Docker nor a database. `cargo xtask db-prepare` is kept for the first checked query: it
-needs a container runtime, starts a throwaway PostgreSQL container and a temporary SQLite file,
-applies each backend's migrations, and writes `crates/*/.sqlx/`, which is then committed with the
-query.
+## Database queries
+
+Every query in both backends goes through the `query!` family of macros (`query!`, `query_as!`,
+`query_scalar!`), so its SQL, its parameters and the columns it returns are checked against the
+migrated schema at compile time. Nothing assembles SQL at run time: a filter with optional parts
+binds its lists as arrays in PostgreSQL and as JSON arrays in SQLite, and an empty list constrains
+nothing.
+
+An ordinary `cargo build` checks the queries against each backend's committed `.sqlx/` cache, so it
+needs neither Docker nor a database. `.cargo/config.toml` pins `SQLX_OFFLINE=true` to keep it that
+way. Changing a query or adding a migration means regenerating the caches and committing them with
+the change:
+
+```bash
+cargo install sqlx-cli --version 0.9.0 --locked --no-default-features \
+  --features postgres,sqlite,rustls,sqlx-toml
+cargo xtask db-prepare           # rewrite both caches
+cargo xtask db-prepare --check   # what CI runs: fail if either cache is stale
+```
+
+Both commands need a container runtime. They start a throwaway PostgreSQL container and a
+temporary SQLite file, apply each backend's migrations, and recompile every query against them.
+The `query-cache` job runs the check on every pull request.
+
+To compile against a live database while writing a query, set the variable the crate's `sqlx.toml`
+names and turn the pin off for that shell:
+
+```bash
+export SQLX_OFFLINE=false
+export DAM_POSTGRES_URL=postgres://postgres:postgres@127.0.0.1:5432/postgres
+export DAM_SQLITE_URL=sqlite:///tmp/dam.db
+```
+
+The two backends name different variables, so one shell can point both at their own database.
 
 ## Checks
 
@@ -41,6 +70,7 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 cargo deny check
 cargo xtask config-docs                       # then check nothing moved
+cargo xtask db-prepare --check                # needs Docker and sqlx-cli
 bash .github/scripts/readme-variables.sh      # the README payload, as CI will render it
 bash .github/scripts/verify-architecture.sh   # the domain crate's dependency rule
 bash .github/scripts/prose-check.sh README.md CONTRIBUTING.md SECURITY.md docs/COMMANDS.md docs/ROUTES.md

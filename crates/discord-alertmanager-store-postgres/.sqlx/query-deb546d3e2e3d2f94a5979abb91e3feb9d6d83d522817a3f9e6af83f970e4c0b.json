@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE notifications SET escalated_at = $1, updated_at = $2 WHERE id = $3 AND escalated_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Timestamptz",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "deb546d3e2e3d2f94a5979abb91e3feb9d6d83d522817a3f9e6af83f970e4c0b"
+}

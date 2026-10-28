@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE notifications SET escalated_at = ?1, updated_at = ?2 WHERE id = ?3 AND escalated_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "d90e1343f9403e6d9e52c55e2db1b2f6292fd26dc09e8adefd5293c0ff26a909"
+}

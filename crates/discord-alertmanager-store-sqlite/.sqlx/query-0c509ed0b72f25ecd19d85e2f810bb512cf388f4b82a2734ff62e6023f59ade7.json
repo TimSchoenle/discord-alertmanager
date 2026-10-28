@@ -1,0 +1,218 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT fingerprint AS \"fingerprint!\", labels_hash, group_key, labels, annotations, starts_at, ends_at, generator_url, status, am_state, silenced_by, inhibited_by, first_seen_at, last_seen_at, resolved_at, flap_count, updated_at FROM alerts WHERE (json_array_length(?1) = 0 OR status IN (SELECT value FROM json_each(?1))) AND (json_array_length(?2) = 0 OR severity IN (SELECT value FROM json_each(?2))) AND NOT EXISTS (SELECT 1 FROM json_each(?3) AS name JOIN json_each(?4) AS expected ON expected.key = name.key JOIN json_each(?5) AS equal ON equal.key = name.key WHERE (COALESCE(json_extract(alerts.labels, '$.\"' || name.value || '\"'), '') = expected.value) <> equal.value) AND (?6 IS NULL OR EXISTS (SELECT 1 FROM notifications WHERE notifications.dedupe_key = 'a:' || alerts.fingerprint AND notifications.state = ?6)) ORDER BY last_seen_at DESC, fingerprint LIMIT ?7 OFFSET ?8",
+  "describe": {
+    "columns": [
+      {
+        "name": "fingerprint!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "fingerprint"
+          }
+        }
+      },
+      {
+        "name": "labels_hash",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "labels_hash"
+          }
+        }
+      },
+      {
+        "name": "group_key",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "group_key"
+          }
+        }
+      },
+      {
+        "name": "labels",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "labels"
+          }
+        }
+      },
+      {
+        "name": "annotations",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "annotations"
+          }
+        }
+      },
+      {
+        "name": "starts_at",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "starts_at"
+          }
+        }
+      },
+      {
+        "name": "ends_at",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "ends_at"
+          }
+        }
+      },
+      {
+        "name": "generator_url",
+        "ordinal": 7,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "generator_url"
+          }
+        }
+      },
+      {
+        "name": "status",
+        "ordinal": 8,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "name": "am_state",
+        "ordinal": 9,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "am_state"
+          }
+        }
+      },
+      {
+        "name": "silenced_by",
+        "ordinal": 10,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "silenced_by"
+          }
+        }
+      },
+      {
+        "name": "inhibited_by",
+        "ordinal": 11,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "inhibited_by"
+          }
+        }
+      },
+      {
+        "name": "first_seen_at",
+        "ordinal": 12,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "first_seen_at"
+          }
+        }
+      },
+      {
+        "name": "last_seen_at",
+        "ordinal": 13,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "last_seen_at"
+          }
+        }
+      },
+      {
+        "name": "resolved_at",
+        "ordinal": 14,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "resolved_at"
+          }
+        }
+      },
+      {
+        "name": "flap_count",
+        "ordinal": 15,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "flap_count"
+          }
+        }
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 16,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "updated_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": [
+      true,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "0c509ed0b72f25ecd19d85e2f810bb512cf388f4b82a2734ff62e6023f59ade7"
+}

@@ -5,8 +5,8 @@ name: Build
 #
 # Three kinds of job live here. The first kind compiles and runs the workspace — `check`, `test`,
 # `clippy`, `doc`, `msrv`, and `coverage`, which also uploads to Codecov. The second kind reads a
-# committed artefact and regenerates it (`config-docs` and `config-contract`), so a generated file
-# cannot drift from the types that produce it. The third kind builds the image the release will
+# committed artefact and regenerates it (`config-docs`, `config-contract` and `query-cache`), so a
+# generated file cannot drift from the types or the schema that produce it. The third kind builds the image the release will
 # push, on both architectures, and checks that what came out describes the configuration the
 # source tree declares.
 
@@ -331,8 +331,8 @@ jobs:
       - name: Install pinned toolchain
         uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
 
-      # `db-prepare` is the other half of `xtask` and is deliberately not run here: no query in
-      # this workspace goes through the `query!` macro, so there is no offline cache to compare.
+      # `db-prepare` is the other half of `xtask`, and `query-cache` runs it: it needs a container
+      # runtime and a database, which this job does not.
       - name: Regenerate
         run: cargo xtask config-docs
 
@@ -344,6 +344,42 @@ jobs:
             git --no-pager diff
             exit 1
           fi
+
+  # The checked queries' half of the generated surface. Every statement in both backends is
+  # verified at compile time against its crate's committed `.sqlx/` cache, which is only as good
+  # as its agreement with the migrations. This job starts PostgreSQL in Docker and a scratch SQLite
+  # file, applies each backend's migrations, and has `sqlx prepare --check` recompile every query
+  # against the live schema; a migration or a query changed without regenerating the cache fails
+  # here rather than in an ordinary build that would trust the stale cache.
+  query-cache:
+    name: Query Cache
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read # Required to checkout the code
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Install pinned toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+
+      # Pinned to the `sqlx` the workspace locks, and built with only the two drivers and the
+      # `sqlx.toml` support each backend's per-crate database variable needs.
+      - name: Install sqlx-cli
+        run: >-
+          cargo install sqlx-cli --version 0.9.0 --locked --no-default-features
+          --features postgres,sqlite,rustls,sqlx-toml
+
+      - name: Verify the offline caches against migrated databases
+        run: cargo xtask db-prepare --check
 
   # The reverse gate on the config contract: regenerate the committed document and the
   # Dockerfile's `LABEL` block from the Rust types and fail if either has drifted. A renamed key

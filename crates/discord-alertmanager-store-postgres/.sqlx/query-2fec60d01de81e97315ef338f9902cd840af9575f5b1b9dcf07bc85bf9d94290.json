@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE ignore_rules SET revoked_at = $1 WHERE id = $2 AND guild_id = $3 AND revoked_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2fec60d01de81e97315ef338f9902cd840af9575f5b1b9dcf07bc85bf9d94290"
+}

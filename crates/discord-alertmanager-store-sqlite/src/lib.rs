@@ -10,13 +10,20 @@
 //!
 //! # Where this dialect costs more than `PostgreSQL`
 //!
-//! Type inference is weaker, so queries are run at runtime through `sqlx::query`/`query_as`
-//! rather than the `query!` macro, and every row is mapped by hand in the `convert` module. Timestamps are
-//! `TEXT` in RFC 3339 with a fixed six-digit subsecond, so that lexicographic order matches
-//! chronological order; anything shorter sorts `…:00.5Z` after `…:00.45Z`.
+//! There is no timestamp, boolean or JSON type, so those columns come back as text and integers
+//! and the `convert` module decodes them. Timestamps are `TEXT` in RFC 3339 with a fixed six-digit
+//! subsecond, so that lexicographic order matches chronological order; anything shorter sorts
+//! `…:00.5Z` after `…:00.45Z`. A list a query filters on is bound as a JSON array and read back
+//! with `json_each`, the counterpart of the other dialect's array parameters.
 //!
-//! The `PostgreSQL` backend was written first and this one ported from it. The inference
-//! overrides are easier to reason about against a working reference than in parallel with one.
+//! Nullability inference is weaker as well: a `TEXT PRIMARY KEY` is nullable to `SQLite`, so the
+//! two such columns are selected as `fingerprint AS "fingerprint!"` and `am_id AS "am_id!"`.
+//!
+//! # Checked queries
+//!
+//! Every statement goes through the `query!` family of macros and is checked against the migrated
+//! schema when the crate compiles. A build reads the committed `.sqlx/` cache, and
+//! `cargo xtask db-prepare` regenerates it against a scratch database file; see CONTRIBUTING.md.
 
 mod convert;
 mod store;
@@ -259,10 +266,13 @@ mod tests {
     /// Asserts what 0005 made of the legacy cards.
     async fn assert_legacy_keys_migrated(pool: &Pool<Sqlite>) {
         let keys: Vec<(i64, String)> =
-            sqlx::query_as("SELECT id, dedupe_key FROM notifications ORDER BY id")
+            sqlx::query!("SELECT id, dedupe_key FROM notifications ORDER BY id")
                 .fetch_all(pool)
                 .await
-                .expect("the keys read back");
+                .expect("the keys read back")
+                .into_iter()
+                .map(|row| (row.id, row.dedupe_key))
+                .collect();
         let expected: Vec<(i64, String)> = MIGRATED
             .iter()
             .map(|(id, key)| (*id, (*key).to_owned()))
@@ -273,8 +283,8 @@ mod tests {
             "the newest card per alert and channel holds the bare key; the older ones retire"
         );
 
-        let resolved: Vec<i64> = sqlx::query_scalar(
-            "SELECT id FROM notifications WHERE resolved_at IS NOT NULL ORDER BY id",
+        let resolved: Vec<i64> = sqlx::query_scalar!(
+            "SELECT id FROM notifications WHERE resolved_at IS NOT NULL ORDER BY id"
         )
         .fetch_all(pool)
         .await

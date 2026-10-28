@@ -6,6 +6,7 @@
 //!
 //! ```bash
 //! cargo xtask db-prepare      # regenerate both .sqlx offline caches
+//! cargo xtask db-prepare --check   # fail if either cache disagrees with the schema
 //! cargo xtask config-docs     # regenerate docs/config.md, docs/config.json,
 //!                             # docs/config.contract.json and config.example.toml
 //! ```
@@ -21,11 +22,26 @@ use testcontainers::runners::AsyncRunner;
 use testcontainers_modules::postgres::Postgres;
 use tokio::process::Command;
 
-/// Crate holding the `PostgreSQL` backend and its offline cache.
-const POSTGRES_CRATE: &str = "discord-alertmanager-store-postgres";
+/// One backend crate whose checked queries have an offline cache.
+struct Backend {
+    /// The crate's directory under `crates/`, which is also where its `.sqlx/` lives.
+    name: &'static str,
 
-/// Crate holding the `SQLite` backend and its offline cache.
-const SQLITE_CRATE: &str = "discord-alertmanager-store-sqlite";
+    /// The variable its `sqlx.toml` names for the query macros' database URL.
+    url_var: &'static str,
+}
+
+/// The `PostgreSQL` backend.
+const POSTGRES: Backend = Backend {
+    name: "discord-alertmanager-store-postgres",
+    url_var: "DAM_POSTGRES_URL",
+};
+
+/// The `SQLite` backend.
+const SQLITE: Backend = Backend {
+    name: "discord-alertmanager-store-sqlite",
+    url_var: "DAM_SQLITE_URL",
+};
 
 /// Opens `docs/config.md`, which the schema renderer emits as two bare tables.
 ///
@@ -67,7 +83,12 @@ enum Task {
     /// Starts a throwaway `PostgreSQL` container and creates a temporary `SQLite` file, applies
     /// each backend's migrations to its own database, and asks `sqlx` to record every checked
     /// query against the resulting schema.
-    DbPrepare,
+    DbPrepare {
+        /// Compares the committed caches with the schema instead of rewriting them, and fails
+        /// when they differ. This is what continuous integration runs.
+        #[arg(long)]
+        check: bool,
+    },
 
     /// Regenerates the configuration reference, the JSON schema, the contract and the example.
     ConfigDocs,
@@ -76,17 +97,17 @@ enum Task {
 #[tokio::main]
 async fn main() -> Result<()> {
     match Cli::parse().command {
-        Task::DbPrepare => db_prepare().await,
+        Task::DbPrepare { check } => db_prepare(check).await,
         Task::ConfigDocs => config_docs().await,
     }
 }
 
-/// Regenerates both offline caches.
+/// Regenerates, or with `check` verifies, both offline caches.
 ///
 /// The container belongs here rather than in a build script. Starting one from `build.rs` would
 /// make every build require a container runtime, break cross-compilation and offline builds, and
 /// turn a cold cache into an image pull — for a schema that changes only when a migration does.
-async fn db_prepare() -> Result<()> {
+async fn db_prepare(check: bool) -> Result<()> {
     let root = workspace_root()?;
 
     let postgres = Postgres::default()
@@ -99,7 +120,7 @@ async fn db_prepare() -> Result<()> {
         .context("reading the container's mapped port")?;
     let postgres_url = format!("postgres://postgres:postgres@127.0.0.1:{port}/postgres");
 
-    prepare(&root, POSTGRES_CRATE, &postgres_url).await?;
+    prepare(&root, &POSTGRES, &postgres_url, check).await?;
 
     // A file rather than `:memory:`: the schema has to outlive the connection that migrates it,
     // and `sqlx prepare` opens its own.
@@ -109,27 +130,40 @@ async fn db_prepare() -> Result<()> {
         sqlite_path.to_string_lossy().replace('\\', "/")
     );
 
-    let result = prepare(&root, SQLITE_CRATE, &sqlite_url).await;
+    let result = prepare(&root, &SQLITE, &sqlite_url, check).await;
 
     // Removed whether or not the preparation succeeded, so a failed run does not leave a stale
     // database that the next one would silently reuse.
     let _ = std::fs::remove_file(&sqlite_path);
     result?;
 
-    println!("offline caches regenerated for both backends");
+    if check {
+        println!("both offline caches match the schema");
+    } else {
+        println!("offline caches regenerated for both backends");
+    }
     Ok(())
 }
 
-/// Applies one backend's migrations and records its checked queries.
-async fn prepare(root: &Path, crate_name: &str, database_url: &str) -> Result<()> {
-    let migrations = root.join("crates").join(crate_name).join("migrations");
+/// Applies one backend's migrations, then records or verifies its checked queries.
+///
+/// `sqlx prepare` runs from the backend's own directory, because that is where it writes the
+/// cache and where the macros look for one. `--all-targets` takes the queries in tests along.
+async fn prepare(root: &Path, backend: &Backend, database_url: &str, check: bool) -> Result<()> {
+    let crate_dir = root.join("crates").join(backend.name);
+    let migrations = crate_dir.join("migrations");
+    let name = backend.name;
 
     if !migrations.is_dir() {
         bail!(
-            "{crate_name} has no migrations directory at {}",
+            "{name} has no migrations directory at {}",
             migrations.display()
         );
     }
+
+    // `SQLX_OFFLINE` is pinned to true for the whole workspace, and both of these commands are
+    // the one place that must reach a live database instead.
+    let env = [("SQLX_OFFLINE", "false"), (backend.url_var, database_url)];
 
     run(
         root,
@@ -143,21 +177,24 @@ async fn prepare(root: &Path, crate_name: &str, database_url: &str) -> Result<()
             "--database-url",
             database_url,
         ],
-        // `SQLX_OFFLINE` is pinned to true for the whole workspace, and both of these commands
-        // are the one place that must reach a live database instead.
-        &[("SQLX_OFFLINE", "false"), ("DATABASE_URL", database_url)],
+        &env,
     )
     .await
-    .with_context(|| format!("applying {crate_name} migrations"))?;
+    .with_context(|| format!("applying {name} migrations"))?;
 
-    run(
-        root,
-        "cargo",
-        ["sqlx", "prepare", "-p", crate_name],
-        &[("SQLX_OFFLINE", "false"), ("DATABASE_URL", database_url)],
-    )
-    .await
-    .with_context(|| format!("recording {crate_name} queries"))
+    let mut args = vec!["sqlx", "prepare", "--database-url", database_url];
+    if check {
+        args.push("--check");
+    }
+    args.extend(["--", "--all-targets"]);
+
+    run(&crate_dir, "cargo", args, &env).await.with_context(|| {
+        if check {
+            format!("{name}'s offline cache is stale; run `cargo xtask db-prepare`")
+        } else {
+            format!("recording {name} queries")
+        }
+    })
 }
 
 /// Regenerates the four files that describe the configuration surface.

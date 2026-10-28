@@ -16,11 +16,17 @@
 //!
 //! It has a timestamp type, a JSON type and a boolean, so three of the encodings the other
 //! backend performs by hand are the driver's job here, and the `convert` module is correspondingly
-//! shorter. Queries are issued through `sqlx::query`/`QueryBuilder` rather than the `query!`
-//! macro, for the same reason both backends share one row mapper: the filtered read paths are
-//! dynamic and cannot be expressed as a macro at all, and a checked query feeding a hand-written
-//! mapper checks the half that was never in doubt. What the mapping has to satisfy is a
-//! behavioural contract, and `dam_store::conformance` runs it against both engines.
+//! shorter.
+//!
+//! # Checked queries
+//!
+//! Every statement goes through the `query!` family of macros, so its SQL, its parameter types
+//! and the types of the columns it returns are checked against the migrated schema when the crate
+//! compiles. A build reads the committed `.sqlx/` cache; `cargo xtask db-prepare` regenerates it
+//! against a `PostgreSQL` container, and continuous integration fails when the two disagree. The
+//! filtered reads that used to be assembled per call are single statements whose optional parts
+//! are bound as arrays, so no SQL is built at run time. What the mapping has to satisfy beyond its
+//! types is a behavioural contract, and `dam_store::conformance` runs it against both engines.
 
 mod convert;
 mod store;
@@ -183,7 +189,7 @@ mod tests {
 
         // A database of its own in the same container: the conformance run above has already
         // taken the default one past every migration.
-        sqlx::query("CREATE DATABASE legacy_keys")
+        sqlx::query!("CREATE DATABASE legacy_keys")
             .execute(&store.pool)
             .await
             .expect("a second database is created");
@@ -270,10 +276,13 @@ mod tests {
     /// Asserts what 0005 made of the legacy cards.
     async fn assert_legacy_keys_migrated(pool: &Pool<Postgres>) {
         let keys: Vec<(i64, String)> =
-            sqlx::query_as("SELECT id, dedupe_key FROM notifications ORDER BY id")
+            sqlx::query!("SELECT id, dedupe_key FROM notifications ORDER BY id")
                 .fetch_all(pool)
                 .await
-                .expect("the keys read back");
+                .expect("the keys read back")
+                .into_iter()
+                .map(|row| (row.id, row.dedupe_key))
+                .collect();
         let expected: Vec<(i64, String)> = MIGRATED
             .iter()
             .map(|(id, key)| (*id, (*key).to_owned()))
@@ -284,8 +293,8 @@ mod tests {
             "the newest card per alert and channel holds the bare key; the older ones retire"
         );
 
-        let resolved: Vec<i64> = sqlx::query_scalar(
-            "SELECT id FROM notifications WHERE resolved_at IS NOT NULL ORDER BY id",
+        let resolved: Vec<i64> = sqlx::query_scalar!(
+            "SELECT id FROM notifications WHERE resolved_at IS NOT NULL ORDER BY id"
         )
         .fetch_all(pool)
         .await

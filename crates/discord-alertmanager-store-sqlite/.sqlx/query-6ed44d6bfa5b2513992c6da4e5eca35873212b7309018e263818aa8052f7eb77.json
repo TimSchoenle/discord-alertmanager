@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE ignore_rules SET scope = ?1, guild_id = ?2, channel_id = ?3, matcher_source = ?4, reason = ?5, expires_at = ?6, revoked_at = ?7 WHERE id = ?8",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": []
+  },
+  "hash": "6ed44d6bfa5b2513992c6da4e5eca35873212b7309018e263818aa8052f7eb77"
+}

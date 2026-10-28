@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE outbox SET claimed_by = ?1, claimed_at = ?2, attempts = attempts + 1 WHERE id IN (SELECT value FROM json_each(?3))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "f3718e24bcc2111b4a00f00209fa89d3a5f88eb4b778c7b70cf028075552e2ab"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO alerts (fingerprint, labels_hash, group_key, labels, annotations, starts_at, ends_at, generator_url, status, am_state, severity, silenced_by, inhibited_by, first_seen_at, last_seen_at, resolved_at, flap_count, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (fingerprint) DO UPDATE SET labels_hash = excluded.labels_hash, group_key = excluded.group_key, labels = excluded.labels, annotations = excluded.annotations, starts_at = excluded.starts_at, ends_at = excluded.ends_at, generator_url = excluded.generator_url, status = excluded.status, am_state = excluded.am_state, severity = excluded.severity, silenced_by = excluded.silenced_by, inhibited_by = excluded.inhibited_by, last_seen_at = excluded.last_seen_at, resolved_at = excluded.resolved_at, flap_count = excluded.flap_count, updated_at = excluded.updated_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 18
+    },
+    "nullable": []
+  },
+  "hash": "1835613ea75b58dc45d42a084e34ecf180722c0087deae322021e75d5d04755f"
+}

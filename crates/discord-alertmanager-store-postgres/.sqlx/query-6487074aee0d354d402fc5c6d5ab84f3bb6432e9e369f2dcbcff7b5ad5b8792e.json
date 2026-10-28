@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE alerts SET last_seen_at = $1 WHERE fingerprint = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6487074aee0d354d402fc5c6d5ab84f3bb6432e9e369f2dcbcff7b5ad5b8792e"
+}

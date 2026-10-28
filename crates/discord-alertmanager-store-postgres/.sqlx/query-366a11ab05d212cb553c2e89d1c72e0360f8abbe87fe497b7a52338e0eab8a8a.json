@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE notifications SET updated_at = $1, message_id = COALESCE($2, message_id), thread_id = COALESCE($3, thread_id), render_hash = COALESCE($4, render_hash), applied_tags = COALESCE($5, applied_tags), tags_hash = COALESCE($6, tags_hash), pinned = COALESCE($7, pinned), archived = COALESCE($8, archived) WHERE id = $9",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Int8",
+        "Int8",
+        "Text",
+        "Jsonb",
+        "Text",
+        "Bool",
+        "Bool",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "366a11ab05d212cb553c2e89d1c72e0360f8abbe87fe497b7a52338e0eab8a8a"
+}

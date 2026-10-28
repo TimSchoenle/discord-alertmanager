@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM audit_log WHERE id IN (SELECT id FROM audit_log WHERE created_at < ?1 ORDER BY id LIMIT ?2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "dd21d52d7d9ace98b55f3d7146915e64cf9060d0020494cefe6fb48f812cd455"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE outbox SET payload = ?1, not_before = min(not_before, ?2) WHERE claimed_at IS NULL AND kind = ?3 AND notification_id = ?4",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "ea134748374061a851ce263b90a916a8a500aa685b18f378a4d45e8cf62a787c"
+}

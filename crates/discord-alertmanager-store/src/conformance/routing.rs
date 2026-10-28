@@ -308,6 +308,21 @@ pub(super) async fn a_config_route_syncs_and_a_discord_route_collides(store: &dy
         !after.enabled,
         "disabled rather than deleted, so the notifications it created keep their history"
     );
+
+    store
+        .upsert_route(&declared)
+        .await
+        .expect("the file declares the route again");
+
+    let emptied = store
+        .disable_missing_config_routes(&[])
+        .await
+        .expect("the sweep succeeds");
+
+    assert!(
+        emptied >= 1,
+        "a file that declares no route keeps none of the ones it used to declare"
+    );
 }
 
 pub(super) async fn forum_tags_are_replaced_wholesale(store: &dyn Store) {

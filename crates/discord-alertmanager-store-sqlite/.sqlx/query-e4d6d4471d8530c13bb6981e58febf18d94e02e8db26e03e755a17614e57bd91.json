@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT 1 AS alive",
+  "describe": {
+    "columns": [
+      {
+        "name": "alive",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e4d6d4471d8530c13bb6981e58febf18d94e02e8db26e03e755a17614e57bd91"
+}

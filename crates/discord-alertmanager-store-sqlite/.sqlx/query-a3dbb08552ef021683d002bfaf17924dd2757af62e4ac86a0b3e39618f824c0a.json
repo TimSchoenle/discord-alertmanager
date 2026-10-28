@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT count(*) AS \"total!: i64\" FROM alerts WHERE (json_array_length(?1) = 0 OR status IN (SELECT value FROM json_each(?1))) AND (json_array_length(?2) = 0 OR severity IN (SELECT value FROM json_each(?2))) AND NOT EXISTS (SELECT 1 FROM json_each(?3) AS name JOIN json_each(?4) AS expected ON expected.key = name.key JOIN json_each(?5) AS equal ON equal.key = name.key WHERE (COALESCE(json_extract(alerts.labels, '$.\"' || name.value || '\"'), '') = expected.value) <> equal.value) AND (?6 IS NULL OR EXISTS (SELECT 1 FROM notifications WHERE notifications.dedupe_key = 'a:' || alerts.fingerprint AND notifications.state = ?6)) ",
+  "describe": {
+    "columns": [
+      {
+        "name": "total!: i64",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a3dbb08552ef021683d002bfaf17924dd2757af62e4ac86a0b3e39618f824c0a"
+}

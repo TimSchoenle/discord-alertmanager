@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE alerts SET last_seen_at = ? WHERE fingerprint = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "7d7660410a368223f7cf4dc35831ce65f80449972dc1f1654e576718ee82fd56"
+}

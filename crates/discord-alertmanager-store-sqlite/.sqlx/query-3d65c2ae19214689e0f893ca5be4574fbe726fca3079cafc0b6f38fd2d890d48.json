@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE silences SET state = 'expired', synced_at = ?1 WHERE am_id = ?2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "3d65c2ae19214689e0f893ca5be4574fbe726fca3079cafc0b6f38fd2d890d48"
+}

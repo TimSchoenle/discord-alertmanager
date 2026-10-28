@@ -1,0 +1,269 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, dedupe_key, fingerprint, route_id, guild_id, channel_id, message_id, thread_id, state, render_hash, applied_tags, tags_hash, pinned, archived, responded_at, escalated_at, supersedes, resolved_at, reply_count, created_at, updated_at FROM notifications WHERE message_id IS NOT NULL AND state NOT IN ('resolved', 'orphaned') AND route_id = ANY($1) ORDER BY created_at, id LIMIT $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "dedupe_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "dedupe_key"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "fingerprint",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "fingerprint"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "route_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "route_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "guild_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "guild_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "channel_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "channel_id"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "message_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "message_id"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "thread_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "thread_id"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "render_hash",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "render_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "applied_tags",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "applied_tags"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "tags_hash",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "tags_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "pinned",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "pinned"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "archived",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "archived"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "responded_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "responded_at"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "escalated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "escalated_at"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "supersedes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "supersedes"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "resolved_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "resolved_at"
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "reply_count",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "reply_count"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "notifications",
+            "name": "updated_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8Array",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "6a732f897344b95b5b7bcb73df73f26e2480f8729f8094cf08a1f90906f61dfd"
+}

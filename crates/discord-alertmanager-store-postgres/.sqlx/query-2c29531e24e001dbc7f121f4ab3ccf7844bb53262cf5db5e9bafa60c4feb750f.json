@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE outbox SET claimed_by = $1, claimed_at = $2, attempts = attempts + 1 WHERE id = ANY($3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Timestamptz",
+        "Int8Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2c29531e24e001dbc7f121f4ab3ccf7844bb53262cf5db5e9bafa60c4feb750f"
+}

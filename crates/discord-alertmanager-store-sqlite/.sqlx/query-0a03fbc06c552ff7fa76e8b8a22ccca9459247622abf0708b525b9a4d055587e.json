@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO routes (guild_id, name, matcher_source, min_severity, target, group_strategy, mentions, escalation, priority, continue_to_next, source, enabled, created_by, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14) ON CONFLICT (guild_id, name) DO UPDATE SET matcher_source = excluded.matcher_source, min_severity = excluded.min_severity, target = excluded.target, group_strategy = excluded.group_strategy, mentions = excluded.mentions, escalation = excluded.escalation, priority = excluded.priority, continue_to_next = excluded.continue_to_next, source = excluded.source, enabled = excluded.enabled RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "routes",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 14
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0a03fbc06c552ff7fa76e8b8a22ccca9459247622abf0708b525b9a4d055587e"
+}

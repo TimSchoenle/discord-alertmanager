@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE routes SET guild_id = $1, name = $2, matcher_source = $3, min_severity = $4, target = $5, group_strategy = $6, mentions = $7, escalation = $8, priority = $9, continue_to_next = $10, source = $11, enabled = $12, created_by = $13 WHERE id = $14",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Text",
+        "Jsonb",
+        "Jsonb",
+        "Int4",
+        "Bool",
+        "Text",
+        "Bool",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "89df1f12ed4fa849a8c504fb0fd68f5649eee44fba33caa2caf5cd22c1c1d04a"
+}

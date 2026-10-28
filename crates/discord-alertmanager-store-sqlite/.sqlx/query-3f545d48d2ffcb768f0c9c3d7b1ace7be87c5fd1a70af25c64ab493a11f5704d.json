@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO forum_tags (channel_id, tag_name, tag_id, moderated, synced_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "3f545d48d2ffcb768f0c9c3d7b1ace7be87c5fd1a70af25c64ab493a11f5704d"
+}

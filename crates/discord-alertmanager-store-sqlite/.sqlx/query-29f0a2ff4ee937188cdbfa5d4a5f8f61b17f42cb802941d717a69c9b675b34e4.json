@@ -1,0 +1,33 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT kind, count(*) AS \"depth!\" FROM outbox WHERE claimed_at IS NULL GROUP BY kind\n         ORDER BY kind",
+  "describe": {
+    "columns": [
+      {
+        "name": "kind",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "outbox",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "name": "depth!",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "29f0a2ff4ee937188cdbfa5d4a5f8f61b17f42cb802941d717a69c9b675b34e4"
+}

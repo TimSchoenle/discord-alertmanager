@@ -5,12 +5,11 @@ use dam_store::{
     AppliedEffect, ClaimRequest, Effect, NewOutboxItem, NotificationId, OUTBOX_LANES, OutboxId,
     OutboxItem, SilenceLifecycle, SilenceLink, StoreError, WorkerId,
 };
-use sqlx::{QueryBuilder, Row, Sqlite, SqliteConnection};
+use sqlx::SqliteConnection;
 
 use super::alerts::write_silence;
-use super::const_format;
 use crate::SqliteStore;
-use crate::convert::{backend, encode_json, encode_time, outbox_item};
+use crate::convert::{backend, decode_all, encode_json, encode_time};
 
 pub(super) async fn enqueue_effects(
     store: &SqliteStore,
@@ -34,26 +33,35 @@ pub(super) async fn claim_outbox(
 ) -> Result<Vec<OutboxItem>, StoreError> {
     let mut tx = store.write().await?;
 
-    let mut selector = QueryBuilder::<Sqlite>::new(
-        "SELECT id FROM outbox WHERE claimed_at IS NULL AND not_before <= ",
-    );
-    selector.push_bind(encode_time(now));
-
-    if let Some(lane) = request.lane {
-        selector.push(" AND lane % ");
-        selector.push_bind(i64::from(lane.of));
-        selector.push(" = ");
-        selector.push_bind(i64::from(lane.index));
+    // The write transaction is `BEGIN IMMEDIATE`, so this read and the claim below cannot
+    // interleave with another worker's. Two statements rather than one with an optional lane,
+    // so neither carries a predicate that is true of every row.
+    let limit = i64::from(request.limit);
+    let ids: Vec<i64> = match request.lane {
+        Some(lane) => {
+            sqlx::query_scalar!(
+                "SELECT id FROM outbox WHERE claimed_at IS NULL AND not_before <= ?1 \
+                 AND lane % ?2 = ?3 ORDER BY not_before, id LIMIT ?4",
+                encode_time(now),
+                i64::from(lane.of),
+                i64::from(lane.index),
+                limit,
+            )
+            .fetch_all(&mut *tx)
+            .await
+        }
+        None => {
+            sqlx::query_scalar!(
+                "SELECT id FROM outbox WHERE claimed_at IS NULL AND not_before <= ?1 \
+                 ORDER BY not_before, id LIMIT ?2",
+                encode_time(now),
+                limit,
+            )
+            .fetch_all(&mut *tx)
+            .await
+        }
     }
-
-    selector.push(" ORDER BY not_before, id LIMIT ");
-    selector.push_bind(i64::from(request.limit));
-
-    let ids: Vec<i64> = selector
-        .build_query_scalar()
-        .fetch_all(&mut *tx)
-        .await
-        .map_err(backend)?;
+    .map_err(backend)?;
 
     if ids.is_empty() {
         tx.commit().await.map_err(backend)?;
@@ -62,27 +70,26 @@ pub(super) async fn claim_outbox(
 
     // The attempt counter moves on the claim rather than on the failure, so an item that
     // kills its worker before it can report anything still runs out of attempts.
-    let mut claimer = QueryBuilder::<Sqlite>::new("UPDATE outbox SET claimed_by = ");
-    claimer.push_bind(worker.as_str().to_owned());
-    claimer.push(", claimed_at = ");
-    claimer.push_bind(encode_time(now));
-    claimer.push(", attempts = attempts + 1 WHERE id IN ");
-    push_id_list(&mut claimer, &ids);
-    claimer.build().execute(&mut *tx).await.map_err(backend)?;
+    sqlx::query!(
+        "UPDATE outbox SET claimed_by = ?1, claimed_at = ?2, attempts = attempts + 1 \
+         WHERE id IN (SELECT value FROM json_each(?3))",
+        worker.as_str(),
+        encode_time(now),
+        encode_json(&ids),
+    )
+    .execute(&mut *tx)
+    .await
+    .map_err(backend)?;
 
-    let mut reader = QueryBuilder::<Sqlite>::new(const_format(&[
-        "SELECT ",
-        OUTBOX_COLUMNS,
-        " FROM outbox WHERE id IN ",
-    ]));
-    push_id_list(&mut reader, &ids);
-    reader.push(" ORDER BY not_before, id");
-
-    let rows = reader.build().fetch_all(&mut *tx).await.map_err(backend)?;
-    let items = rows
-        .iter()
-        .map(outbox_item)
-        .collect::<Result<Vec<_>, _>>()?;
+    let items = decode_all(
+        select_outbox!(
+            "WHERE id IN (SELECT value FROM json_each(?1)) ORDER BY not_before, id",
+            encode_json(&ids)
+        )
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(backend)?,
+    )?;
 
     tx.commit().await.map_err(backend)?;
 
@@ -123,18 +130,19 @@ pub(super) async fn complete_outbox(
             .await?;
         }
         (Effect::ExpireSilence { am_id }, _) => {
-            sqlx::query("UPDATE silences SET state = 'expired', synced_at = ? WHERE am_id = ?")
-                .bind(encode_time(now))
-                .bind(am_id.clone())
-                .execute(&mut *tx)
-                .await
-                .map_err(backend)?;
+            sqlx::query!(
+                "UPDATE silences SET state = 'expired', synced_at = ?1 WHERE am_id = ?2",
+                encode_time(now),
+                am_id,
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(backend)?;
         }
         _ => {}
     }
 
-    sqlx::query("DELETE FROM outbox WHERE id = ?")
-        .bind(id.get())
+    sqlx::query!("DELETE FROM outbox WHERE id = ?1", id.get())
         .execute(&mut *tx)
         .await
         .map_err(backend)?;
@@ -154,13 +162,13 @@ pub(super) async fn fail_outbox(
 
     match retry_at {
         Some(retry_at) => {
-            sqlx::query(
-                "UPDATE outbox SET claimed_by = NULL, claimed_at = NULL, not_before = ?, \
-                 last_error = ? WHERE id = ?",
+            sqlx::query!(
+                "UPDATE outbox SET claimed_by = NULL, claimed_at = NULL, not_before = ?1, \
+                 last_error = ?2 WHERE id = ?3",
+                encode_time(retry_at),
+                error,
+                id.get(),
             )
-            .bind(encode_time(retry_at))
-            .bind(error.to_owned())
-            .bind(id.get())
             .execute(&mut *tx)
             .await
             .map_err(backend)?;
@@ -168,8 +176,7 @@ pub(super) async fn fail_outbox(
         // Abandoned rather than parked: a row nobody will ever claim again is queue depth
         // that never drains, and the dispatcher has already logged and audited the failure.
         None => {
-            sqlx::query("DELETE FROM outbox WHERE id = ?")
-                .bind(id.get())
+            sqlx::query!("DELETE FROM outbox WHERE id = ?1", id.get())
                 .execute(&mut *tx)
                 .await
                 .map_err(backend)?;
@@ -184,12 +191,12 @@ pub(super) async fn reclaim_expired(
     older_than: DateTime<Utc>,
     now: DateTime<Utc>,
 ) -> Result<u64, StoreError> {
-    let result = sqlx::query(
-        "UPDATE outbox SET claimed_by = NULL, claimed_at = NULL, not_before = ? \
-         WHERE claimed_at IS NOT NULL AND claimed_at < ?",
+    let result = sqlx::query!(
+        "UPDATE outbox SET claimed_by = NULL, claimed_at = NULL, not_before = ?1 \
+         WHERE claimed_at IS NOT NULL AND claimed_at < ?2",
+        encode_time(now),
+        encode_time(older_than),
     )
-    .bind(encode_time(now))
-    .bind(encode_time(older_than))
     .execute(&store.pool)
     .await
     .map_err(backend)?;
@@ -198,27 +205,19 @@ pub(super) async fn reclaim_expired(
 }
 
 pub(super) async fn outbox_depth(store: &SqliteStore) -> Result<Vec<(String, u64)>, StoreError> {
-    let rows = sqlx::query(
-        "SELECT kind, count(*) AS depth FROM outbox WHERE claimed_at IS NULL GROUP BY kind \
-         ORDER BY kind",
+    let rows = sqlx::query!(
+        r#"SELECT kind, count(*) AS "depth!" FROM outbox WHERE claimed_at IS NULL GROUP BY kind
+         ORDER BY kind"#
     )
     .fetch_all(&store.pool)
     .await
     .map_err(backend)?;
 
-    rows.iter()
-        .map(|row| {
-            let kind: String = row.try_get("kind").map_err(backend)?;
-            let depth: i64 = row.try_get("depth").map_err(backend)?;
-
-            Ok((kind, u64::try_from(depth).unwrap_or(0)))
-        })
-        .collect()
+    Ok(rows
+        .into_iter()
+        .map(|row| (row.kind, u64::try_from(row.depth).unwrap_or(0)))
+        .collect())
 }
-
-/// Every column of `outbox`.
-const OUTBOX_COLUMNS: &str = "id, lane, kind, dedupe_key, payload, not_before, attempts, claimed_by, claimed_at, \
-     last_error, created_at";
 
 /// Queues one effect, folding it into a pending one for the same card where that loses nothing.
 ///
@@ -237,7 +236,6 @@ pub(super) async fn enqueue(
 ) -> Result<(), StoreError> {
     let kind = item.effect.kind();
     let payload = encode_json(&item.effect);
-    let key = item.dedupe_key.as_str().to_owned();
     let notification = item.effect.notification();
 
     // Every coalescable effect names a card, and the binding is what makes that a fact the query
@@ -245,14 +243,14 @@ pub(super) async fn enqueue(
     if item.effect.is_coalescable()
         && let Some(notification) = notification
     {
-        let folded = sqlx::query(
-            "UPDATE outbox SET payload = ?, not_before = min(not_before, ?) \
-             WHERE claimed_at IS NULL AND kind = ? AND notification_id = ?",
+        let folded = sqlx::query!(
+            "UPDATE outbox SET payload = ?1, not_before = min(not_before, ?2) \
+             WHERE claimed_at IS NULL AND kind = ?3 AND notification_id = ?4",
+            payload,
+            encode_time(item.not_before),
+            kind,
+            notification.get(),
         )
-        .bind(payload.clone())
-        .bind(encode_time(item.not_before))
-        .bind(kind)
-        .bind(notification.get())
         .execute(&mut *conn)
         .await
         .map_err(backend)?
@@ -263,18 +261,18 @@ pub(super) async fn enqueue(
         }
     }
 
-    sqlx::query(
+    sqlx::query!(
         "INSERT INTO outbox \
          (lane, kind, dedupe_key, notification_id, payload, not_before, created_at) \
-         VALUES (?, ?, ?, ?, ?, ?, ?)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        i64::from(item.dedupe_key.lane(OUTBOX_LANES)),
+        kind,
+        item.dedupe_key.as_str(),
+        notification.map(NotificationId::get),
+        payload,
+        encode_time(item.not_before),
+        encode_time(at),
     )
-    .bind(i64::from(item.dedupe_key.lane(OUTBOX_LANES)))
-    .bind(kind)
-    .bind(key.clone())
-    .bind(notification.map(NotificationId::get))
-    .bind(payload.clone())
-    .bind(encode_time(item.not_before))
-    .bind(encode_time(at))
     .execute(conn)
     .await
     .map_err(backend)?;
@@ -292,21 +290,20 @@ async fn take_claim(
     worker: &WorkerId,
     id: OutboxId,
 ) -> Result<Effect, StoreError> {
-    let row = sqlx::query("SELECT payload, claimed_by FROM outbox WHERE id = ?")
-        .bind(id.get())
-        .fetch_optional(&mut *conn)
-        .await
-        .map_err(backend)?
-        .ok_or(StoreError::LeaseLost { id })?;
+    let row = sqlx::query!(
+        "SELECT payload, claimed_by FROM outbox WHERE id = ?1",
+        id.get()
+    )
+    .fetch_optional(&mut *conn)
+    .await
+    .map_err(backend)?
+    .ok_or(StoreError::LeaseLost { id })?;
 
-    let claimed_by: Option<String> = row.try_get("claimed_by").map_err(backend)?;
-    if claimed_by.as_deref() != Some(worker.as_str()) {
+    if row.claimed_by.as_deref() != Some(worker.as_str()) {
         return Err(StoreError::LeaseLost { id });
     }
 
-    let payload: String = row.try_get("payload").map_err(backend)?;
-
-    serde_json::from_str(&payload).map_err(|error| StoreError::Decode {
+    serde_json::from_str(&row.payload).map_err(|error| StoreError::Decode {
         kind: "outbox effect",
         detail: error.to_string(),
     })
@@ -319,61 +316,32 @@ async fn apply_to_card(
     applied: &AppliedEffect,
     now: DateTime<Utc>,
 ) -> Result<(), StoreError> {
-    let mut builder = QueryBuilder::<Sqlite>::new("UPDATE notifications SET updated_at = ");
-    builder.push_bind(encode_time(now));
-
-    if let Some(message) = applied.message_id {
-        builder.push(", message_id = ");
-        builder.push_bind(message.to_db());
-    }
-    if let Some(thread) = applied.thread_id {
-        builder.push(", thread_id = ");
-        builder.push_bind(thread.to_db());
-    }
-    if let Some(hash) = applied.render_hash.as_ref() {
-        builder.push(", render_hash = ");
-        builder.push_bind(hash.clone());
-    }
-    if let Some(tags) = applied.applied_tags.as_ref() {
-        builder.push(", applied_tags = ");
-        builder.push_bind(encode_json(tags));
-    }
-    if let Some(hash) = applied.tags_hash.as_ref() {
-        builder.push(", tags_hash = ");
-        builder.push_bind(hash.clone());
-    }
-    if let Some(pinned) = applied.pinned {
-        builder.push(", pinned = ");
-        builder.push_bind(i64::from(pinned));
-    }
-    if let Some(archived) = applied.archived {
-        builder.push(", archived = ");
-        builder.push_bind(i64::from(archived));
-    }
-
-    builder.push(" WHERE id = ");
-    builder.push_bind(id.get());
-
-    let affected = builder
-        .build()
-        .execute(conn)
-        .await
-        .map_err(backend)?
-        .rows_affected();
+    // Every field the effect did not report is bound as null and kept by the `COALESCE`, so one
+    // statement writes back whichever subset an effect produced.
+    let affected = sqlx::query!(
+        "UPDATE notifications SET updated_at = ?1, \
+         message_id = COALESCE(?2, message_id), thread_id = COALESCE(?3, thread_id), \
+         render_hash = COALESCE(?4, render_hash), applied_tags = COALESCE(?5, applied_tags), \
+         tags_hash = COALESCE(?6, tags_hash), pinned = COALESCE(?7, pinned), \
+         archived = COALESCE(?8, archived) WHERE id = ?9",
+        encode_time(now),
+        applied.message_id.map(dam_store::MessageId::to_db),
+        applied.thread_id.map(dam_store::ChannelId::to_db),
+        applied.render_hash.as_deref(),
+        applied.applied_tags.as_ref().map(encode_json),
+        applied.tags_hash.as_deref(),
+        applied.pinned.map(i64::from),
+        applied.archived.map(i64::from),
+        id.get(),
+    )
+    .execute(conn)
+    .await
+    .map_err(backend)?
+    .rows_affected();
 
     if affected == 0 {
         return Err(StoreError::no_such_notification(id));
     }
 
     Ok(())
-}
-
-/// Adds a parenthesised list of surrogate keys.
-fn push_id_list(builder: &mut QueryBuilder<Sqlite>, ids: &[i64]) {
-    builder.push("(");
-    let mut list = builder.separated(", ");
-    for id in ids {
-        list.push_bind(*id);
-    }
-    builder.push(")");
 }

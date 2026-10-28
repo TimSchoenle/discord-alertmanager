@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO alerts (fingerprint, labels_hash, group_key, labels, annotations, starts_at, ends_at, generator_url, status, am_state, severity, silenced_by, inhibited_by, first_seen_at, last_seen_at, resolved_at, flap_count, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) ON CONFLICT (fingerprint) DO UPDATE SET labels_hash = excluded.labels_hash, group_key = excluded.group_key, labels = excluded.labels, annotations = excluded.annotations, starts_at = excluded.starts_at, ends_at = excluded.ends_at, generator_url = excluded.generator_url, status = excluded.status, am_state = excluded.am_state, severity = excluded.severity, silenced_by = excluded.silenced_by, inhibited_by = excluded.inhibited_by, last_seen_at = excluded.last_seen_at, resolved_at = excluded.resolved_at, flap_count = excluded.flap_count, updated_at = excluded.updated_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Jsonb",
+        "Timestamptz",
+        "Timestamptz",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Jsonb",
+        "Timestamptz",
+        "Timestamptz",
+        "Timestamptz",
+        "Int4",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e28e7ef151ffca32db723b83456e87d3ab448e22d096c4803b0a2857e274842b"
+}

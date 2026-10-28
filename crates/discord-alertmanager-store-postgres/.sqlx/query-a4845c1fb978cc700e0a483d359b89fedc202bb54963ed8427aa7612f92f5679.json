@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE notifications SET state = 'orphaned', message_id = NULL, pinned = FALSE, dedupe_key = 'orphaned:' || id || ':' || dedupe_key, updated_at = $1 WHERE id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a4845c1fb978cc700e0a483d359b89fedc202bb54963ed8427aa7612f92f5679"
+}

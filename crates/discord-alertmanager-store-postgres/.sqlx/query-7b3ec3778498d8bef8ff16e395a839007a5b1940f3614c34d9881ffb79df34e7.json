@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE acknowledgements SET revoked_at = $1 WHERE fingerprint = $2 AND revoked_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7b3ec3778498d8bef8ff16e395a839007a5b1940f3614c34d9881ffb79df34e7"
+}

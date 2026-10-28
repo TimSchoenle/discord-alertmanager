@@ -1,0 +1,7 @@
+# Read by the `query!` macros and by `sqlx-cli`. Each backend names its own variable, so one shell
+# can point both crates at their own database at once; see CONTRIBUTING.md.
+[common]
+database-url-var = "DAM_POSTGRES_URL"
+
+[macros.preferred-crates]
+date-time = "chrono"

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO acknowledgements (fingerprint, user_id, kind, note, created_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (fingerprint) WHERE revoked_at IS NULL DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "d836183881b71e3b956e86944cf34a3059815e29f3b05685439422c16d345df7"
+}

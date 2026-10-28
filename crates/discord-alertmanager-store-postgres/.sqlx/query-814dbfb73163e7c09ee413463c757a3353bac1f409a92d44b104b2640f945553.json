@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM alerts WHERE fingerprint IN (SELECT fingerprint FROM alerts WHERE status = 'resolved' AND resolved_at < $1 ORDER BY fingerprint LIMIT $2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "814dbfb73163e7c09ee413463c757a3353bac1f409a92d44b104b2640f945553"
+}

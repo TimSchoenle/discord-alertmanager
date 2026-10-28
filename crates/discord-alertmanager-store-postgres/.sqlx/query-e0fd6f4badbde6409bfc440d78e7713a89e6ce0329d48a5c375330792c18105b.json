@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"total!\" FROM alerts WHERE (cardinality($1::text[]) = 0 OR status = ANY($1)) AND (cardinality($2::text[]) = 0 OR severity = ANY($2)) AND NOT EXISTS (SELECT 1 FROM unnest($3::text[], $4::text[], $5::bool[]) AS matcher (name, value, equal) WHERE (COALESCE(alerts.labels ->> matcher.name, '') = matcher.value) <> matcher.equal) AND ($6::text IS NULL OR EXISTS (SELECT 1 FROM notifications WHERE notifications.dedupe_key = 'a:' || alerts.fingerprint AND notifications.state = $6)) ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "total!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray",
+        "TextArray",
+        "TextArray",
+        "TextArray",
+        "BoolArray",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "e0fd6f4badbde6409bfc440d78e7713a89e6ce0329d48a5c375330792c18105b"
+}

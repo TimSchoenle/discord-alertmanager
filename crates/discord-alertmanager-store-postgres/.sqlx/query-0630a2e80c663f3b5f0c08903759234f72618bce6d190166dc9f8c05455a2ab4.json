@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE routes SET enabled = FALSE WHERE source = 'config' AND enabled = TRUE AND NOT (name = ANY($1))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0630a2e80c663f3b5f0c08903759234f72618bce6d190166dc9f8c05455a2ab4"
+}

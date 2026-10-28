@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "CREATE DATABASE legacy_keys",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "3cfb48797f08555dce0f6753d3afcde6e6174e8dd6d4c43472b9104563bc072e"
+}

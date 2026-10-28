@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT 1 AS present FROM notifications WHERE id = ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "present",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "33b21597c040654df30473f5dde4fdf16503081d6f6472c26008024994bd7097"
+}

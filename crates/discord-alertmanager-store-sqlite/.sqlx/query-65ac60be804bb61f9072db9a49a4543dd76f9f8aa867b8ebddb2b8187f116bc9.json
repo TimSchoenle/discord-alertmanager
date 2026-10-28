@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO alert_events (fingerprint, kind, source, starts_at, ends_at, payload, received_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (fingerprint, kind, starts_at, \n         COALESCE(ends_at, '1970-01-01T00:00:00.000000Z')) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "65ac60be804bb61f9072db9a49a4543dd76f9f8aa867b8ebddb2b8187f116bc9"
+}

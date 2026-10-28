@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE notifications SET dedupe_key = 'superseded:' || id || ':' || dedupe_key WHERE id = ?1 AND dedupe_key = ?2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "b82f7c863e240d8f75772f4446e4347ea6787897014de18bbdeaeb5fb189936a"
+}

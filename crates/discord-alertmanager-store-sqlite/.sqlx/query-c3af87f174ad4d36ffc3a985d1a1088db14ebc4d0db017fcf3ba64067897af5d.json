@@ -1,0 +1,218 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT fingerprint AS \"fingerprint!\", labels_hash, group_key, labels, annotations, starts_at, ends_at, generator_url, status, am_state, silenced_by, inhibited_by, first_seen_at, last_seen_at, resolved_at, flap_count, updated_at FROM alerts WHERE status = 'firing' AND json_extract(labels, '$.alertname') IS NULL ORDER BY fingerprint",
+  "describe": {
+    "columns": [
+      {
+        "name": "fingerprint!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "fingerprint"
+          }
+        }
+      },
+      {
+        "name": "labels_hash",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "labels_hash"
+          }
+        }
+      },
+      {
+        "name": "group_key",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "group_key"
+          }
+        }
+      },
+      {
+        "name": "labels",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "labels"
+          }
+        }
+      },
+      {
+        "name": "annotations",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "annotations"
+          }
+        }
+      },
+      {
+        "name": "starts_at",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "starts_at"
+          }
+        }
+      },
+      {
+        "name": "ends_at",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "ends_at"
+          }
+        }
+      },
+      {
+        "name": "generator_url",
+        "ordinal": 7,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "generator_url"
+          }
+        }
+      },
+      {
+        "name": "status",
+        "ordinal": 8,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "name": "am_state",
+        "ordinal": 9,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "am_state"
+          }
+        }
+      },
+      {
+        "name": "silenced_by",
+        "ordinal": 10,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "silenced_by"
+          }
+        }
+      },
+      {
+        "name": "inhibited_by",
+        "ordinal": 11,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "inhibited_by"
+          }
+        }
+      },
+      {
+        "name": "first_seen_at",
+        "ordinal": 12,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "first_seen_at"
+          }
+        }
+      },
+      {
+        "name": "last_seen_at",
+        "ordinal": 13,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "last_seen_at"
+          }
+        }
+      },
+      {
+        "name": "resolved_at",
+        "ordinal": 14,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "resolved_at"
+          }
+        }
+      },
+      {
+        "name": "flap_count",
+        "ordinal": 15,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "flap_count"
+          }
+        }
+      },
+      {
+        "name": "updated_at",
+        "ordinal": 16,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "alerts",
+            "name": "updated_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "c3af87f174ad4d36ffc3a985d1a1088db14ebc4d0db017fcf3ba64067897af5d"
+}

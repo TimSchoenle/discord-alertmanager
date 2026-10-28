@@ -17,69 +17,68 @@ use dam_store::{
     StoreError, Subscription, SubscriptionId, TagId, UserId, WorkerId,
 };
 use serde::de::DeserializeOwned;
-use sqlx::Row;
-use sqlx::postgres::PgRow;
 
-/// Reads a JSON column.
-fn json_at<T: DeserializeOwned>(row: &PgRow, column: &'static str) -> Result<T, StoreError> {
-    let raw: serde_json::Value = row.try_get(column).map_err(backend)?;
-
+/// Decodes a JSON column.
+fn from_json<T: DeserializeOwned>(
+    raw: serde_json::Value,
+    kind: &'static str,
+) -> Result<T, StoreError> {
     serde_json::from_value(raw).map_err(|error| StoreError::Decode {
-        kind: column,
+        kind,
         detail: error.to_string(),
     })
 }
 
-/// Reads a nullable JSON column, where SQL null and a JSON null mean the same thing.
-fn json_opt_at<T: DeserializeOwned>(
-    row: &PgRow,
-    column: &'static str,
+/// Decodes a nullable JSON column, where SQL null and a JSON null mean the same thing.
+fn from_json_opt<T: DeserializeOwned>(
+    raw: Option<serde_json::Value>,
+    kind: &'static str,
 ) -> Result<Option<T>, StoreError> {
-    let raw: Option<serde_json::Value> = row.try_get(column).map_err(backend)?;
-    let Some(raw) = raw.filter(|value| !value.is_null()) else {
-        return Ok(None);
-    };
-
-    serde_json::from_value(raw).map_err(|error| StoreError::Decode {
-        kind: column,
-        detail: error.to_string(),
-    })
+    raw.filter(|value| !value.is_null())
+        .map(|raw| from_json(raw, kind))
+        .transpose()
 }
 
-/// Reads a column holding one of the domain's stored discriminants.
-fn parsed_at<T>(row: &PgRow, column: &'static str) -> Result<T, StoreError>
+/// Decodes a column holding one of the domain's stored discriminants.
+fn parsed<T>(raw: &str, kind: &'static str) -> Result<T, StoreError>
 where
     T: std::str::FromStr,
     T::Err: std::fmt::Display,
 {
-    let raw: String = row.try_get(column).map_err(backend)?;
-
     raw.parse().map_err(|error: T::Err| StoreError::Decode {
-        kind: column,
+        kind,
         detail: error.to_string(),
     })
 }
 
-/// Reads a nullable snowflake column into the newtype `wrap` produces.
-fn id_opt_at<T>(
-    row: &PgRow,
-    column: &'static str,
-    wrap: fn(i64) -> T,
-) -> Result<Option<T>, StoreError> {
-    let raw: Option<i64> = row.try_get(column).map_err(backend)?;
-
-    Ok(raw.map(wrap))
-}
-
-/// Reads a count column that the domain holds as a `u32`.
+/// Decodes a count column that the domain holds as a `u32`.
 ///
 /// A negative count is not representable and is clamped rather than refused: the column is a
 /// counter the database maintains, and failing the read of a whole card because a reply count went
 /// strange would hide the card as well as the counter.
-fn count_at(row: &PgRow, column: &'static str) -> Result<u32, StoreError> {
-    let raw: i32 = row.try_get(column).map_err(backend)?;
+fn count(raw: i32) -> u32 {
+    u32::try_from(raw).unwrap_or(0)
+}
 
-    Ok(u32::try_from(raw).unwrap_or(0))
+/// Compiles a stored matcher expression.
+fn matchers(source: &str, kind: &'static str) -> Result<MatcherSet, StoreError> {
+    MatcherSet::parse(source).map_err(|error| StoreError::Decode {
+        kind,
+        detail: error.to_string(),
+    })
+}
+
+/// Decodes a nullable severity column.
+fn severity_opt(raw: Option<&str>, kind: &'static str) -> Result<Option<Severity>, StoreError> {
+    raw.map(|value| parsed::<Severity>(value, kind)).transpose()
+}
+
+/// Decodes a fingerprint column.
+fn fingerprint(raw: String, kind: &'static str) -> Result<Fingerprint, StoreError> {
+    Fingerprint::new(raw).map_err(|error| StoreError::Decode {
+        kind,
+        detail: error.to_string(),
+    })
 }
 
 /// Maps a driver failure onto the store's vocabulary.
@@ -107,235 +106,333 @@ pub(crate) fn backend(error: sqlx::Error) -> StoreError {
     }
 }
 
-/// Builds an alert and its ledger fields from an `alerts` row.
-pub(crate) fn alert_record(row: &PgRow) -> Result<AlertRecord, StoreError> {
-    let fingerprint: String = row.try_get("fingerprint").map_err(backend)?;
-    let group_key: Option<String> = row.try_get("group_key").map_err(backend)?;
-    let labels_hash: String = row.try_get("labels_hash").map_err(backend)?;
-
-    let alert = Alert {
-        fingerprint: Fingerprint::new(fingerprint).map_err(|error| StoreError::Decode {
-            kind: "fingerprint",
-            detail: error.to_string(),
-        })?,
-        labels: json_at::<Labels>(row, "labels")?,
-        annotations: json_at::<Annotations>(row, "annotations")?,
-        starts_at: row.try_get("starts_at").map_err(backend)?,
-        ends_at: row.try_get("ends_at").map_err(backend)?,
-        generator_url: row.try_get("generator_url").map_err(backend)?,
-        status: parsed_at::<AlertStatus>(row, "status")?,
-        am_state: parsed_at::<AmState>(row, "am_state")?,
-        silenced_by: json_at(row, "silenced_by")?,
-        inhibited_by: json_at(row, "inhibited_by")?,
-        group_key: group_key.map(GroupKey::new),
-    };
-
-    Ok(AlertRecord {
-        alert,
-        labels_hash: LabelsHash::from_stored(labels_hash),
-        first_seen_at: row.try_get("first_seen_at").map_err(backend)?,
-        last_seen_at: row.try_get("last_seen_at").map_err(backend)?,
-        resolved_at: row.try_get("resolved_at").map_err(backend)?,
-        flap_count: count_at(row, "flap_count")?,
-        updated_at: row.try_get("updated_at").map_err(backend)?,
-    })
+/// One `alerts` row, as [`crate::store`] selects it.
+pub(crate) struct AlertRow {
+    pub(crate) fingerprint: String,
+    pub(crate) labels_hash: String,
+    pub(crate) group_key: Option<String>,
+    pub(crate) labels: serde_json::Value,
+    pub(crate) annotations: serde_json::Value,
+    pub(crate) starts_at: Timestamp,
+    pub(crate) ends_at: Option<Timestamp>,
+    pub(crate) generator_url: Option<String>,
+    pub(crate) status: String,
+    pub(crate) am_state: String,
+    pub(crate) silenced_by: serde_json::Value,
+    pub(crate) inhibited_by: serde_json::Value,
+    pub(crate) first_seen_at: Timestamp,
+    pub(crate) last_seen_at: Timestamp,
+    pub(crate) resolved_at: Option<Timestamp>,
+    pub(crate) flap_count: i32,
+    pub(crate) updated_at: Timestamp,
 }
 
-/// Builds a card from a `notifications` row.
-pub(crate) fn notification(row: &PgRow) -> Result<Notification, StoreError> {
-    let dedupe_key: String = row.try_get("dedupe_key").map_err(backend)?;
-    let route_id: i64 = row.try_get("route_id").map_err(backend)?;
-    let guild_id: i64 = row.try_get("guild_id").map_err(backend)?;
-    let channel_id: i64 = row.try_get("channel_id").map_err(backend)?;
-    let id: i64 = row.try_get("id").map_err(backend)?;
+impl TryFrom<AlertRow> for AlertRecord {
+    type Error = StoreError;
 
-    let fingerprint: String = row.try_get("fingerprint").map_err(backend)?;
+    fn try_from(row: AlertRow) -> Result<Self, StoreError> {
+        let alert = Alert {
+            fingerprint: fingerprint(row.fingerprint, "fingerprint")?,
+            labels: from_json::<Labels>(row.labels, "labels")?,
+            annotations: from_json::<Annotations>(row.annotations, "annotations")?,
+            starts_at: row.starts_at,
+            ends_at: row.ends_at,
+            generator_url: row.generator_url,
+            status: parsed::<AlertStatus>(&row.status, "status")?,
+            am_state: parsed::<AmState>(&row.am_state, "am_state")?,
+            silenced_by: from_json(row.silenced_by, "silenced_by")?,
+            inhibited_by: from_json(row.inhibited_by, "inhibited_by")?,
+            group_key: row.group_key.map(GroupKey::new),
+        };
 
-    Ok(Notification {
-        id: NotificationId::new(id),
-        dedupe_key: DedupeKey::from_stored(dedupe_key),
-        fingerprint: Fingerprint::new(fingerprint).map_err(|error| StoreError::Decode {
-            kind: "notification fingerprint",
-            detail: error.to_string(),
-        })?,
-        route_id: RouteId::new(route_id),
-        guild_id: GuildId::from_db(guild_id),
-        channel_id: ChannelId::from_db(channel_id),
-        message_id: id_opt_at(row, "message_id", MessageId::from_db)?,
-        thread_id: id_opt_at(row, "thread_id", ChannelId::from_db)?,
-        state: parsed_at::<NotificationState>(row, "state")?,
-        render_hash: row.try_get("render_hash").map_err(backend)?,
-        applied_tags: json_at(row, "applied_tags")?,
-        tags_hash: row.try_get("tags_hash").map_err(backend)?,
-        pinned: row.try_get("pinned").map_err(backend)?,
-        archived: row.try_get("archived").map_err(backend)?,
-        responded_at: row.try_get("responded_at").map_err(backend)?,
-        escalated_at: row.try_get("escalated_at").map_err(backend)?,
-        supersedes: id_opt_at(row, "supersedes", NotificationId::new)?,
-        resolved_at: row.try_get("resolved_at").map_err(backend)?,
-        reply_count: count_at(row, "reply_count")?,
-        created_at: row.try_get("created_at").map_err(backend)?,
-        updated_at: row.try_get("updated_at").map_err(backend)?,
-    })
+        Ok(Self {
+            alert,
+            labels_hash: LabelsHash::from_stored(row.labels_hash),
+            first_seen_at: row.first_seen_at,
+            last_seen_at: row.last_seen_at,
+            resolved_at: row.resolved_at,
+            flap_count: count(row.flap_count),
+            updated_at: row.updated_at,
+        })
+    }
 }
 
-/// Builds a queued effect from an `outbox` row.
-pub(crate) fn outbox_item(row: &PgRow) -> Result<OutboxItem, StoreError> {
-    let id: i64 = row.try_get("id").map_err(backend)?;
-    let lane: i32 = row.try_get("lane").map_err(backend)?;
-    let dedupe_key: String = row.try_get("dedupe_key").map_err(backend)?;
-    let claimed_by: Option<String> = row.try_get("claimed_by").map_err(backend)?;
-
-    Ok(OutboxItem {
-        id: OutboxId::new(id),
-        lane: u16::try_from(lane).unwrap_or(0),
-        effect: json_at::<Effect>(row, "payload")?,
-        dedupe_key: DedupeKey::from_stored(dedupe_key),
-        not_before: row.try_get("not_before").map_err(backend)?,
-        attempts: count_at(row, "attempts")?,
-        claimed_by: claimed_by.map(WorkerId::new),
-        claimed_at: row.try_get("claimed_at").map_err(backend)?,
-        last_error: row.try_get("last_error").map_err(backend)?,
-        created_at: row.try_get("created_at").map_err(backend)?,
-    })
+/// One `notifications` row.
+pub(crate) struct NotificationRow {
+    pub(crate) id: i64,
+    pub(crate) dedupe_key: String,
+    pub(crate) fingerprint: String,
+    pub(crate) route_id: i64,
+    pub(crate) guild_id: i64,
+    pub(crate) channel_id: i64,
+    pub(crate) message_id: Option<i64>,
+    pub(crate) thread_id: Option<i64>,
+    pub(crate) state: String,
+    pub(crate) render_hash: Option<String>,
+    pub(crate) applied_tags: serde_json::Value,
+    pub(crate) tags_hash: Option<String>,
+    pub(crate) pinned: bool,
+    pub(crate) archived: bool,
+    pub(crate) responded_at: Option<Timestamp>,
+    pub(crate) escalated_at: Option<Timestamp>,
+    pub(crate) supersedes: Option<i64>,
+    pub(crate) resolved_at: Option<Timestamp>,
+    pub(crate) reply_count: i32,
+    pub(crate) created_at: Timestamp,
+    pub(crate) updated_at: Timestamp,
 }
 
-/// Builds a route from a `routes` row, compiling its matchers.
+impl TryFrom<NotificationRow> for Notification {
+    type Error = StoreError;
+
+    fn try_from(row: NotificationRow) -> Result<Self, StoreError> {
+        Ok(Self {
+            id: NotificationId::new(row.id),
+            dedupe_key: DedupeKey::from_stored(row.dedupe_key),
+            fingerprint: fingerprint(row.fingerprint, "notification fingerprint")?,
+            route_id: RouteId::new(row.route_id),
+            guild_id: GuildId::from_db(row.guild_id),
+            channel_id: ChannelId::from_db(row.channel_id),
+            message_id: row.message_id.map(MessageId::from_db),
+            thread_id: row.thread_id.map(ChannelId::from_db),
+            state: parsed::<NotificationState>(&row.state, "state")?,
+            render_hash: row.render_hash,
+            applied_tags: from_json(row.applied_tags, "applied_tags")?,
+            tags_hash: row.tags_hash,
+            pinned: row.pinned,
+            archived: row.archived,
+            responded_at: row.responded_at,
+            escalated_at: row.escalated_at,
+            supersedes: row.supersedes.map(NotificationId::new),
+            resolved_at: row.resolved_at,
+            reply_count: count(row.reply_count),
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        })
+    }
+}
+
+/// One `outbox` row.
+pub(crate) struct OutboxRow {
+    pub(crate) id: i64,
+    pub(crate) lane: i32,
+    pub(crate) dedupe_key: String,
+    pub(crate) payload: serde_json::Value,
+    pub(crate) not_before: Timestamp,
+    pub(crate) attempts: i32,
+    pub(crate) claimed_by: Option<String>,
+    pub(crate) claimed_at: Option<Timestamp>,
+    pub(crate) last_error: Option<String>,
+    pub(crate) created_at: Timestamp,
+}
+
+impl TryFrom<OutboxRow> for OutboxItem {
+    type Error = StoreError;
+
+    fn try_from(row: OutboxRow) -> Result<Self, StoreError> {
+        Ok(Self {
+            id: OutboxId::new(row.id),
+            lane: u16::try_from(row.lane).unwrap_or(0),
+            effect: from_json::<Effect>(row.payload, "payload")?,
+            dedupe_key: DedupeKey::from_stored(row.dedupe_key),
+            not_before: row.not_before,
+            attempts: count(row.attempts),
+            claimed_by: row.claimed_by.map(WorkerId::new),
+            claimed_at: row.claimed_at,
+            last_error: row.last_error,
+            created_at: row.created_at,
+        })
+    }
+}
+
+/// One `routes` row.
+pub(crate) struct RouteRow {
+    pub(crate) id: i64,
+    pub(crate) guild_id: i64,
+    pub(crate) name: String,
+    pub(crate) matcher_source: String,
+    pub(crate) min_severity: Option<String>,
+    pub(crate) target: serde_json::Value,
+    pub(crate) group_strategy: String,
+    pub(crate) mentions: serde_json::Value,
+    pub(crate) escalation: Option<serde_json::Value>,
+    pub(crate) priority: i32,
+    pub(crate) continue_to_next: bool,
+    pub(crate) source: String,
+    pub(crate) enabled: bool,
+    pub(crate) created_by: Option<i64>,
+    pub(crate) created_at: Timestamp,
+}
+
+/// Builds a route, compiling its matchers.
 ///
 /// The compiled set is built here rather than on use: evaluating a route against an alert happens
 /// once per alert per route, and compiling a regex there would put the regex compiler on the hot
 /// path of every notification.
-pub(crate) fn route(row: &PgRow) -> Result<Route, StoreError> {
-    let id: i64 = row.try_get("id").map_err(backend)?;
-    let guild_id: i64 = row.try_get("guild_id").map_err(backend)?;
-    let matcher_source: String = row.try_get("matcher_source").map_err(backend)?;
-    let min_severity: Option<String> = row.try_get("min_severity").map_err(backend)?;
-    let priority: i32 = row.try_get("priority").map_err(backend)?;
+impl TryFrom<RouteRow> for Route {
+    type Error = StoreError;
 
-    let matchers = MatcherSet::parse(&matcher_source).map_err(|error| StoreError::Decode {
-        kind: "route matchers",
-        detail: error.to_string(),
-    })?;
-
-    let min_severity = min_severity
-        .map(|value| {
-            value
-                .parse::<Severity>()
-                .map_err(|error| StoreError::Decode {
-                    kind: "route severity",
-                    detail: error.to_string(),
-                })
+    fn try_from(row: RouteRow) -> Result<Self, StoreError> {
+        Ok(Self {
+            id: RouteId::new(row.id),
+            guild_id: GuildId::from_db(row.guild_id),
+            name: row.name,
+            matchers: matchers(&row.matcher_source, "route matchers")?,
+            matcher_source: row.matcher_source,
+            min_severity: severity_opt(row.min_severity.as_deref(), "route severity")?,
+            target: from_json::<RouteTarget>(row.target, "target")?,
+            group_strategy: parsed(&row.group_strategy, "group_strategy")?,
+            mentions: from_json::<Mentions>(row.mentions, "mentions")?,
+            escalation: from_json_opt(row.escalation, "escalation")?,
+            priority: row.priority,
+            continue_to_next: row.continue_to_next,
+            source: parsed::<RouteSource>(&row.source, "source")?,
+            enabled: row.enabled,
+            created_by: row.created_by.map(UserId::from_db),
+            created_at: row.created_at,
         })
-        .transpose()?;
-
-    Ok(Route {
-        id: RouteId::new(id),
-        guild_id: GuildId::from_db(guild_id),
-        name: row.try_get("name").map_err(backend)?,
-        matcher_source,
-        matchers,
-        min_severity,
-        target: json_at::<RouteTarget>(row, "target")?,
-        group_strategy: parsed_at(row, "group_strategy")?,
-        mentions: json_at::<Mentions>(row, "mentions")?,
-        escalation: json_opt_at::<dam_store::Escalation>(row, "escalation")?,
-        priority,
-        continue_to_next: row.try_get("continue_to_next").map_err(backend)?,
-        source: parsed_at::<RouteSource>(row, "source")?,
-        enabled: row.try_get("enabled").map_err(backend)?,
-        created_by: id_opt_at(row, "created_by", UserId::from_db)?,
-        created_at: row.try_get("created_at").map_err(backend)?,
-    })
+    }
 }
 
-/// Builds an ignore rule from an `ignore_rules` row, compiling its matchers.
-pub(crate) fn ignore_rule(row: &PgRow) -> Result<IgnoreRule, StoreError> {
-    let id: i64 = row.try_get("id").map_err(backend)?;
-    let guild_id: i64 = row.try_get("guild_id").map_err(backend)?;
-    let created_by: i64 = row.try_get("created_by").map_err(backend)?;
-    let matcher_source: String = row.try_get("matcher_source").map_err(backend)?;
-
-    let matchers = MatcherSet::parse(&matcher_source).map_err(|error| StoreError::Decode {
-        kind: "ignore matchers",
-        detail: error.to_string(),
-    })?;
-
-    Ok(IgnoreRule {
-        id: IgnoreId::new(id),
-        scope: parsed_at::<IgnoreScope>(row, "scope")?,
-        guild_id: GuildId::from_db(guild_id),
-        channel_id: id_opt_at(row, "channel_id", ChannelId::from_db)?,
-        matcher_source,
-        matchers,
-        reason: row.try_get("reason").map_err(backend)?,
-        created_by: UserId::from_db(created_by),
-        created_at: row.try_get("created_at").map_err(backend)?,
-        expires_at: row.try_get("expires_at").map_err(backend)?,
-        revoked_at: row.try_get("revoked_at").map_err(backend)?,
-    })
+/// One `ignore_rules` row.
+pub(crate) struct IgnoreRow {
+    pub(crate) id: i64,
+    pub(crate) scope: String,
+    pub(crate) guild_id: i64,
+    pub(crate) channel_id: Option<i64>,
+    pub(crate) matcher_source: String,
+    pub(crate) reason: String,
+    pub(crate) created_by: i64,
+    pub(crate) created_at: Timestamp,
+    pub(crate) expires_at: Option<Timestamp>,
+    pub(crate) revoked_at: Option<Timestamp>,
 }
 
-/// Builds a silence link from a `silences` row.
-pub(crate) fn silence_link(row: &PgRow) -> Result<SilenceLink, StoreError> {
-    Ok(SilenceLink {
-        am_id: row.try_get("am_id").map_err(backend)?,
-        matchers: row.try_get("matchers").map_err(backend)?,
-        starts_at: row.try_get("starts_at").map_err(backend)?,
-        ends_at: row.try_get("ends_at").map_err(backend)?,
-        created_by: row.try_get("created_by").map_err(backend)?,
-        discord_user_id: id_opt_at(row, "discord_user_id", UserId::from_db)?,
-        origin_message: row.try_get("origin_message").map_err(backend)?,
-        comment: row.try_get("comment").map_err(backend)?,
-        state: parsed_at::<SilenceLifecycle>(row, "state")?,
-        synced_at: row.try_get("synced_at").map_err(backend)?,
-    })
-}
+impl TryFrom<IgnoreRow> for IgnoreRule {
+    type Error = StoreError;
 
-/// Builds a cached forum tag from a `forum_tags` row.
-pub(crate) fn forum_tag(row: &PgRow) -> Result<ForumTag, StoreError> {
-    let channel_id: i64 = row.try_get("channel_id").map_err(backend)?;
-    let tag_id: i64 = row.try_get("tag_id").map_err(backend)?;
-
-    Ok(ForumTag {
-        channel_id: ChannelId::from_db(channel_id),
-        name: row.try_get("tag_name").map_err(backend)?,
-        id: TagId::from_db(tag_id),
-        moderated: row.try_get("moderated").map_err(backend)?,
-        synced_at: row.try_get("synced_at").map_err(backend)?,
-    })
-}
-
-/// Builds a subscription from a `subscriptions` row, compiling its matchers.
-pub(crate) fn subscription(row: &PgRow) -> Result<Subscription, StoreError> {
-    let id: i64 = row.try_get("id").map_err(backend)?;
-    let user_id: i64 = row.try_get("user_id").map_err(backend)?;
-    let matcher_source: String = row.try_get("matcher_source").map_err(backend)?;
-    let min_severity: Option<String> = row.try_get("min_severity").map_err(backend)?;
-
-    let matchers = MatcherSet::parse(&matcher_source).map_err(|error| StoreError::Decode {
-        kind: "subscription matchers",
-        detail: error.to_string(),
-    })?;
-
-    let min_severity = min_severity
-        .map(|value| {
-            value
-                .parse::<Severity>()
-                .map_err(|error| StoreError::Decode {
-                    kind: "subscription severity",
-                    detail: error.to_string(),
-                })
+    fn try_from(row: IgnoreRow) -> Result<Self, StoreError> {
+        Ok(Self {
+            id: IgnoreId::new(row.id),
+            scope: parsed::<IgnoreScope>(&row.scope, "scope")?,
+            guild_id: GuildId::from_db(row.guild_id),
+            channel_id: row.channel_id.map(ChannelId::from_db),
+            matchers: matchers(&row.matcher_source, "ignore matchers")?,
+            matcher_source: row.matcher_source,
+            reason: row.reason,
+            created_by: UserId::from_db(row.created_by),
+            created_at: row.created_at,
+            expires_at: row.expires_at,
+            revoked_at: row.revoked_at,
         })
-        .transpose()?;
+    }
+}
 
-    Ok(Subscription {
-        id: SubscriptionId::new(id),
-        user_id: UserId::from_db(user_id),
-        matcher_source,
-        matchers,
-        min_severity,
-        created_at: row.try_get("created_at").map_err(backend)?,
-    })
+/// One `silences` row.
+pub(crate) struct SilenceRow {
+    pub(crate) am_id: String,
+    pub(crate) matchers: String,
+    pub(crate) starts_at: Timestamp,
+    pub(crate) ends_at: Timestamp,
+    pub(crate) created_by: String,
+    pub(crate) discord_user_id: Option<i64>,
+    pub(crate) origin_message: Option<String>,
+    pub(crate) comment: String,
+    pub(crate) state: String,
+    pub(crate) synced_at: Timestamp,
+}
+
+impl TryFrom<SilenceRow> for SilenceLink {
+    type Error = StoreError;
+
+    fn try_from(row: SilenceRow) -> Result<Self, StoreError> {
+        Ok(Self {
+            am_id: row.am_id,
+            matchers: row.matchers,
+            starts_at: row.starts_at,
+            ends_at: row.ends_at,
+            created_by: row.created_by,
+            discord_user_id: row.discord_user_id.map(UserId::from_db),
+            origin_message: row.origin_message,
+            comment: row.comment,
+            state: parsed::<SilenceLifecycle>(&row.state, "state")?,
+            synced_at: row.synced_at,
+        })
+    }
+}
+
+/// One `forum_tags` row.
+pub(crate) struct ForumTagRow {
+    pub(crate) channel_id: i64,
+    pub(crate) tag_name: String,
+    pub(crate) tag_id: i64,
+    pub(crate) moderated: bool,
+    pub(crate) synced_at: Timestamp,
+}
+
+impl From<ForumTagRow> for ForumTag {
+    fn from(row: ForumTagRow) -> Self {
+        Self {
+            channel_id: ChannelId::from_db(row.channel_id),
+            name: row.tag_name,
+            id: TagId::from_db(row.tag_id),
+            moderated: row.moderated,
+            synced_at: row.synced_at,
+        }
+    }
+}
+
+/// One `subscriptions` row.
+pub(crate) struct SubscriptionRow {
+    pub(crate) id: i64,
+    pub(crate) user_id: i64,
+    pub(crate) matcher_source: String,
+    pub(crate) min_severity: Option<String>,
+    pub(crate) created_at: Timestamp,
+}
+
+impl TryFrom<SubscriptionRow> for Subscription {
+    type Error = StoreError;
+
+    fn try_from(row: SubscriptionRow) -> Result<Self, StoreError> {
+        Ok(Self {
+            id: SubscriptionId::new(row.id),
+            user_id: UserId::from_db(row.user_id),
+            matchers: matchers(&row.matcher_source, "subscription matchers")?,
+            matcher_source: row.matcher_source,
+            min_severity: severity_opt(row.min_severity.as_deref(), "subscription severity")?,
+            created_at: row.created_at,
+        })
+    }
+}
+
+/// The live acknowledgement on one alert, from an `acknowledgements` row.
+pub(crate) struct AckRow {
+    pub(crate) user_id: i64,
+    pub(crate) kind: String,
+    pub(crate) note: Option<String>,
+    pub(crate) created_at: Timestamp,
+}
+
+impl TryFrom<AckRow> for Acknowledgement {
+    type Error = StoreError;
+
+    fn try_from(row: AckRow) -> Result<Self, StoreError> {
+        Ok(Self {
+            user_id: UserId::from_db(row.user_id),
+            kind: parsed::<AckKind>(&row.kind, "kind")?,
+            note: row.note,
+            at: row.created_at,
+        })
+    }
+}
+
+/// Converts every row of a result set, stopping at the first that does not decode.
+pub(crate) fn decode_all<R, T>(rows: Vec<R>) -> Result<Vec<T>, StoreError>
+where
+    T: TryFrom<R, Error = StoreError>,
+{
+    rows.into_iter().map(T::try_from).collect()
 }
 
 /// Renders a value as the JSON document a column holds.
@@ -349,15 +446,3 @@ pub(crate) fn json<T: serde::Serialize>(value: &T) -> serde_json::Value {
 
 /// The timestamp type this dialect binds, named so the store reads the same as its counterpart.
 pub(crate) type Timestamp = DateTime<Utc>;
-
-/// Builds the live acknowledgement from an `acknowledgements` row.
-pub(crate) fn acknowledgement(row: &PgRow) -> Result<Acknowledgement, StoreError> {
-    let user_id: i64 = row.try_get("user_id").map_err(backend)?;
-
-    Ok(Acknowledgement {
-        user_id: UserId::from_db(user_id),
-        kind: parsed_at::<AckKind>(row, "kind")?,
-        note: row.try_get("note").map_err(backend)?,
-        at: row.try_get("created_at").map_err(backend)?,
-    })
-}

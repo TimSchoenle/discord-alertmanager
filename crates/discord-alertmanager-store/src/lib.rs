@@ -53,7 +53,7 @@ pub use ids::{
     Snowflake, SubscriptionId, TagId, UserId, WorkerId,
 };
 pub use logic::{
-    IN_MEMORY_SCAN_LIMIT, Transition, carry_over, classify, matches_regex_matchers,
+    IN_MEMORY_SCAN_LIMIT, SqlAlertFilter, Transition, carry_over, classify, matches_regex_matchers,
     needs_in_memory_filter, severities_at_or_above, suppression_map,
 };
 pub use notifications::{

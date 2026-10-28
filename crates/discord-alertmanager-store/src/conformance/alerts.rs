@@ -1,13 +1,16 @@
 //! Cases for ingest, alert queries and silence sync.
 
-use dam_core::{AlertStatus, AmState, EventKind, EventSource, Fingerprint, MatchOp};
+use dam_core::{
+    AlertStatus, AmState, DedupeKey, EventKind, EventSource, Fingerprint, MatchOp,
+    NotificationState,
+};
 
 use crate::alerts::{AlertQuery, IngestBatch, QueryMatcher, SilenceLifecycle, SilenceState};
-use crate::ids::UserId;
+use crate::ids::{MessageId, UserId};
 use crate::logic::suppression_map;
 use crate::{SilenceLink, Store};
 
-use super::{alert, at, ingest, labels};
+use super::{alert, at, card_for, ingest, labels, record_post, route_for};
 
 pub(super) async fn ingest_records_what_changed(store: &dyn Store) {
     let outcome = ingest(
@@ -460,4 +463,41 @@ pub(super) async fn the_reconciler_finds_what_alertmanager_dropped(store: &dyn S
         !missing.iter().any(|record| *record.fingerprint() == kept),
         "an alert Alertmanager still reports is not missing"
     );
+}
+
+/// Runs after [`queries_filter_paginate_and_match`], whose `bbbb000x` alerts it filters.
+///
+/// Only an alert whose per-alert card is in the state asked for passes, and an alert with no card
+/// at all never does.
+pub(super) async fn a_query_on_card_state_joins_the_cards(store: &dyn Store) {
+    let fingerprint = Fingerprint::new("bbbb0000").expect("the fingerprint is hexadecimal");
+    let key = DedupeKey::per_alert(&fingerprint);
+    let route = route_for(store, "queries", 4_242).await;
+    card_for(store, route, 4_242, &key).await;
+    record_post(store, "query-worker", &key, MessageId::new(424_242)).await;
+
+    for (state, expected) in [
+        (NotificationState::Firing, 1),
+        (NotificationState::Acked, 0),
+    ] {
+        let by_card = store
+            .query_alerts(&AlertQuery {
+                statuses: vec![AlertStatus::Firing],
+                matchers: vec![QueryMatcher {
+                    name: "namespace".to_owned(),
+                    op: MatchOp::Equal,
+                    value: "queries".to_owned(),
+                }],
+                notification_state: Some(state),
+                limit: 10,
+                ..AlertQuery::default()
+            })
+            .await
+            .expect("the query succeeds");
+
+        assert_eq!(
+            by_card.total, expected,
+            "only the alert whose card is {state} passes a filter on {state} cards"
+        );
+    }
 }

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO outbox (lane, kind, dedupe_key, notification_id, payload, not_before, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "17d7257c1d0f2d21e2b282efeb8a9162aa10a58aa742e2e310eb5f62cc9ed32d"
+}

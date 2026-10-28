@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE notifications SET state = 'orphaned', message_id = NULL, pinned = 0, dedupe_key = 'orphaned:' || id || ':' || dedupe_key, updated_at = ?1 WHERE id = ?2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "cffacc3402711bf16d88e9a22a9e66b29e19c76919ae09fab73301a90efa61e1"
+}

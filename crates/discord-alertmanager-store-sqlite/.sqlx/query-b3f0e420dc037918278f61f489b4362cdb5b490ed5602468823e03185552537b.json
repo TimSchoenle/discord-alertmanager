@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM notifications WHERE id IN (SELECT id FROM notifications WHERE state = 'resolved' AND updated_at < ?1 ORDER BY id LIMIT ?2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "b3f0e420dc037918278f61f489b4362cdb5b490ed5602468823e03185552537b"
+}
