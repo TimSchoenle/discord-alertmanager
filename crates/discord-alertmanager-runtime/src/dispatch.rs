@@ -109,6 +109,11 @@ impl Dispatcher {
     }
 
     /// Claims and runs work until the token is cancelled.
+    ///
+    /// # Panics
+    ///
+    /// Panics if polled outside a Tokio runtime with the time driver enabled, once the queue
+    /// is empty and the loop waits before claiming again.
     pub async fn run(self, shutdown: CancellationToken) {
         info!(worker = %self.worker, "dispatcher started");
 
