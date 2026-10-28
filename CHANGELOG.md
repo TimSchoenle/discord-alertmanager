@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.9.3](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.9.2...v0.9.3) (2026-10-28)
+
+
+### Bug Fixes
+
+* **deps:** document why three rustls advisories do not apply ([#196](https://github.com/TimSchoenle/discord-alertmanager/issues/196)) ([6733c75](https://github.com/TimSchoenle/discord-alertmanager/commit/6733c7546e65aad005dcc376afd910021871f2df))
+* **forum:** apply the policy keys the forum route documents ([#202](https://github.com/TimSchoenle/discord-alertmanager/issues/202)) ([100c089](https://github.com/TimSchoenle/discord-alertmanager/commit/100c089b0da7bc5f1dc9d037a1d76ca48cfb64c9))
+
+
+### Code Refactoring
+
+* move the running pipeline into a dam-runtime crate ([#195](https://github.com/TimSchoenle/discord-alertmanager/issues/195)) ([c94b243](https://github.com/TimSchoenle/discord-alertmanager/commit/c94b243a4f501e032081679e2ac663da7a4e885f))
+* **store:** check every query at compile time ([#204](https://github.com/TimSchoenle/discord-alertmanager/issues/204)) ([1e6afac](https://github.com/TimSchoenle/discord-alertmanager/commit/1e6afac7a96a66b542b0a7064504e82daff6bc05))
+* **store:** split each backend and the conformance suite by concern ([#197](https://github.com/TimSchoenle/discord-alertmanager/issues/197)) ([453e620](https://github.com/TimSchoenle/discord-alertmanager/commit/453e6204af3ded9a5d388d171313c7fc31e3acf9))
+
+
+### Dependencies
+
+* **deps:** update getsentry/sentry-cli docker tag to v3.8.2 ([#187](https://github.com/TimSchoenle/discord-alertmanager/issues/187)) ([9151851](https://github.com/TimSchoenle/discord-alertmanager/commit/9151851d62be3c39e610c8eb56d915c83ee758a5))
+* **deps:** update rust crate minijinja to v3.0.2 ([#188](https://github.com/TimSchoenle/discord-alertmanager/issues/188)) ([f94a2a3](https://github.com/TimSchoenle/discord-alertmanager/commit/f94a2a38bd95876aefa7fc796714fbad94bb4350))
+* **deps:** update rust crate terrace-config to v0.17.0 ([#189](https://github.com/TimSchoenle/discord-alertmanager/issues/189)) ([9a48e19](https://github.com/TimSchoenle/discord-alertmanager/commit/9a48e1978f4e277409cf4a57d8b4b3d14e5dc105))
+* **deps:** update rust crate tokio to v1.54.1 ([#191](https://github.com/TimSchoenle/discord-alertmanager/issues/191)) ([5c3a20c](https://github.com/TimSchoenle/discord-alertmanager/commit/5c3a20ce57ac4e01cf5bae2c77cfb1b5d85c9b3d))
+
 ## [0.9.2](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.9.1...v0.9.2) (2026-10-22)
 
 
