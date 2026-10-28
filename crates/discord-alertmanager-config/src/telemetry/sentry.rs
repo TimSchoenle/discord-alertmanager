@@ -89,10 +89,11 @@ pub struct Sentry {
     #[cfg_attr(feature = "config-schema", config(values))]
     pub span_level: CaptureLevel,
 
-    /// Whether every event carries a stack trace, not only a panic.
+    /// Whether captured messages carry a stack trace, as panics always do.
     ///
     /// Useful while a fault is being chased and expensive afterwards: it captures and symbolicates
-    /// a backtrace on every capture, including the ones that were only ever going to be counted.
+    /// a backtrace on every captured message, including the ones that were only ever going to be
+    /// counted.
     pub attach_stacktrace: bool,
 
     /// Whether events carry the addresses, headers and user identifiers Sentry calls default PII.

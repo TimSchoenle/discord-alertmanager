@@ -252,8 +252,9 @@ impl Effect {
 
     /// Whether a later item of this kind supersedes an earlier one *for the same card*.
     ///
-    /// A backend folds a queued item into a later one only when both are of the same kind and name
-    /// the same notification. It never folds on the dedupe key.
+    /// A backend folds a later item into an unclaimed row of the same kind for the same
+    /// notification. The row keeps its id, takes the later payload and keeps the earlier
+    /// `not_before`. It never folds on the dedupe key.
     #[must_use]
     pub fn is_coalescable(&self) -> bool {
         // Two queued edits of one card are one edit of its current state; two queued notes are two
