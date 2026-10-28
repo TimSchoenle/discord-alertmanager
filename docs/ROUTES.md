@@ -59,10 +59,11 @@ the route posts. The bot creates no tag in a forum that already holds 18, two sh
 20, so that a person can still add one. In a forum that full, `Manage Channels` changes nothing:
 create the state tags and `default_tag` by hand before the gateway connects.
 
-The policy keys left out keep their defaults. An unacknowledged post is pinned once its alert is
-critical, it is archived as soon as the alert resolves, and it is never locked, so a flap can
-reopen it without `Manage Threads`. Discord allows one pinned post per forum, so while one critical
-post holds the pin, the next one stays unpinned and the bot asks again at its next state change.
+The policy keys left out keep their defaults. An unacknowledged critical post is pinned, whether
+it is created critical or becomes so later, it is archived as soon as the alert resolves, and it
+is never locked, so a flap can reopen it without `Manage Threads`. Discord allows one pinned post
+per forum, so while one critical post holds the pin, the next one stays unpinned and the bot asks
+again at its next state change.
 
 ## Forum policy keys
 
@@ -77,7 +78,7 @@ lists `routes` as one value, so this table is where the forum keys are described
 | `severity_tags` | `true` | Whether each post gets a tag named after the alert's severity. |
 | `label_tags` | `[]` | Labels whose values become tags, at most three. Without `manage_tags`, a value is applied only when its tag exists. Use low-cardinality labels: a channel holds 20 tags. |
 | `default_tag` | empty | The tag applied when nothing else resolves, for a channel that requires one. |
-| `auto_archive_minutes` | unset | Inactivity before a resolved post archives: 60, 1440, 4320 or 10080. Unset takes `render.thread_archive_after_minutes`. |
+| `auto_archive_minutes` | unset | Inactivity before a resolved post archives: 60, 1440, 4320 or 10080. Unset takes `render.thread_archive_after_minutes`. A post whose alert is still open, including a new one, holds 10080. |
 | `archive_on_resolve` | `true` | Whether a post is archived when its alert resolves. |
 | `lock_on_resolve` | `false` | Whether a post is locked when its alert resolves. Reopening a locked post needs `Manage Threads`. |
 | `pin_min_severity` | `critical` | The lowest severity that pins an unacknowledged post. The pin is dropped on acknowledgement or resolution. |
