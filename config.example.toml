@@ -61,7 +61,7 @@
 # capture_reply_text = false
 
 [discord.capabilities]
-# Roles that may read alerts, silences and routes, and change nothing.
+# Roles that may read alerts, silences and ignores, and manage their own subscriptions.
 # Type: Vec<String>
 # Also from: DAM_DISCORD__CAPABILITIES__VIEW, DAM_DISCORD__CAPABILITIES__VIEW_FILE=/path/to/file,
 #   discord__capabilities__view in the secrets directory

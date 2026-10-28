@@ -105,7 +105,7 @@
               "default": [
                 "@everyone"
               ],
-              "description": "Roles that may read alerts, silences and routes, and change nothing.",
+              "description": "Roles that may read alerts, silences and ignores, and manage their own subscriptions.",
               "items": {
                 "type": "string"
               },
