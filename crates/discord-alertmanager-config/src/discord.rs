@@ -50,7 +50,7 @@ pub struct Discord {
 )]
 #[serde(default, deny_unknown_fields)]
 pub struct Capabilities {
-    /// Roles that may read alerts, silences and routes, and change nothing.
+    /// Roles that may read alerts, silences and ignores, and manage their own subscriptions.
     pub view: Vec<String>,
 
     /// Roles that may acknowledge, assign, and add or remove bot-local ignores.

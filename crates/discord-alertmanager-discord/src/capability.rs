@@ -20,7 +20,9 @@ use dam_store::RoleId;
 /// not have to be listed in four places to be able to press a button.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Capability {
-    /// Reading alerts, silences and routes, with no change to any of them.
+    /// Reading alerts, silences and ignores, and managing one's own subscriptions.
+    ///
+    /// Routes are not readable at this level: `/route` needs [`Self::Admin`] for every subcommand.
     View,
 
     /// Acknowledging, assigning, and adding or removing bot-local ignores.

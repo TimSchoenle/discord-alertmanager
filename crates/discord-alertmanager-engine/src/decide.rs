@@ -417,31 +417,8 @@ fn update_for(
             now,
         ));
 
-        if let RouteTarget::Forum { policy, .. } = &route.target
-            && policy.archive_on_resolve
-        {
-            effects.push(NewOutboxItem {
-                effect: Effect::SetFlags {
-                    notification: card.id,
-                    archived: true,
-                    locked: policy.lock_on_resolve,
-                    // The route's own window rather than a week: the incident is over, and a
-                    // resolved post that lingers at the top of the index buries the ones that
-                    // are not.
-                    auto_archive_minutes: auto_archive_minutes(
-                        route,
-                        NotificationState::Resolved,
-                        settings,
-                    ),
-                },
-                dedupe_key: card.dedupe_key.clone(),
-                // Behind the edit's debounce, and queued after it, so that the claim order —
-                // `not_before` then insertion — re-renders the card before the post is sealed.
-                // Archiving first left the edit fighting the archive it had just caused: a locked
-                // post refuses the edit outright and the card keeps saying "firing" for good,
-                // while an unlocked one is reopened to carry it and stops being archived at all.
-                not_before: now + settings.debounce,
-            });
+        if let RouteTarget::Forum { policy, .. } = &route.target {
+            effects.extend(resolved_post_flags(route, policy, card, settings, now));
         }
     }
 
@@ -450,6 +427,47 @@ fn update_for(
         fingerprint: shown.fingerprint.clone(),
         state,
         effects,
+    })
+}
+
+/// The archive, lock and window a forum post takes when its alert resolves.
+///
+/// A post archived on resolve is sealed with the route's window. One left open still drops from
+/// the week it held while firing to that window, or it would sit at the top of the index for a
+/// week; an archived card needs nothing, as reopening it above already set that window.
+fn resolved_post_flags(
+    route: &Route,
+    policy: &ForumPolicy,
+    card: &Notification,
+    settings: &DecisionSettings,
+    now: DateTime<Utc>,
+) -> Option<NewOutboxItem> {
+    if !policy.archive_on_resolve && card.archived {
+        return None;
+    }
+
+    Some(NewOutboxItem {
+        effect: Effect::SetFlags {
+            notification: card.id,
+            archived: policy.archive_on_resolve,
+            // A lock comes only with the archive: a re-fire reopens an archived post, which is
+            // what lifts the lock, while one left open would stay locked against its edits.
+            locked: policy.archive_on_resolve && policy.lock_on_resolve,
+            // The route's own window rather than a week: the incident is over, and a resolved
+            // post that lingers at the top of the index buries the ones that are not.
+            auto_archive_minutes: auto_archive_minutes(
+                route,
+                NotificationState::Resolved,
+                settings,
+            ),
+        },
+        dedupe_key: card.dedupe_key.clone(),
+        // Behind the edit's debounce, and queued after it, so that the claim order — `not_before`
+        // then insertion — re-renders the card before the post is sealed. Archiving first left
+        // the edit fighting the archive it had just caused: a locked post refuses the edit
+        // outright and the card keeps saying "firing" for good, while an unlocked one is reopened
+        // to carry it and stops being archived at all.
+        not_before: now + settings.debounce,
     })
 }
 

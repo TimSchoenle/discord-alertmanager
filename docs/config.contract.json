@@ -114,7 +114,7 @@
         "env": "DAM_DISCORD__CAPABILITIES__VIEW",
         "env_file": "DAM_DISCORD__CAPABILITIES__VIEW_FILE",
         "secrets_file": "discord__capabilities__view",
-        "docs": "Roles that may read alerts, silences and routes, and change nothing.",
+        "docs": "Roles that may read alerts, silences and ignores, and manage their own subscriptions.",
         "ty": "Vec<String>",
         "values": [],
         "constraint": {
@@ -2409,7 +2409,7 @@
                         "type": "array"
                       },
                       "lock_on_resolve": {
-                        "description": "Whether a forum post is locked when its alert resolves.\n\nA locked thread needs `MANAGE_THREADS` to reopen, and a flap has to reopen one. Without\nthat permission the notification is marked orphaned and a fresh card is posted, so leave\nthis off unless the permission is held.",
+                        "description": "Whether a forum post is locked when its alert resolves and is archived.\n\nIgnored when `archive_on_resolve` is off: a post left open has to stay editable.\nA locked thread needs `MANAGE_THREADS` to reopen, and a flap has to reopen one. Without\nthat permission the notification is marked orphaned and a fresh card is posted, so leave\nthis off unless the permission is held.",
                         "type": "boolean"
                       },
                       "manage_tags": {
@@ -2614,7 +2614,7 @@
                 "default": [
                   "@everyone"
                 ],
-                "description": "Roles that may read alerts, silences and routes, and change nothing.",
+                "description": "Roles that may read alerts, silences and ignores, and manage their own subscriptions.",
                 "items": {
                   "type": "string"
                 },
@@ -3086,7 +3086,7 @@
                       "type": "array"
                     },
                     "lock_on_resolve": {
-                      "description": "Whether a forum post is locked when its alert resolves.\n\nA locked thread needs `MANAGE_THREADS` to reopen, and a flap has to reopen one. Without\nthat permission the notification is marked orphaned and a fresh card is posted, so leave\nthis off unless the permission is held.",
+                      "description": "Whether a forum post is locked when its alert resolves and is archived.\n\nIgnored when `archive_on_resolve` is off: a post left open has to stay editable.\nA locked thread needs `MANAGE_THREADS` to reopen, and a flap has to reopen one. Without\nthat permission the notification is marked orphaned and a fresh card is posted, so leave\nthis off unless the permission is held.",
                       "type": "boolean"
                     },
                     "manage_tags": {
