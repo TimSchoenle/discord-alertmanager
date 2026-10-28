@@ -29,7 +29,10 @@ pub enum Job {
     /// The diff of the local silence rows against Alertmanager's.
     SyncSilences,
 
-    /// The return of leases held by workers that died.
+    /// The return to the queue of every claim older than three lease durations.
+    ///
+    /// Nothing checks whether the holder is alive, so a worker still running an item past that
+    /// window loses it, and another worker may apply the same effect again.
     ReclaimLeases,
 
     /// The mention of escalation targets for cards nobody has answered.
