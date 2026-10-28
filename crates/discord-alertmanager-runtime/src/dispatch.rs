@@ -785,7 +785,10 @@ where
 
 /// What to do about an effect that did not succeed.
 enum Failure {
-    /// A failure worth another attempt, after the given number of seconds.
+    /// A failure worth another attempt, after at least the given number of seconds.
+    ///
+    /// The delay is the larger of that and the backoff for the attempt count, and an item that
+    /// has already been tried [`MAX_ATTEMPTS`] times is abandoned instead.
     Retry(String, i64),
 
     /// A failure no attempt can fix, for the stated reason.
