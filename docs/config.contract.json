@@ -2115,7 +2115,7 @@
         "env": "DAM_TELEMETRY__SENTRY__ATTACH_STACKTRACE",
         "env_file": "DAM_TELEMETRY__SENTRY__ATTACH_STACKTRACE_FILE",
         "secrets_file": "telemetry__sentry__attach_stacktrace",
-        "docs": "Whether every event carries a stack trace, not only a panic.\n\nUseful while a fault is being chased and expensive afterwards: it captures and symbolicates\na backtrace on every capture, including the ones that were only ever going to be counted.",
+        "docs": "Whether captured messages carry a stack trace, as panics always do.\n\nUseful while a fault is being chased and expensive afterwards: it captures and symbolicates\na backtrace on every captured message, including the ones that were only ever going to be\ncounted.",
         "ty": "bool",
         "values": [],
         "constraint": {
@@ -3262,7 +3262,7 @@
             "properties": {
               "attach_stacktrace": {
                 "default": false,
-                "description": "Whether every event carries a stack trace, not only a panic.\n\nUseful while a fault is being chased and expensive afterwards: it captures and symbolicates\na backtrace on every capture, including the ones that were only ever going to be counted.",
+                "description": "Whether captured messages carry a stack trace, as panics always do.\n\nUseful while a fault is being chased and expensive afterwards: it captures and symbolicates\na backtrace on every captured message, including the ones that were only ever going to be\ncounted.",
                 "type": "boolean"
               },
               "breadcrumb_level": {

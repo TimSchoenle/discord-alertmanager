@@ -263,8 +263,9 @@ fn escape(value: &str) -> String {
 ///
 /// # Errors
 ///
-/// Returns the offending text when it is not a duration, or when it is zero or negative. A
-/// silence that expires the moment it is created is a request nobody meant to make.
+/// Returns a message naming the offending text when the number or the unit does not parse, and
+/// a fixed message when the duration is zero or negative. A silence that expires the moment it
+/// is created is a request nobody meant to make.
 pub(crate) fn parse_duration(raw: &str) -> Result<Duration, String> {
     let raw = raw.trim();
     let (value, unit) = raw.split_at(
