@@ -201,7 +201,7 @@ impl Renderer {
 
         let budget = self.config.description_budget.min(DESCRIPTION_LIMIT);
 
-        if text.len() > budget {
+        if discord_len(&text) > budget {
             // The marker names the command that has the rest, because a truncated description
             // without one reads as a bug in the bot rather than as a budget.
             text = truncate(&text, budget.saturating_sub(24));
@@ -494,17 +494,17 @@ pub(crate) fn mention_text(mentions: &[Mention]) -> String {
 /// status and the age survive, a twenty-first label does not. The marker says what happened, so a
 /// card that lost fields does not look like a card that never had them.
 fn budget(title: &str, description: &str, footer: &str, fields: &mut Vec<(String, String, bool)>) {
-    let fixed = title.len() + description.len() + footer.len();
+    let fixed = discord_len(title) + discord_len(description) + discord_len(footer);
     let mut total = fixed
         + fields
             .iter()
-            .map(|(k, v, _)| k.len() + v.len())
+            .map(|(k, v, _)| discord_len(k) + discord_len(v))
             .sum::<usize>();
     let mut dropped = false;
 
     while fields.len() > FIELD_COUNT_LIMIT || (total > EMBED_BUDGET && !fields.is_empty()) {
         if let Some((label, value, _)) = fields.pop() {
-            total -= label.len() + value.len();
+            total -= discord_len(&label) + discord_len(&value);
             dropped = true;
         }
     }
@@ -575,21 +575,37 @@ impl Fnv {
     }
 }
 
-/// Cuts a string to a byte budget on a character boundary, marker included.
+/// The length of a string as counted against Discord's limits, in UTF-16 code units.
 ///
-/// The marker counts against the budget rather than being added to it. Discord measures the limit
-/// on what it receives, so a truncation that lands exactly on the cap and then appends three bytes
+/// Discord states its limits in characters, which a byte count overstates for any non-ASCII text:
+/// fifty CJK characters are 150 bytes and would be cut against a hundred-character cap. UTF-16
+/// units equal code points for every character outside the astral planes and exceed them only for
+/// the rest, such as emoji, so this count never undercounts whichever of the two Discord applies.
+fn discord_len(value: &str) -> usize {
+    value.encode_utf16().count()
+}
+
+/// Cuts a string to a limit measured by [`discord_len`], on a character boundary, marker included.
+///
+/// The marker counts against the limit rather than being added to it. Discord measures the limit
+/// on what it receives, so a truncation that lands exactly on the cap and then appends the marker
 /// produces the rejected request it was meant to prevent.
 fn truncate(value: &str, limit: usize) -> String {
     const MARKER: char = '…';
 
-    if value.len() <= limit {
+    if discord_len(value) <= limit {
         return value.to_owned();
     }
 
-    let mut end = limit.saturating_sub(MARKER.len_utf8()).min(value.len());
-    while end > 0 && !value.is_char_boundary(end) {
-        end -= 1;
+    let budget = limit.saturating_sub(MARKER.len_utf16());
+    let mut used = 0;
+    let mut end = 0;
+    for (index, character) in value.char_indices() {
+        used += character.len_utf16();
+        if used > budget {
+            break;
+        }
+        end = index + character.len_utf8();
     }
 
     let mut cut = value[..end].to_owned();
@@ -727,20 +743,24 @@ mod tests {
         let description = json["description"].as_str().unwrap_or_default();
         let fields = json["fields"].as_array().map(Vec::len).unwrap_or_default();
 
-        assert!(title.len() <= TITLE_LIMIT, "title is {} bytes", title.len());
-        assert!(description.len() <= DESCRIPTION_LIMIT);
+        assert!(
+            discord_len(title) <= TITLE_LIMIT,
+            "title is {}",
+            discord_len(title)
+        );
+        assert!(discord_len(description) <= DESCRIPTION_LIMIT);
         assert!(fields <= FIELD_COUNT_LIMIT, "{fields} fields");
 
-        let total: usize = title.len()
-            + description.len()
+        let total: usize = discord_len(title)
+            + discord_len(description)
             + json["fields"]
                 .as_array()
                 .map(|fields| {
                     fields
                         .iter()
                         .map(|field| {
-                            field["name"].as_str().unwrap_or_default().len()
-                                + field["value"].as_str().unwrap_or_default().len()
+                            discord_len(field["name"].as_str().unwrap_or_default())
+                                + discord_len(field["value"].as_str().unwrap_or_default())
                         })
                         .sum::<usize>()
                 })
@@ -769,9 +789,9 @@ mod tests {
         ));
 
         assert!(
-            long.len() <= NAME_LIMIT,
-            "the marker counts against the budget, not on top of it: {} bytes",
-            long.len()
+            discord_len(&long) <= NAME_LIMIT,
+            "the marker counts against the budget, not on top of it: {}",
+            discord_len(&long)
         );
     }
 
@@ -834,6 +854,23 @@ mod tests {
 
         let title = renderer.forum_title(&card, &"x".repeat(300));
 
-        assert!(title.len() <= NAME_LIMIT, "{} bytes", title.len());
+        assert!(discord_len(&title) <= NAME_LIMIT, "{}", discord_len(&title));
+    }
+
+    #[test]
+    fn a_forum_title_counts_characters_not_bytes() {
+        let renderer = renderer();
+        let card = card(NotificationState::Firing, &[("alertname", "PodDown")]);
+        let fifty = "警".repeat(50);
+
+        assert_eq!(
+            renderer.forum_title(&card, &fifty),
+            fifty,
+            "fifty CJK characters are 150 bytes but fit Discord's hundred characters"
+        );
+
+        let cut = renderer.forum_title(&card, &"警".repeat(150));
+        assert_eq!(discord_len(&cut), NAME_LIMIT);
+        assert!(cut.ends_with('…'));
     }
 }

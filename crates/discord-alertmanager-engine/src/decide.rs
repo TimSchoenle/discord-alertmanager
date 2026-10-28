@@ -393,6 +393,10 @@ fn update_for(
         ));
     }
 
+    if let RouteTarget::Forum { .. } = &route.target {
+        effects.extend(reopened_post_window(route, card, effective, settings, now));
+    }
+
     effects.push(NewOutboxItem {
         effect: Effect::EditCard {
             notification: card.id,
@@ -467,6 +471,38 @@ fn resolved_post_flags(
         // the edit fighting the archive it had just caused: a locked post refuses the edit
         // outright and the card keeps saying "firing" for good, while an unlocked one is reopened
         // to carry it and stops being archived at all.
+        not_before: now + settings.debounce,
+    })
+}
+
+/// The window a forum post left open on resolve takes back when its alert fires again.
+///
+/// [`resolved_post_flags`] drops such a post to the route's window, and nothing else restores the
+/// week: the reopening above runs only for an archived post. Without this, a re-fired alert
+/// keeps the short window and Discord archives its post mid-incident, taking it off the active
+/// list until the next edit happens to reopen it.
+fn reopened_post_window(
+    route: &Route,
+    card: &Notification,
+    effective: NotificationState,
+    settings: &DecisionSettings,
+    now: DateTime<Utc>,
+) -> Option<NewOutboxItem> {
+    if card.archived || card.state != NotificationState::Resolved || !effective.holds_thread_open()
+    {
+        return None;
+    }
+
+    Some(NewOutboxItem {
+        effect: Effect::SetFlags {
+            notification: card.id,
+            archived: false,
+            locked: false,
+            auto_archive_minutes: auto_archive_minutes(route, effective, settings),
+        },
+        dedupe_key: card.dedupe_key.clone(),
+        // Behind the debounce, like the resolve's own flags: a re-fire inside that debounce
+        // finds the resolve's seal still queued and unapplied, and must land after it to undo it.
         not_before: now + settings.debounce,
     })
 }

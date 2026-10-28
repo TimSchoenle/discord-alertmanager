@@ -2423,7 +2423,7 @@
                         "type": "integer"
                       },
                       "pin_min_severity": {
-                        "description": "Lowest severity that pins an unacknowledged post.\n\nPinned posts are a free \"needs attention\" tray at the top of the index. The pin is dropped\non acknowledgement or resolution, and a pin that fails is a warning that never blocks the\nnotification.",
+                        "description": "Lowest severity that pins an unacknowledged post.\n\nPinned posts are a free \"needs attention\" tray at the top of the index. Checked when the\npost is created and at each state change, so a severity that rises without one waits for\nthe next. The pin is dropped on acknowledgement or resolution, and a pin that fails is a\nwarning that never blocks the notification.",
                         "enum": [
                           "info",
                           "warning",
@@ -3100,7 +3100,7 @@
                       "type": "integer"
                     },
                     "pin_min_severity": {
-                      "description": "Lowest severity that pins an unacknowledged post.\n\nPinned posts are a free \"needs attention\" tray at the top of the index. The pin is dropped\non acknowledgement or resolution, and a pin that fails is a warning that never blocks the\nnotification.",
+                      "description": "Lowest severity that pins an unacknowledged post.\n\nPinned posts are a free \"needs attention\" tray at the top of the index. Checked when the\npost is created and at each state change, so a severity that rises without one waits for\nthe next. The pin is dropped on acknowledgement or resolution, and a pin that fails is a\nwarning that never blocks the notification.",
                       "enum": [
                         "info",
                         "warning",
