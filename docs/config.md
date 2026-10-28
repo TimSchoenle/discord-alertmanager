@@ -22,7 +22,7 @@ indirection, in that order of precedence.
 | `discord.token` | `SecretString` | `DAM_DISCORD__TOKEN` | unset | secret | Bot token. Supply it through `DAM_DISCORD__TOKEN_FILE` or the secrets directory. |
 | `discord.dev_guild_id` | `u64` | `DAM_DISCORD__DEV_GUILD_ID` | unset | — | Guild to register slash commands into. Registration is global when unset. |
 | `discord.capture_reply_text` | `bool` | `DAM_DISCORD__CAPTURE_REPLY_TEXT` | `false` | — | Whether thread reply text is captured, which needs the privileged `MESSAGE_CONTENT` intent. |
-| `discord.capabilities.view` | `Vec<String>` | `DAM_DISCORD__CAPABILITIES__VIEW` | `[@everyone]` | — | Roles that may read alerts, silences and routes, and change nothing. |
+| `discord.capabilities.view` | `Vec<String>` | `DAM_DISCORD__CAPABILITIES__VIEW` | `[@everyone]` | — | Roles that may read alerts, silences and ignores, and manage their own subscriptions. |
 | `discord.capabilities.operate` | `Vec<String>` | `DAM_DISCORD__CAPABILITIES__OPERATE` | `[]` | — | Roles that may acknowledge, assign, and add or remove bot-local ignores. |
 | `discord.capabilities.silence` | `Vec<String>` | `DAM_DISCORD__CAPABILITIES__SILENCE` | `[]` | — | Roles that may create, extend and expire Alertmanager silences, which affect every receiver. |
 | `discord.capabilities.admin` | `Vec<String>` | `DAM_DISCORD__CAPABILITIES__ADMIN` | `[]` | — | Roles that may manage routes and read the effective configuration. |
