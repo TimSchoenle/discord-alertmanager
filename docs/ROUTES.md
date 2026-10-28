@@ -53,9 +53,10 @@ by hyphens.
 A post whose tags all fail to resolve gets `default_tag`, but only when the forum already has a
 tag by that name; otherwise it carries none. A forum set to require a tag rejects a post that
 carries none, so in such a forum make sure `default_tag` or the state tags exist before the route
-posts. The bot creates no tag in a forum that already holds 18, two short of Discord's 20, so that
-a person can still add one. In a full forum, `Manage Channels` changes nothing: create the state
-tags and `default_tag` by hand before the gateway connects.
+posts. The bot creates no tag once a forum already holds 18 or more of Discord's 20. Below 18 it
+adds every missing tag in one request, up to 20, so the forum can still end up full. Once the bot
+stops creating tags, `Manage Channels` changes nothing: create the state tags and `default_tag` by
+hand before the gateway connects.
 
 The policy keys left out keep their defaults. An unacknowledged post is pinned once its alert is
 critical, it is archived as soon as the alert resolves, and it is never locked, so a flap can
