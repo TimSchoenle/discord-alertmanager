@@ -44,9 +44,9 @@ pub struct Cards {
 impl Cards {
     /// Builds an assembler over the store, the current routing snapshot and the renderer.
     ///
-    /// The renderer is here for one reason: a forum post and a thread both need a name, the name
-    /// comes from the same template and fallback chain the card's title does, and computing it in
-    /// two places is how the two drift apart.
+    /// The renderer is here for one reason: a forum post and a thread both need a name, a forum
+    /// post's comes from its route's title template with the thread name as the fallback, and
+    /// computing either in two places is how they drift apart.
     pub fn new(
         store: Arc<dyn Store>,
         routing: Arc<SharedRouting>,
@@ -146,8 +146,13 @@ impl Cards {
                 ),
                 _ => Vec::new(),
             },
+            title: match &route.target {
+                RouteTarget::Forum { policy, .. } => {
+                    self.renderer.forum_title(&data, &policy.title_template)
+                }
+                _ => self.renderer.name(&data),
+            },
             target: route.target.clone(),
-            title: self.renderer.name(&data),
         };
 
         Ok(Some(Assembled { target, data, card }))

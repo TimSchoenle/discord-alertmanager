@@ -18,15 +18,15 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::Utc;
-use dam_core::NotificationState;
+use dam_core::{Labels, NotificationState};
 use dam_discord::Renderer;
 use dam_engine::{
-    AlertmanagerApi, DiscordSink, Mention, MessageRef, Note, PostFlags, SharedRouting,
-    SilenceRequest, SinkError,
+    AlertmanagerApi, DiscordSink, Mention, MessageRef, Note, PostFlags, RoutingSnapshot,
+    SharedRouting, SilenceRequest, SinkError, TagSpec, label_tag_names, load_snapshot,
 };
 use dam_store::{
-    AppliedEffect, ClaimRequest, Effect, LaneAssignment, MessageId, OutboxItem, SilenceEffect,
-    Store, StoreError, WorkerId,
+    AppliedEffect, ClaimRequest, Effect, ForumPolicy, LaneAssignment, MessageId, OutboxItem,
+    RouteTarget, SilenceEffect, Store, StoreError, WorkerId,
 };
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
@@ -248,20 +248,7 @@ impl Dispatcher {
                 self.open_thread(*notification, name).await
             }
             Effect::ThreadNote { notification, text } => self.note(*notification, text).await,
-            Effect::SetTags { notification, tags } => {
-                let thread = self.thread(*notification).await?;
-                reopening(self.sink.as_ref(), thread, || {
-                    self.sink.set_post_tags(thread, tags)
-                })
-                .await
-                .map(|((), reopened)| AppliedEffect {
-                    applied_tags: Some(tags.clone()),
-                    tags_hash: Some(tags_hash(tags)),
-                    archived: reopened.then_some(false),
-                    ..AppliedEffect::default()
-                })
-                .map_err(Failure::from_sink)
-            }
+            Effect::SetTags { notification, tags } => self.retag(*notification, tags).await,
             Effect::SetFlags {
                 notification,
                 archived,
@@ -328,7 +315,7 @@ impl Dispatcher {
         notification: dam_store::NotificationId,
         mention: bool,
     ) -> Result<AppliedEffect, Failure> {
-        let Some(assembled) = self.assemble(notification, mention).await? else {
+        let Some(mut assembled) = self.assemble(notification, mention).await? else {
             return Err(Failure::Drop("the card can no longer be drawn".to_owned()));
         };
 
@@ -336,6 +323,17 @@ impl Dispatcher {
             // Somebody already posted it — a redelivered effect, or a worker whose lease expired
             // after the call succeeded. Posting again would put two cards in the channel.
             return Err(Failure::Drop("the card is already posted".to_owned()));
+        }
+
+        // A label tag can only be created once an alert carries the value it is named after, so
+        // this is the first point at which it can exist. When one was created the card is
+        // assembled again, because its tag ids were resolved against the routing snapshot from
+        // before the tag existed.
+        if self.create_label_tags(&assembled).await {
+            let Some(again) = self.assemble(notification, mention).await? else {
+                return Err(Failure::Drop("the card can no longer be drawn".to_owned()));
+            };
+            assembled = again;
         }
 
         let posted = if assembled.target.target.is_forum() {
@@ -509,6 +507,107 @@ impl Dispatcher {
         Ok(applied)
     }
 
+    /// Creates the label tags a forum post needs that its channel does not have yet.
+    ///
+    /// Only for a route whose policy sets `manage_tags`. Returns whether a tag was created and the
+    /// routing snapshot rebuilt with it. Every failure is logged and ends in `false`: a missing tag
+    /// is a worse reason to lose a notification than any tag is a reason to have one, so the post
+    /// goes out with the tags that already resolve.
+    ///
+    /// Discord replaces a channel's tag list wholesale, so two workers creating tags in one channel
+    /// at once can each drop the other's new tag. If Discord refuses a post for naming a dropped
+    /// tag, the retry assembles the card again and creates the tag again.
+    async fn create_label_tags(&self, assembled: &crate::cards::Assembled) -> bool {
+        let RouteTarget::Forum { channel, policy } = &assembled.target.target else {
+            return false;
+        };
+
+        if !policy.manage_tags {
+            return false;
+        }
+
+        let missing = missing_label_tags(
+            &self.routing.load(),
+            *channel,
+            policy,
+            &assembled.data.alert.labels,
+        );
+
+        if missing.is_empty() {
+            return false;
+        }
+
+        let tags = match self.sink.ensure_forum_tags(*channel, &missing).await {
+            Ok(tags) => tags,
+            Err(error) => {
+                warn!(%error, channel = channel.get(), "cannot create a forum's label tags");
+                return false;
+            }
+        };
+
+        // Without `MANAGE_CHANNELS`, or at the tag ceiling, the sink returns the tags that were
+        // already there, and there is nothing new to resolve the card against.
+        if !missing
+            .iter()
+            .any(|spec| tags.iter().any(|tag| tag.name == spec.name))
+        {
+            return false;
+        }
+
+        if let Err(error) = self.store.sync_forum_tags(*channel, &tags).await {
+            warn!(%error, channel = channel.get(), "cannot cache forum tags");
+            return false;
+        }
+
+        match load_snapshot(self.store.as_ref(), Utc::now()).await {
+            Ok(rebuilt) => {
+                self.routing.store(rebuilt);
+                true
+            }
+            Err(error) => {
+                warn!(%error, "cannot rebuild the routing snapshot");
+                false
+            }
+        }
+    }
+
+    /// Applies a post's tags, skipping the call when the post already carries that set.
+    ///
+    /// Compared here rather than when the effect is planned. Tag changes coalesce in the queue, so
+    /// the row this worker holds is the latest desired set, and the stored hash is the set the
+    /// last completed call applied. A comparison at planning time would read the stored hash while
+    /// an older change was still queued, skip a revert to the applied set, and let the queued
+    /// change land last.
+    async fn retag(
+        &self,
+        notification: dam_store::NotificationId,
+        tags: &[dam_store::TagId],
+    ) -> Result<AppliedEffect, Failure> {
+        let card = self.card(notification).await?;
+
+        let thread = card
+            .thread_id
+            .ok_or_else(|| Failure::Drop("the card has no thread".to_owned()))?;
+
+        let hash = tags_hash(tags);
+        if !card.needs_tag_update(&hash) {
+            debug!(notification = %notification, "skipping a tag write that would change nothing");
+            return Ok(AppliedEffect::default());
+        }
+
+        reopening(self.sink.as_ref(), thread, || {
+            self.sink.set_post_tags(thread, tags)
+        })
+        .await
+        .map(|((), reopened)| AppliedEffect {
+            applied_tags: Some(tags.to_vec()),
+            tags_hash: Some(hash),
+            archived: reopened.then_some(false),
+            ..AppliedEffect::default()
+        })
+        .map_err(Failure::from_sink)
+    }
+
     /// Opens the thread a route's policy asks for.
     async fn open_thread(
         &self,
@@ -561,7 +660,16 @@ impl Dispatcher {
         notification: dam_store::NotificationId,
         pinned: bool,
     ) -> Result<AppliedEffect, Failure> {
-        let thread = self.thread(notification).await?;
+        let card = self.card(notification).await?;
+
+        let thread = card
+            .thread_id
+            .ok_or_else(|| Failure::Drop("the card has no thread".to_owned()))?;
+
+        if pinned && !self.pin_allowed(&card).await? {
+            debug!(%notification, "the route's pin limit is reached; carrying on");
+            return Ok(AppliedEffect::default());
+        }
 
         match self.sink.set_post_pinned(thread, pinned).await {
             Ok(()) => Ok(AppliedEffect {
@@ -583,6 +691,28 @@ impl Dispatcher {
         }
     }
 
+    /// Whether a card's route leaves room for one more pinned post in its channel.
+    ///
+    /// Counted from the stored flags, so two workers pinning in the same channel at once can both
+    /// see room. Discord's own limit of one pinned post per forum still holds in that case, and
+    /// its refusal is handled by the caller like any other.
+    async fn pin_allowed(&self, card: &dam_store::Notification) -> Result<bool, Failure> {
+        let snapshot = self.routing.load();
+        let Some(RouteTarget::Forum { policy, .. }) =
+            snapshot.route(card.route_id).map(|route| &route.target)
+        else {
+            return Ok(true);
+        };
+
+        let pinned = self
+            .store
+            .pinned_posts(card.channel_id)
+            .await
+            .map_err(|error| Failure::Retry(error.to_string(), 5))?;
+
+        Ok(has_pin_room(pinned, policy.max_pinned))
+    }
+
     /// Mentions a route's escalation targets about a card nobody has taken.
     ///
     /// Into the card's thread where it has one, and beside the card in its channel where it does
@@ -594,12 +724,7 @@ impl Dispatcher {
         roles: &[dam_store::RoleId],
         users: &[dam_store::UserId],
     ) -> Result<AppliedEffect, Failure> {
-        let card = self
-            .store
-            .notification(notification)
-            .await
-            .map_err(|error| Failure::Retry(error.to_string(), 5))?
-            .ok_or_else(|| Failure::Drop("the card is gone".to_owned()))?;
+        let card = self.card(notification).await?;
 
         // Somebody answered it between the sweep claiming the card and this running. The claim is
         // not given back: the alert has been seen, which is the whole thing an escalation asks
@@ -709,12 +834,7 @@ impl Dispatcher {
         &self,
         notification: dam_store::NotificationId,
     ) -> Result<MessageRef, Failure> {
-        let card = self
-            .store
-            .notification(notification)
-            .await
-            .map_err(|error| Failure::Retry(error.to_string(), 5))?
-            .ok_or_else(|| Failure::Drop("the card is gone".to_owned()))?;
+        let card = self.card(notification).await?;
 
         let message: MessageId = card
             .message_id
@@ -726,17 +846,24 @@ impl Dispatcher {
         })
     }
 
+    /// Reads a card's row, dropping the effect when the row is gone.
+    async fn card(
+        &self,
+        notification: dam_store::NotificationId,
+    ) -> Result<dam_store::Notification, Failure> {
+        self.store
+            .notification(notification)
+            .await
+            .map_err(|error| Failure::Retry(error.to_string(), 5))?
+            .ok_or_else(|| Failure::Drop("the card is gone".to_owned()))
+    }
+
     /// A card's thread, which for a forum post is the post itself.
     async fn thread(
         &self,
         notification: dam_store::NotificationId,
     ) -> Result<dam_store::ChannelId, Failure> {
-        let card = self
-            .store
-            .notification(notification)
-            .await
-            .map_err(|error| Failure::Retry(error.to_string(), 5))?
-            .ok_or_else(|| Failure::Drop("the card is gone".to_owned()))?;
+        let card = self.card(notification).await?;
 
         card.thread_id
             .ok_or_else(|| Failure::Drop("the card has no thread".to_owned()))
@@ -848,11 +975,43 @@ impl Failure {
     }
 }
 
+/// Whether a channel holding `pinned` of the bot's posts may take one more under `max_pinned`.
+///
+/// A `max_pinned` of zero turns pinning off for the route.
+fn has_pin_room(pinned: u32, max_pinned: u32) -> bool {
+    pinned < max_pinned
+}
+
+/// The label tags a forum post wants that its channel does not have, each named once.
+///
+/// Created non-moderated, so the bot can apply them as the thread's owner without
+/// `MANAGE_THREADS`.
+fn missing_label_tags(
+    snapshot: &RoutingSnapshot,
+    channel: dam_store::ChannelId,
+    policy: &ForumPolicy,
+    labels: &Labels,
+) -> Vec<TagSpec> {
+    let mut missing: Vec<TagSpec> = Vec::new();
+
+    for name in label_tag_names(policy, labels) {
+        if snapshot.tag_id(channel, &name).is_none()
+            && !missing.iter().any(|spec| spec.name == name)
+        {
+            missing.push(TagSpec {
+                name,
+                moderated: false,
+            });
+        }
+    }
+
+    missing
+}
+
 /// Hashes a tag set into the fingerprint stored as `tags_hash` when tags are written.
 ///
-/// Planning does not compare it yet, so an unchanged set still schedules `Effect::SetTags`.
-// `Notification::needs_tag_update` is the comparison that would skip such a write, and nothing
-// calls it.
+/// Order-sensitive: `desired_tags` returns a set in a fixed priority order, so the same set always
+/// hashes the same.
 fn tags_hash(tags: &[dam_store::TagId]) -> String {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
 
@@ -1100,6 +1259,108 @@ mod tests {
 
         assert_eq!(tags_hash(&tags), tags_hash(&tags.clone()));
         assert_ne!(tags_hash(&tags), tags_hash(&[dam_store::TagId::new(1)]));
+    }
+
+    /// A forum policy that names two labels as tags.
+    fn labelled_policy() -> ForumPolicy {
+        ForumPolicy {
+            title_template: "{{ labels.alertname }}".to_owned(),
+            manage_tags: true,
+            state_tags: dam_store::StateTags {
+                firing: "firing".to_owned(),
+                acked: "acked".to_owned(),
+                silenced: "silenced".to_owned(),
+                resolved: "resolved".to_owned(),
+            },
+            severity_tags: true,
+            label_tags: vec!["namespace".to_owned(), "team".to_owned()],
+            default_tag: None,
+            auto_archive_minutes: 10_080,
+            archive_on_resolve: true,
+            lock_on_resolve: false,
+            pin_min_severity: None,
+            max_pinned: 1,
+            bump_on_state_change: true,
+        }
+    }
+
+    /// Builds a label set.
+    fn labels(pairs: &[(&str, &str)]) -> Labels {
+        pairs
+            .iter()
+            .map(|(name, value)| {
+                (
+                    dam_core::LabelName::new(*name).expect("the test label name is valid"),
+                    (*value).to_owned(),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn only_label_tags_the_channel_lacks_are_created_and_each_once() {
+        let forum = ChannelId::new(200);
+        let snapshot = RoutingSnapshot::new(
+            Vec::new(),
+            Vec::new(),
+            vec![ForumTag {
+                channel_id: forum,
+                name: "payments".to_owned(),
+                id: dam_store::TagId::new(1),
+                moderated: false,
+                synced_at: Utc::now(),
+            }],
+        );
+        let mut policy = labelled_policy();
+        policy.label_tags.push("owner".to_owned());
+
+        let missing = missing_label_tags(
+            &snapshot,
+            forum,
+            &policy,
+            &labels(&[("namespace", "payments"), ("team", "sre"), ("owner", "sre")]),
+        );
+
+        assert_eq!(
+            missing,
+            vec![TagSpec {
+                name: "sre".to_owned(),
+                moderated: false,
+            }],
+            "an existing tag is not created again, and two labels sharing a value create one tag"
+        );
+    }
+
+    #[test]
+    fn a_tag_in_another_channel_does_not_count() {
+        let snapshot = RoutingSnapshot::new(
+            Vec::new(),
+            Vec::new(),
+            vec![ForumTag {
+                channel_id: ChannelId::new(300),
+                name: "payments".to_owned(),
+                id: dam_store::TagId::new(1),
+                moderated: false,
+                synced_at: Utc::now(),
+            }],
+        );
+
+        let missing = missing_label_tags(
+            &snapshot,
+            ChannelId::new(200),
+            &labelled_policy(),
+            &labels(&[("namespace", "payments")]),
+        );
+
+        assert_eq!(missing.len(), 1);
+    }
+
+    #[test]
+    fn pins_stop_at_the_route_limit_and_zero_turns_them_off() {
+        assert!(has_pin_room(0, 1));
+        assert!(!has_pin_room(1, 1));
+        assert!(has_pin_room(4, 5));
+        assert!(!has_pin_room(0, 0));
     }
 
     #[test]

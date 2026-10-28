@@ -570,7 +570,7 @@
                     "type": "string"
                   },
                   "label_tags": {
-                    "description": "Labels whose values become tags, at most three.\n\nA value is applied only when a tag with that name already exists; the bot does not create\nlabel tags. Use low-cardinality labels: a forum channel holds 20 tags and a post holds 5.",
+                    "description": "Labels whose values become tags, at most three.\n\nWith `manage_tags`, a value's tag is created the first time a post carries it; without,\na value is applied only when a tag of that name already exists. Use low-cardinality labels\nonly. A forum channel holds 20 tags and a post holds 5, and the bot refuses to create a new\ntag once the channel reaches 18, so an unbounded label exhausts the budget and later posts\nlose their tags.",
                     "items": {
                       "type": "string"
                     },
@@ -581,11 +581,11 @@
                     "type": "boolean"
                   },
                   "manage_tags": {
-                    "description": "Whether missing forum tags are created, stored but not checked yet.\n\nWhen the gateway connects, the bot creates the missing state, severity and default tags\nwhenever it holds `MANAGE_CHANNELS`, whatever this says. Created tags are non-moderated,\nso the bot can apply them as the thread's owner. Without the permission the bot applies\nthe tags that already resolve and reports the gap in `/route test`.",
+                    "description": "Whether missing forum tags are created, which needs `MANAGE_CHANNELS`.\n\nThe state, severity and default tags are created when the gateway connects, and a label\ntag the first time a post carries its value. Created tags are non-moderated, so the bot\ncan apply them as the thread's owner. Off, or without the permission, the bot applies the\ntags that already resolve and reports the gap in `/route test`; a missing tag never fails\na notification.",
                     "type": "boolean"
                   },
                   "max_pinned": {
-                    "description": "Most posts pinned at once, stored but not enforced.\n\nDiscord allows one pinned post per forum, which is the effective limit.",
+                    "description": "Most of the bot's posts pinned at once in the channel. Zero turns pinning off.\n\nDiscord allows one pinned post per forum, so a value above one has no further effect.",
                     "maximum": 4294967295,
                     "minimum": 0,
                     "type": "integer"
@@ -644,7 +644,7 @@
                     "type": "string"
                   },
                   "title_template": {
-                    "description": "Title template for a forum post, stored but not applied yet.\n\nPost titles are `[SEVERITY] alertname` followed by the first non-empty `render.key_labels`\nvalue. `/route test` still reports an empty template.",
+                    "description": "Title template for a forum post, rendered with `minijinja` against the alert.\n\nA forum post title is mandatory and 1 to 100 characters. A template that fails to render,\nsuch as one naming a label the alert does not carry, or that renders to only whitespace,\nfalls back to the thread name: `[SEVERITY] alertname` and the first non-empty\n`render.key_labels` value. The title is set when the post is created.",
                     "type": "string"
                   }
                 },

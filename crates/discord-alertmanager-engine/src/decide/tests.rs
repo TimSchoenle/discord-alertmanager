@@ -1144,3 +1144,31 @@ fn a_newly_matching_ignore_mutes_a_card_that_already_exists() {
 
     assert_eq!(decision.updates[0].state, Some(NotificationState::Ignored));
 }
+
+#[test]
+fn label_tags_follow_the_policy_order_and_skip_absent_values() {
+    let RouteTarget::Forum { mut policy, .. } = forum_route().target else {
+        unreachable!("the fixture is a forum route");
+    };
+    policy.label_tags = vec![
+        "team".to_owned(),
+        "missing".to_owned(),
+        "namespace".to_owned(),
+    ];
+
+    let names = label_tag_names(
+        &policy,
+        &labels(&[
+            ("namespace", "payments api"),
+            ("team", "a-very-long-team-name-indeed"),
+            ("missing", ""),
+        ]),
+    );
+
+    assert_eq!(
+        names,
+        vec!["a-very-long-team-nam".to_owned(), "payments-api".to_owned()],
+        "values are cut to Discord's twenty characters, whitespace becomes a hyphen, and an \
+         empty value names no tag"
+    );
+}

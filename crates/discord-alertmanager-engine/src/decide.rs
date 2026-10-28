@@ -691,12 +691,7 @@ pub fn desired_tags(
         names.push(severity.as_str().to_owned());
     }
 
-    for label in &policy.label_tags {
-        let value = labels.get_or_empty(label);
-        if !value.is_empty() {
-            names.push(slug(value));
-        }
-    }
+    names.extend(label_tag_names(policy, labels));
 
     let mut tags = Vec::new();
     for name in names {
@@ -726,6 +721,21 @@ pub fn desired_tags(
     }
 
     tags
+}
+
+/// The tag names a forum policy derives from an alert's labels, in the policy's order.
+///
+/// One per label in `label_tags` that the alert carries with a non-empty value, cut to the
+/// twenty characters Discord allows a tag name, with whitespace replaced by hyphens.
+#[must_use]
+pub fn label_tag_names(policy: &ForumPolicy, labels: &Labels) -> Vec<String> {
+    policy
+        .label_tags
+        .iter()
+        .map(|label| labels.get_or_empty(label))
+        .filter(|value| !value.is_empty())
+        .map(slug)
+        .collect()
 }
 
 /// Truncates a label value to something Discord will accept as a tag name.

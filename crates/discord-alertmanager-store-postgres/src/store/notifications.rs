@@ -320,6 +320,22 @@ pub(super) async fn orphan_notification(
     Ok(())
 }
 
+pub(super) async fn pinned_posts(
+    store: &PostgresStore,
+    channel: ChannelId,
+) -> Result<u32, StoreError> {
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM notifications WHERE channel_id = $1 AND pinned = TRUE",
+    )
+    .bind(channel.to_db())
+    .fetch_one(&store.pool)
+    .await
+    .map_err(backend)?;
+
+    // A count is never negative, and a channel cannot hold four billion posts.
+    Ok(u32::try_from(count).unwrap_or(u32::MAX))
+}
+
 pub(super) async fn live_cards(
     store: &PostgresStore,
     routes: &[RouteId],

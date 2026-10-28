@@ -335,6 +335,16 @@ pub trait Store: Send + Sync + 'static {
         limit: u32,
     ) -> Result<Vec<Notification>, StoreError>;
 
+    /// How many of the bot's posts in a channel are pinned.
+    ///
+    /// Counts the stored flag, which is what the bot last applied. A post somebody pinned or
+    /// unpinned by hand is not seen until the bot next writes its pin.
+    ///
+    /// # Errors
+    ///
+    /// As [`Store::ingest_batch`].
+    async fn pinned_posts(&self, channel: ChannelId) -> Result<u32, StoreError>;
+
     /// Posted cards that are still firing, still unanswered, and have never been escalated.
     ///
     /// `created_before` is the earliest deadline any route sets, which makes the answer a

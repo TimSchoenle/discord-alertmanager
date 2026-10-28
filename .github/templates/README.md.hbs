@@ -213,11 +213,11 @@ themselves; `Create Public Threads` and `Send Messages in Threads` for the reply
 each one; and `Manage Threads` for pinning, archiving, locking and retagging a forum post. A route
 that lacks one of these reports it in the administrative channel rather than retrying forever.
 
-`Manage Channels` is optional. It is used only to create a forum route's missing state, severity
-and default tags when the gateway connects. Without it, the bot applies the tags that already exist
-and leaves the rest off the post. A forum set to require a tag rejects a post that carries none, so
-in such a forum create the route's state tags or its `default_tag` by hand first. The bot never
-asks for `Mention Everyone`: an escalation pings only the roles and users its route names.
+`Manage Channels` is optional. It is used only to create the forum tags a route with
+`manage_tags = true` lacks. Without it, the bot applies the tags that already exist and leaves the
+rest off the post. A forum set to require a tag rejects a post that carries none, so in such a
+forum create the route's state tags or its `default_tag` by hand first. The bot never asks for
+`Mention Everyone`: an escalation pings only the roles and users its route names.
 
 `discord.capture_reply_text` also asks the gateway for the privileged `Message Content`
 intent, which has to be turned on for the application in the Discord developer portal before the

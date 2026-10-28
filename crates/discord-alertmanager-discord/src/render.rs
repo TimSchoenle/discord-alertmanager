@@ -17,9 +17,11 @@ use chrono::{DateTime, Utc};
 use dam_config::Render;
 use dam_core::{Alert, NotificationState, Severity};
 use dam_engine::{CardData, Mention, PreviousCard};
+use minijinja::Environment;
 use serenity::all::{
     ButtonStyle, Colour, CreateActionRow, CreateButton, CreateEmbed, CreateEmbedFooter,
 };
+use tracing::warn;
 
 use crate::custom_id::{Action, CustomId};
 use crate::links::{LinkRenderer, RenderedLink};
@@ -71,13 +73,18 @@ pub struct RenderedCard {
 pub struct Renderer {
     config: Render,
     links: LinkRenderer,
+    templates: Environment<'static>,
 }
 
 impl Renderer {
     /// Builds a renderer around the layout configuration and the compiled link templates.
     #[must_use]
     pub fn new(config: Render, links: LinkRenderer) -> Self {
-        Self { config, links }
+        Self {
+            config,
+            links,
+            templates: crate::template::environment(),
+        }
     }
 
     /// Renders one card.
@@ -146,6 +153,26 @@ impl Renderer {
         };
 
         truncate(&name, NAME_LIMIT)
+    }
+
+    /// The title a forum post takes, rendered from its route's `title_template`.
+    ///
+    /// Falls back to [`Renderer::name`] when the template fails to render or renders to nothing
+    /// but whitespace. Discord rejects a post without a title, and a template naming a label the
+    /// alert does not carry fails under strict undefined behaviour, so the fallback is what keeps
+    /// such a post deliverable. The result is cut to Discord's hundred characters.
+    #[must_use]
+    pub fn forum_title(&self, card: &CardData, template: &str) -> String {
+        let context = crate::template::context(&card.alert, &[], None, card.rendered_at);
+
+        match self.templates.render_str(template, context) {
+            Ok(title) if !title.trim().is_empty() => truncate(title.trim(), NAME_LIMIT),
+            Ok(_) => self.name(card),
+            Err(error) => {
+                warn!(%error, "the title template did not render; using the default name");
+                self.name(card)
+            }
+        }
     }
 
     /// The link buttons an alert produces, for the detail views that draw them outside a card.
@@ -762,5 +789,51 @@ mod tests {
         let produced = renderer.render(&card(NotificationState::Orphaned, &[]));
 
         assert_eq!(produced.components, Vec::<CreateActionRow>::new());
+    }
+
+    #[test]
+    fn a_forum_title_comes_from_the_route_template() {
+        let renderer = renderer();
+        let card = card(
+            NotificationState::Firing,
+            &[("alertname", "PodDown"), ("namespace", "payments")],
+        );
+
+        assert_eq!(
+            renderer.forum_title(&card, "{{ labels.alertname }} in {{ labels.namespace }}"),
+            "PodDown in payments"
+        );
+    }
+
+    #[test]
+    fn a_template_that_cannot_render_falls_back_to_the_thread_name() {
+        let renderer = renderer();
+        let card = card(NotificationState::Firing, &[("alertname", "PodDown")]);
+
+        assert_eq!(
+            renderer.forum_title(&card, "{{ labels.absent }}"),
+            renderer.name(&card),
+            "a missing label fails under strict undefined behaviour, and Discord rejects a post \
+             without a title"
+        );
+        assert_eq!(
+            renderer.forum_title(&card, "   "),
+            renderer.name(&card),
+            "a title of only whitespace is no title"
+        );
+        assert_eq!(
+            renderer.forum_title(&card, "{{ unclosed"),
+            renderer.name(&card)
+        );
+    }
+
+    #[test]
+    fn a_forum_title_is_cut_to_discords_limit() {
+        let renderer = renderer();
+        let card = card(NotificationState::Firing, &[("alertname", "PodDown")]);
+
+        let title = renderer.forum_title(&card, &"x".repeat(300));
+
+        assert!(title.len() <= NAME_LIMIT, "{} bytes", title.len());
     }
 }

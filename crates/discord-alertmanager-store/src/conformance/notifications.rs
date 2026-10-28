@@ -7,7 +7,7 @@ use crate::notifications::{AckCommand, AckKind, NewNotification, ThreadReply};
 use crate::outbox::{AppliedEffect, ClaimRequest, Effect};
 use crate::{CardUpdate, Decision, PlannedCard, Store, StoreError};
 
-use super::{alert, at, card_for, drain, ingest, record_post, route_for};
+use super::{alert, at, card_for, drain, ingest, record_applied, record_post, route_for};
 
 /// A resync sees the live cards on the routes it was given and on no others.
 pub(super) async fn a_resync_reads_the_live_cards_of_its_own_routes(store: &dyn Store) {
@@ -663,4 +663,45 @@ pub(super) async fn a_deleted_card_releases_its_key(store: &dyn Store) {
     );
 
     drain(store, "orphan").await;
+}
+
+/// The pin count covers one channel and only the posts whose stored flag says pinned.
+pub(super) async fn pinned_posts_are_counted_per_channel(store: &dyn Store) {
+    let route = route_for(store, "pins", 140).await;
+    let other = route_for(store, "pins-other", 141).await;
+
+    let pinned = DedupeKey::from_stored("a:pins-pinned");
+    let plain = DedupeKey::from_stored("a:pins-plain");
+    let elsewhere = DedupeKey::from_stored("a:pins-elsewhere");
+
+    card_for(store, route, 140, &pinned).await;
+    card_for(store, route, 140, &plain).await;
+    card_for(store, other, 141, &elsewhere).await;
+
+    assert_eq!(
+        store
+            .pinned_posts(ChannelId::new(140))
+            .await
+            .expect("the count reads"),
+        0
+    );
+
+    let posted_and_pinned = |message| AppliedEffect {
+        message_id: Some(MessageId::new(message)),
+        pinned: Some(true),
+        ..AppliedEffect::default()
+    };
+
+    record_applied(store, "pins-setup", &pinned, &posted_and_pinned(9_140)).await;
+    record_post(store, "pins-setup", &plain, MessageId::new(9_141)).await;
+    record_applied(store, "pins-setup", &elsewhere, &posted_and_pinned(9_142)).await;
+
+    assert_eq!(
+        store
+            .pinned_posts(ChannelId::new(140))
+            .await
+            .expect("the count reads"),
+        1,
+        "the unpinned post and the pinned post in another channel are not counted"
+    );
 }
