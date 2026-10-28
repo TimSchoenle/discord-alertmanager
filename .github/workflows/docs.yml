@@ -9,8 +9,8 @@ name: docs
 # lifted out of `docs/config.md`. The case that matters is the release pull request, which is the
 # commit that changes `version` and would otherwise leave the README advertising the previous tag.
 #
-# Everywhere it cannot commit, which is a push to `main` and a pull request from a fork, it renders
-# in `check` mode instead: nothing is written, and a stale `README.md` fails the job. Without that,
+# On every event, including a push to `main` and a pull request from a fork, the `readme` job also
+# renders in `check` mode: nothing is written, and a stale `README.md` fails the job. Without that,
 # editing `README.md` directly would appear to work right up until the next pull request silently
 # reverted it.
 #
@@ -119,7 +119,7 @@ jobs:
       # absent from the diff.
       - name: Collect the README payload
         id: variables
-        uses: TimSchoenle/actions/actions/common/readme-variables@8da2713994ba2b5f542e7e3334db287b1e22854a # tag=actions-common-readme-variables-v1.2.9
+        uses: TimSchoenle/actions/actions/common/readme-variables@7fad0f1921ffec7dc6eda32e8fb07c9bd4688624 # tag=actions-common-readme-variables-v2.0.1
         with:
           manifest: crates/discord-alertmanager/Cargo.toml
           branch: ${{ github.event.repository.default_branch }}
@@ -127,7 +127,7 @@ jobs:
 
       # Written, not committed: the commit is `render-commit`'s, over every generated file at once.
       - name: Render the README
-        uses: TimSchoenle/actions/actions/common/render-template@8da2713994ba2b5f542e7e3334db287b1e22854a # tag=actions-common-render-template-v1.2.9
+        uses: TimSchoenle/actions/actions/common/render-template@495fd50fd4a5ae3d9fb1496c96eada74c6f2529a # tag=actions-common-render-template-v3.0.0
         with:
           template: .github/templates/README.md.hbs
           output: README.md
@@ -222,10 +222,10 @@ jobs:
 
   check:
     name: readme
-    # The complement of `render`: the pushes to `main` that no pull request rendered, and the fork
-    # pull requests that could not be committed to. Between the two conditions every event this
-    # workflow sees is handled by exactly one job.
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    # Runs on every event, so the check a branch protection rule requires always reports. On a
+    # pull request from this repository it can fail on the commit `render-commit` is about to
+    # replace; the run for the rendered commit is the one that gates the merge. On a fork's pull
+    # request, which nothing commits to, it is the only report of a stale README.
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -250,7 +250,7 @@ jobs:
 
       - name: Collect the README payload
         id: variables
-        uses: TimSchoenle/actions/actions/common/readme-variables@8da2713994ba2b5f542e7e3334db287b1e22854a # tag=actions-common-readme-variables-v1.2.9
+        uses: TimSchoenle/actions/actions/common/readme-variables@7fad0f1921ffec7dc6eda32e8fb07c9bd4688624 # tag=actions-common-readme-variables-v2.0.1
         with:
           manifest: crates/discord-alertmanager/Cargo.toml
           branch: ${{ github.event.repository.default_branch }}
@@ -258,9 +258,17 @@ jobs:
 
       # Writes nothing; fails with the first differing line when README.md is stale.
       - name: Verify README.md is current
-        uses: TimSchoenle/actions/actions/common/render-template@8da2713994ba2b5f542e7e3334db287b1e22854a # tag=actions-common-render-template-v1.2.9
+        uses: TimSchoenle/actions/actions/common/render-template@495fd50fd4a5ae3d9fb1496c96eada74c6f2529a # tag=actions-common-render-template-v3.0.0
         with:
           template: .github/templates/README.md.hbs
           output: README.md
           variables: ${{ steps.variables.outputs.variables }}
-          check: true
+          check: 'true'
+
+      # The budgets PROSE.md and the doc-comment GUIDE.md define as mechanical: banned doc-comment
+      # openers across the workspace, and the em-dash and bold-frame counts of each hand-written
+      # Markdown document and the rendered README. It runs after a failed render too, so one push
+      # reports both.
+      - name: Check the prose budgets
+        if: ${{ !cancelled() }}
+        run: bash .github/scripts/prose-check.sh README.md CONTRIBUTING.md SECURITY.md

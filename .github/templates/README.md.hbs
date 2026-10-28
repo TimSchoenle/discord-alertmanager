@@ -374,7 +374,8 @@ floor Cargo enforces is the release this repository is built and tested with.
 
 | Document | Purpose |
 | --- | --- |
-{{#each docs}}| [{{ title }}]({{ path }}) | {{ default (mdCell summary) "—" }} |
+{{#each docs}}{{#if summary}}| [{{ title }}]({{ path }}) | {{ mdCell summary }} |
+{{/if}}
 {{/each}}
 
 ## Contributing
