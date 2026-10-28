@@ -5,7 +5,7 @@ name: Build
 #
 # Three kinds of job live here. The first kind compiles and runs the workspace — `check`, `test`,
 # `clippy`, `doc`, `msrv`, and `coverage`, which also uploads to Codecov. The second kind reads a
-# committed artefact and regenerates it — `config-docs` and `config-contract` — so a generated file
+# committed artefact and regenerates it (`config-docs` and `config-contract`), so a generated file
 # cannot drift from the types that produce it. The third kind builds the image the release will
 # push, on both architectures, and checks that what came out describes the configuration the
 # source tree declares.
@@ -242,8 +242,8 @@ jobs:
   # sits in the working directory and rustup honours it over a default, so without the variable
   # this job would silently use the pinned toolchain and check nothing.
   #
-  # No `--all-targets`. The floor is about the crates, and the dev-dependencies — proptest,
-  # testcontainers, wiremock — carry MSRVs of their own that nothing depending on this workspace
+  # No `--all-targets`. The floor is about the crates, and the dev-dependencies (proptest,
+  # testcontainers, wiremock) carry MSRVs of their own that nothing depending on this workspace
   # would ever compile.
   msrv:
     name: MSRV
@@ -348,7 +348,7 @@ jobs:
   # The reverse gate on the config contract: regenerate the committed document and the
   # Dockerfile's `LABEL` block from the Rust types and fail if either has drifted. A renamed key
   # or a renamed prefix then shows up in the pull request that renamed it, as a diff a reviewer
-  # reads — one step earlier than the label check on the built image, and far cheaper.
+  # reads, one step earlier than the label check on the built image, and far cheaper.
   #
   # It overlaps `config-docs` on `docs/config.contract.json` by design. That job proves the
   # committed document matches the generator; this one proves the Dockerfile's labels match the
@@ -497,7 +497,7 @@ jobs:
           image: discord-alertmanager:test
 
       # The cross-check the dropped `sha256` label would have bought. The build is the one place
-      # that holds both copies, so it costs nothing here and is invisible everywhere else — a
+      # that holds both copies, so it costs nothing here and is invisible everywhere else. A
       # stale in-image copy is exactly the failure nothing downstream can see.
       #
       # The path comes from the label rather than from a literal, which ties the two together: a

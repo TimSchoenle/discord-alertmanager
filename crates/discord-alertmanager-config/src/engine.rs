@@ -163,7 +163,7 @@ pub struct Retention {
     /// Days of `audit_log`.
     ///
     /// Kept far longer than the rest because it is small and it is the record of what people
-    /// decided. Check this horizon against what an incident review actually needs.
+    /// decided. Check this horizon against what an incident review needs.
     pub audit_days: u32,
 }
 

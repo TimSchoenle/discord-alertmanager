@@ -1,7 +1,7 @@
 //! Alertmanager API v2 client and the version-4 webhook envelope.
 //!
 //! The model is hand-written against a pinned spec commit rather than generated from
-//! `openapi.yaml`. The surface actually used is about ten structs and six calls; a generated
+//! `openapi.yaml`. The surface used is about ten structs and six calls; a generated
 //! client pulls a large dependency tree, churns on every Alertmanager release, and produces a map
 //! wrapper where `dam_core::Labels` belongs. A test deserialises fixtures captured from a real
 //! 0.33 server, which is the part of a generated client's value worth keeping.

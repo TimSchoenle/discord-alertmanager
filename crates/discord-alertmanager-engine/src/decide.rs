@@ -506,7 +506,7 @@ fn forum_effects(
 
         // Inside the state gate with the tags and the note, because the pin is decoration on the
         // same transition and an update that changes no state changes no pin. Outside it, a pin
-        // Discord will not grant — its forums hold one pinned post — is asked for again on every
+        // Discord will not grant (its forums hold one pinned post) is asked for again on every
         // poll and every repeat of an alert that is going nowhere, for as long as the alert lasts.
         let wants_pin = effective.wants_pin()
             && policy

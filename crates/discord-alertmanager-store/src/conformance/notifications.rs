@@ -653,7 +653,7 @@ pub(super) async fn a_deleted_card_releases_its_key(store: &dyn Store) {
         "the key is freed, or the next change would edit a message that is not there"
     );
 
-    // Freed means genuinely reusable: the unique index has to accept a fresh card under the same
+    // Freed means reusable: the unique index has to accept a fresh card under the same
     // key in the same channel.
     let replacement = card_for(store, route, 111, &key).await;
 

@@ -154,7 +154,7 @@ pub async fn serve(state: AppState, cancel: CancellationToken) -> Result<(), Ser
         .map_err(|source| ServeError::Bind { address, source })?;
 
     // The bound address rather than the configured one, so a configuration asking for port 0
-    // logs the port it actually got instead of the zero nothing can connect to.
+    // logs the port it got instead of the zero nothing can connect to.
     let bound = listener.local_addr().unwrap_or(address);
     tracing::info!(address = %bound, path = %state.ingest().webhook_path, "ingest listener started");
 

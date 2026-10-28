@@ -179,7 +179,7 @@ COPY . .
 # `target/` is not a cache mount, for the reason given in `builder`: the cooked dependencies live
 # in the layer, and a mount would hide them. It is removed at the end so the layer holds `/out`.
 #
-# `--version` is passed only when the build was told a release. Absent, the document simply omits
+# `--version` is passed only when the build was told a release. Absent, the document omits
 # the field, which is what keeps the committed copy in `docs/config.json` stable across a version
 # bump and so keeps the drift gate from failing every release pull request.
 RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry-contract-${TARGETARCH} \

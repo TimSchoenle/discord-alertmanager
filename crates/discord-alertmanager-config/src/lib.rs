@@ -29,7 +29,7 @@
 //! `backend` discriminant instead. The TOML spelling is what a tagged enum would produce anyway;
 //! what changes is that keys belonging to the unselected backend are ignored rather than refused.
 //!
-//! [`RouteTarget`] is flat for the same reason. The four delivery targets are a genuine enum in
+//! [`RouteTarget`] is flat for the same reason. The four delivery targets are an enum in
 //! `dam_store`, where the reference generator never looks, and `dam_engine::route_from_config` is
 //! the single point where the flat table becomes that enum.
 

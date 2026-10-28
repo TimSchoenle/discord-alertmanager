@@ -3,13 +3,13 @@
 //! The limits are not advisory. An embed over 6000 characters, a field value over 1024, a
 //! twenty-sixth field or a hundred-and-first byte of `custom_id` is a rejected request, and the
 //! alert that produces one is the alert with sixty labels and a five-thousand-character
-//! annotation — which is to say, the interesting one. Everything here is budgeted rather than
-//! hoped about, and the tests assert the budgets rather than the prose.
+//! annotation, which is the one most worth reading. Every length here is cut to its budget
+//! before the request is built, and the tests assert the budgets, not the prose.
 //!
 //! # The render hash is what keeps a storm inside the rate limits
 //!
 //! Every card carries a hash of what was last posted. An edit whose freshly computed hash matches
-//! is skipped without a request. Which means the hash has to cover exactly what a viewer can see
+//! is skipped without a request, so the hash has to cover exactly what a viewer can see
 //! and nothing else: fold in the render time and every card re-renders every debounce interval;
 //! leave out a field and a change to it never reaches the channel.
 

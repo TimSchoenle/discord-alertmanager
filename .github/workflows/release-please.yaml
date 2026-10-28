@@ -55,7 +55,7 @@ jobs:
       # trigger the checks in build.yaml, and a release pull request nothing has checked is the
       # one pull request that must not be merged unchecked.
       #
-      # The three permissions release-please actually uses, named rather than left to the
+      # The three permissions release-please uses, named rather than left to the
       # installation's own set. An unscoped App token inherits every permission the installation
       # holds, which is what zizmor's `github-app` rule reports and is more than a tool that
       # writes a changelog and opens a pull request needs.
@@ -294,7 +294,7 @@ jobs:
 
           # One empty file per per-architecture digest, named after it. Both registries are given
           # the same list in the same order, which is what makes the two indexes the same bytes
-          # and so the same digest — the property the next step asserts.
+          # and so the same digest, which is the property the next step asserts.
           for repo in "${DOCKERHUB_REPO}" "${GHCR_REPO}"; do
             references=""
             for digest in *; do
@@ -337,7 +337,7 @@ jobs:
 
       # Every architecture generates the document from one source tree with one set of
       # arguments, so the copies must be byte-identical. If they are not, which one gets
-      # attached to the index would be arbitrary — so this is a failure, not a tie to break.
+      # attached to the index would be arbitrary. That makes this a failure, not a tie to break.
       - name: Reduce the per-architecture contracts to one
         run: |
           set -euo pipefail
@@ -363,7 +363,7 @@ jobs:
           cp "${canonical}/contract.labels" /tmp/contract.labels
 
       # The checkpoint everything below rests on. Multi-platform, so it necessarily runs after
-      # the push — `--load` cannot take an index. The floating tag is briefly unverified, which
+      # the push, because `--load` cannot take an index. The floating tag is briefly unverified, which
       # is acceptable because nothing is attached or signed until this passes.
       #
       # Every platform, read out of the index rather than out of the build matrix: labels live
@@ -431,14 +431,14 @@ jobs:
             "${GHCR_REPO}:${TAG}@${DIGEST}"
 
       # Attached to the digest, not to a tag: the referrer's subject is the exact build a
-      # deployment pins, and a tag can be moved. Attached verbatim — the bytes the generator
+      # deployment pins, and a tag can be moved. Attached verbatim: the bytes the generator
       # wrote, with nothing added afterwards. There is no digest field to fill in; the attachment
       # to a digest *is* the tie between image and document.
       #
       # Two spellings this step is picky about, both of which fail it outright:
       #
       #  - the registry is named. `oras` applies no implicit `docker.io` default the way buildx,
-      #    crane and cosign do — it reads the first segment of a bare `user/repo` as a registry
+      #    crane and cosign do. It reads the first segment of a bare `user/repo` as a registry
       #    hostname and tries to resolve it in DNS. Both repositories above carry one for that
       #    reason.
       #  - the contract is passed as a relative path from its own directory. `oras` rejects an

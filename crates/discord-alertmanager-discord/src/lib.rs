@@ -13,7 +13,7 @@
 //! keyed by the action segment of the custom id. It is roughly two hundred lines, and it buys one
 //! place to hang authorisation, deferral, audit logging and error mapping, which is where the
 //! risk in this layer sits. Argument extraction and autocomplete are the work being re-done, and
-//! that is the honest cost of the choice. Commands only ever call into `dam_engine`, so swapping
+//! that is the cost of the choice. Commands only ever call into `dam_engine`, so swapping
 //! the registry for poise would touch this crate and nothing else.
 //!
 //! # Intents

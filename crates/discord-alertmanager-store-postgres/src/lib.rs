@@ -19,7 +19,7 @@
 //! shorter. Queries are issued through `sqlx::query`/`QueryBuilder` rather than the `query!`
 //! macro, for the same reason both backends share one row mapper: the filtered read paths are
 //! dynamic and cannot be expressed as a macro at all, and a checked query feeding a hand-written
-//! mapper checks the half that was never in doubt. What the mapping actually has to satisfy is a
+//! mapper checks the half that was never in doubt. What the mapping has to satisfy is a
 //! behavioural contract, and `dam_store::conformance` runs it against both engines.
 
 mod convert;
@@ -156,7 +156,7 @@ mod tests {
     async fn the_conformance_suite_passes() {
         // A container rather than a service container in the pipeline: a service container works
         // in continuous integration and nowhere else, so `cargo test` on a laptop would stop
-        // exercising the backend that most deployments actually run.
+        // exercising the backend most deployments run.
         let container = PostgresImage::default()
             .start()
             .await
