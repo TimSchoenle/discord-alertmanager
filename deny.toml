@@ -25,6 +25,19 @@ ignore = [
     # verifier from the webpki roots with no CRL — so neither entry point is ever called.
     { id = "RUSTSEC-2026-0049", reason = "No certificate revocation list is ever parsed." },
     { id = "RUSTSEC-2026-0104", reason = "No certificate revocation list is ever parsed." },
+    # `Debug` on a client session value printed the TLS secret it holds. Only a custom
+    # `ClientSessionStore` that formats one reaches it, and nothing in the tree implements one.
+    { id = "RUSTSEC-2026-0346", reason = "No custom ClientSessionStore exists to format a session value." },
+    # A forged ServerHello could make later handshakes skip the post-quantum key share. rustls
+    # 0.22 offers no post-quantum group, so there is no stronger exchange to fall back from.
+    { id = "RUSTSEC-2026-0349", reason = "rustls 0.22 offers no post-quantum key exchange to downgrade." },
+    # Paths through emSign intermediates whose private keys are public were accepted. The eight
+    # distrusted keys are P-384 intermediates (Mozilla bug 2083449) that chain to the emSign ECC
+    # G3 hierarchy, and Sectigo cross-signed each of them from `AAA Certificate Services`.
+    # webpki-roots removed `emSign ECC Root CA - G3` in 1.0.10 and `- C3` in 1.0.11, and does
+    # not carry `AAA Certificate Services`. Its only emSign root is the RSA `emSign Root CA - G1`,
+    # so no path the gateway verifies reaches those intermediates.
+    { id = "RUSTSEC-2026-0382", reason = "webpki-roots 1.0.11 trusts neither the emSign ECC roots nor AAA Certificate Services, so the distrusted intermediates have no trusted path." },
 ]
 
 [licenses]
