@@ -661,7 +661,7 @@ fn auto_archive_minutes(
     state: NotificationState,
     settings: &DecisionSettings,
 ) -> u32 {
-    if state != NotificationState::Resolved && state != NotificationState::Orphaned {
+    if state.holds_thread_open() {
         return MAX_AUTO_ARCHIVE;
     }
 

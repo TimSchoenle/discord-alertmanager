@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use chrono::Utc;
-use dam_core::{Labels, NotificationState};
+use dam_core::{Labels, NotificationState, Severity};
 use dam_discord::Renderer;
 use dam_engine::{
     AlertmanagerApi, DiscordSink, Mention, MessageRef, Note, PostFlags, RoutingSnapshot,
@@ -362,12 +362,28 @@ impl Dispatcher {
 
         let rendered = self.renderer.render(&assembled.data);
 
+        // The engine plans pins on state changes only, and a new post has not changed state yet,
+        // so the pin a critical post is born with is asked for here.
+        let pinned = match posted.thread {
+            Some(thread)
+                if born_pinned(
+                    &assembled.target.target,
+                    assembled.data.state,
+                    assembled.data.severity(),
+                ) =>
+            {
+                self.try_pin(&assembled.card, thread, true).await
+            }
+            _ => None,
+        };
+
         Ok(AppliedEffect {
             message_id: Some(posted.message),
             thread_id: posted.thread,
             render_hash: Some(rendered.hash),
             applied_tags: Some(assembled.target.tags.clone()),
             tags_hash: Some(tags_hash(&assembled.target.tags)),
+            pinned,
             ..AppliedEffect::default()
         })
     }
@@ -784,27 +800,53 @@ impl Dispatcher {
             .thread_id
             .ok_or_else(|| Failure::Drop("the card has no thread".to_owned()))?;
 
-        if pinned && !self.pin_allowed(&card).await? {
-            debug!(%notification, "the route's pin limit is reached; carrying on");
-            return Ok(AppliedEffect::default());
+        Ok(AppliedEffect {
+            pinned: self.try_pin(&card, thread, pinned).await,
+            ..AppliedEffect::default()
+        })
+    }
+
+    /// Asks Discord to pin or unpin a post, and returns the pin it now holds.
+    ///
+    /// `None` means the pin did not change, for any reason: the route's limit is reached, the
+    /// channel has no free pin, the count could not be read, or Discord refused. None of them is
+    /// worth failing the effect over, and the post-creation path must not fail at all, because a
+    /// retried post is a duplicate card.
+    async fn try_pin(
+        &self,
+        card: &dam_store::Notification,
+        thread: dam_store::ChannelId,
+        pinned: bool,
+    ) -> Option<bool> {
+        let notification = card.id;
+
+        if pinned {
+            match self.pin_allowed(card).await {
+                Ok(true) => {}
+                Ok(false) => {
+                    debug!(%notification, "the route's pin limit is reached; carrying on");
+                    return None;
+                }
+                Err(error) => {
+                    warn!(%notification, %error, "cannot count the channel's pins; carrying on");
+                    return None;
+                }
+            }
         }
 
         match self.sink.set_post_pinned(thread, pinned).await {
-            Ok(()) => Ok(AppliedEffect {
-                pinned: Some(pinned),
-                ..AppliedEffect::default()
-            }),
+            Ok(()) => Some(pinned),
             // Discord gives a forum one pinned post, which is fewer than a busy channel asks for,
             // and a full channel stays full for as long as the post holding the slot is open.
             // Expected rather than broken, so not a warning: the card keeps its unpinned state,
             // and the plan asks again the next time the card changes state.
             Err(SinkError::PinLimitReached) => {
                 debug!(%notification, "the channel has no free pin; carrying on");
-                Ok(AppliedEffect::default())
+                None
             }
             Err(error) => {
                 warn!(%notification, %error, "cannot change a post's pin; carrying on");
-                Ok(AppliedEffect::default())
+                None
             }
         }
     }
@@ -814,7 +856,7 @@ impl Dispatcher {
     /// Counted from the stored flags, so two workers pinning in the same channel at once can both
     /// see room. Discord's own limit of one pinned post per forum still holds in that case, and
     /// its refusal is handled by the caller like any other.
-    async fn pin_allowed(&self, card: &dam_store::Notification) -> Result<bool, Failure> {
+    async fn pin_allowed(&self, card: &dam_store::Notification) -> Result<bool, StoreError> {
         let snapshot = self.routing.load();
         let Some(RouteTarget::Forum { policy, .. }) =
             snapshot.route(card.route_id).map(|route| &route.target)
@@ -822,11 +864,7 @@ impl Dispatcher {
             return Ok(true);
         };
 
-        let pinned = self
-            .store
-            .pinned_posts(card.channel_id)
-            .await
-            .map_err(|error| Failure::Retry(error.to_string(), 5))?;
+        let pinned = self.store.pinned_posts(card.channel_id).await?;
 
         Ok(has_pin_room(pinned, policy.max_pinned))
     }
@@ -1098,6 +1136,19 @@ impl Failure {
 /// A `max_pinned` of zero turns pinning off for the route.
 fn has_pin_room(pinned: u32, max_pinned: u32) -> bool {
     pinned < max_pinned
+}
+
+/// Whether a post being created should start out pinned, by the rule the engine applies to a
+/// post that changes state.
+fn born_pinned(target: &RouteTarget, state: NotificationState, severity: Severity) -> bool {
+    let RouteTarget::Forum { policy, .. } = target else {
+        return false;
+    };
+
+    state.wants_pin()
+        && policy
+            .pin_min_severity
+            .is_some_and(|floor| severity >= floor)
 }
 
 /// Label tags this worker recently failed to create, keyed by channel and tag name.
@@ -1506,6 +1557,40 @@ mod tests {
         );
 
         assert_eq!(missing.len(), 1);
+    }
+
+    #[test]
+    fn only_a_firing_post_at_or_above_the_floor_is_born_pinned() {
+        let mut policy = labelled_policy();
+        policy.pin_min_severity = Some(Severity::Critical);
+        let forum = RouteTarget::Forum {
+            channel: ChannelId::new(200),
+            policy: policy.clone(),
+        };
+
+        assert!(born_pinned(
+            &forum,
+            NotificationState::Firing,
+            Severity::Critical
+        ));
+        assert!(
+            !born_pinned(&forum, NotificationState::Firing, Severity::Warning),
+            "below the floor"
+        );
+        assert!(
+            !born_pinned(&forum, NotificationState::Silenced, Severity::Critical),
+            "somebody already decided what to do about it"
+        );
+
+        policy.pin_min_severity = None;
+        let unpinned = RouteTarget::Forum {
+            channel: ChannelId::new(200),
+            policy,
+        };
+        assert!(
+            !born_pinned(&unpinned, NotificationState::Firing, Severity::Critical),
+            "the route turned pinning off"
+        );
     }
 
     #[test]
