@@ -79,9 +79,9 @@ lists `routes` as one value, so this table is where the forum keys are described
 | `severity_tags` | `true` | Whether each post gets a tag named after the alert's severity. |
 | `label_tags` | `[]` | Labels whose values become tags, at most three. Without `manage_tags`, a value is applied only when its tag exists. Use low-cardinality labels: a channel holds 20 tags. |
 | `default_tag` | empty | The tag applied when nothing else resolves, for a channel that requires one. |
-| `auto_archive_minutes` | unset | Inactivity before a resolved post archives: 60, 1440, 4320 or 10080. Unset takes `render.thread_archive_after_minutes`. A post whose alert is still open, including a new one, holds 10080. |
+| `auto_archive_minutes` | unset | Inactivity before a resolved post archives: 60, 1440, 4320 or 10080. Unset takes `render.thread_archive_after_minutes`. A post whose alert is still open, including a new one, holds 10080, and drops to this window when the alert resolves, whether or not `archive_on_resolve` archives it. |
 | `archive_on_resolve` | `true` | Whether a post is archived when its alert resolves. |
-| `lock_on_resolve` | `false` | Whether a post is locked when its alert resolves. Reopening a locked post needs `Manage Threads`. |
+| `lock_on_resolve` | `false` | Whether a post is locked when its alert resolves. Applies only with `archive_on_resolve`. Reopening a locked post needs `Manage Threads`. |
 | `pin_min_severity` | `critical` | The lowest severity that pins an unacknowledged post. The pin is dropped on acknowledgement or resolution. |
 | `max_pinned` | `1` | The most of the bot's posts pinned at once in the channel. `0` turns pinning off. Discord allows one pinned post per forum, so higher values change nothing. |
 | `bump_on_state_change` | `true` | Whether each state change posts a one-line note, which moves the post up the forum's activity sort. |

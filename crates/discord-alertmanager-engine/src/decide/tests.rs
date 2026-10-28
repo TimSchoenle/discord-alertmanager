@@ -713,6 +713,56 @@ fn a_resolved_forum_post_archives_on_the_configured_window() {
 }
 
 #[test]
+fn a_resolved_post_left_open_drops_to_the_route_window_unlocked() {
+    let mut route = forum_route();
+    if let RouteTarget::Forum { policy, .. } = &mut route.target {
+        policy.archive_on_resolve = false;
+        policy.lock_on_resolve = true;
+        policy.auto_archive_minutes = 60;
+    }
+    let channel = ChannelId::new(200);
+    let snapshot = RoutingSnapshot::new(vec![route], Vec::new(), forum_tags());
+
+    let key =
+        DedupeKey::per_alert(&Fingerprint::new("0123456789abcdef").expect("hex is a fingerprint"));
+    let mut existing = ExistingCards::new();
+    existing.insert(
+        (channel, key.clone()),
+        card(NotificationState::Firing, channel, &key),
+    );
+
+    let decision = decide(
+        &delta(EventKind::Resolved, AlertStatus::Resolved, AmState::Active),
+        &snapshot,
+        &quiet(),
+        &existing,
+        &known(false),
+        &DecisionSettings::default(),
+        now(),
+    );
+
+    let flags: Vec<_> = decision.updates[0]
+        .effects
+        .iter()
+        .filter_map(|item| match item.effect {
+            Effect::SetFlags {
+                archived,
+                locked,
+                auto_archive_minutes,
+                ..
+            } => Some((archived, locked, auto_archive_minutes)),
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(
+        flags,
+        vec![(false, false, 60)],
+        "the post stays open and editable, but no longer holds the week it held while firing"
+    );
+}
+
+#[test]
 fn a_reopened_card_holds_the_maximum_archive_window() {
     let route = text_route();
     let channel = ChannelId::new(100);

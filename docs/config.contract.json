@@ -2409,7 +2409,7 @@
                         "type": "array"
                       },
                       "lock_on_resolve": {
-                        "description": "Whether a forum post is locked when its alert resolves.\n\nA locked thread needs `MANAGE_THREADS` to reopen, and a flap has to reopen one. Without\nthat permission the notification is marked orphaned and a fresh card is posted, so leave\nthis off unless the permission is held.",
+                        "description": "Whether a forum post is locked when its alert resolves and is archived.\n\nIgnored when `archive_on_resolve` is off: a post left open has to stay editable.\nA locked thread needs `MANAGE_THREADS` to reopen, and a flap has to reopen one. Without\nthat permission the notification is marked orphaned and a fresh card is posted, so leave\nthis off unless the permission is held.",
                         "type": "boolean"
                       },
                       "manage_tags": {
@@ -3086,7 +3086,7 @@
                       "type": "array"
                     },
                     "lock_on_resolve": {
-                      "description": "Whether a forum post is locked when its alert resolves.\n\nA locked thread needs `MANAGE_THREADS` to reopen, and a flap has to reopen one. Without\nthat permission the notification is marked orphaned and a fresh card is posted, so leave\nthis off unless the permission is held.",
+                      "description": "Whether a forum post is locked when its alert resolves and is archived.\n\nIgnored when `archive_on_resolve` is off: a post left open has to stay editable.\nA locked thread needs `MANAGE_THREADS` to reopen, and a flap has to reopen one. Without\nthat permission the notification is marked orphaned and a fresh card is posted, so leave\nthis off unless the permission is held.",
                       "type": "boolean"
                     },
                     "manage_tags": {
