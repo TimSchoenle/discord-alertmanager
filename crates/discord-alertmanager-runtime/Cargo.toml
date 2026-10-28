@@ -28,5 +28,11 @@ tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }
 tokio-util.workspace = true
 tracing.workspace = true
 
+# A real store and the real renderer, so the worker tests drive the dispatcher the way the binary
+# does and fake only the two network clients.
+[dev-dependencies]
+dam-config.workspace = true
+dam-store-sqlite.workspace = true
+
 [lints]
 workspace = true

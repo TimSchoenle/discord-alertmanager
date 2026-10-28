@@ -1083,11 +1083,13 @@ version = "0.9.2"
 dependencies = [
  "async-trait",
  "chrono",
+ "discord-alertmanager-config",
  "discord-alertmanager-core",
  "discord-alertmanager-discord",
  "discord-alertmanager-engine",
  "discord-alertmanager-ingest",
  "discord-alertmanager-store",
+ "discord-alertmanager-store-sqlite",
  "metrics",
  "tokio",
  "tokio-util",
