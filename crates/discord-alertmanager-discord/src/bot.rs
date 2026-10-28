@@ -180,7 +180,7 @@ impl Bot {
     #[must_use]
     #[expect(
         clippy::too_many_arguments,
-        reason = "the composition root hands the gateway every collaborator it owns; folding \n                  them into a struct would move the same list one line up"
+        reason = "the composition root hands the gateway every collaborator it owns; folding \n them into a struct would move the same list one line up"
     )]
     pub fn new(
         config: &DiscordConfig,

@@ -265,18 +265,19 @@ where
 
 /// Whether a span belongs to this workspace rather than to a dependency.
 ///
-/// Only this workspace's spans are traced, and there is deliberately no key to widen that. Two
-/// reasons, both of which bite the moment `telemetry.log_level` is loosened to `info` for an
-/// unrelated investigation. `serenity`, `reqwest` and `sqlx` instrument their internals densely, so
-/// the trace stops being a record of what the bot did and the transaction volume rises by orders of
-/// magnitude. Worse, their span fields are `Debug` renderings of whatever the call was holding — a
-/// `Request`, a `Client`, a query — written for a local log and not for export to a third party. A
-/// trace is the bot's own units of work: a webhook batch, an outbox item, a periodic pass, an
-/// interaction.
-///
-/// Events are not filtered this way. A dependency logging at `error` is exactly what error
-/// reporting is for, and an event carries a message rather than a dump of a caller's internals.
+/// Spans are filtered this way; events are not.
 fn is_own_work(metadata: &Metadata<'_>) -> bool {
+    // Only this workspace's spans are traced, and there is deliberately no key to widen that. Both
+    // reasons bite the moment `telemetry.log_level` is loosened to `info` for an unrelated
+    // investigation. `serenity`, `reqwest` and `sqlx` instrument their internals densely, so the
+    // trace stops being a record of what the bot did and the transaction volume rises by orders of
+    // magnitude. Their span fields are also `Debug` renderings of whatever the call was holding, a
+    // `Request`, a `Client` or a query, written for a local log and not for export to a third
+    // party. A trace is the bot's own units of work: a webhook batch, an outbox item, a periodic
+    // pass, an interaction.
+    //
+    // Events are not filtered, because a dependency logging at `error` is what error reporting is
+    // for, and an event carries a message rather than a dump of a caller's internals.
     OWN_TARGETS
         .iter()
         .any(|prefix| metadata.target().starts_with(prefix))
@@ -284,8 +285,8 @@ fn is_own_work(metadata: &Metadata<'_>) -> bool {
 
 /// Whether a record at this metadata's level clears a threshold.
 ///
-/// `tracing` orders levels by verbosity rather than by severity — `TRACE` is the greatest of them
-/// — so "at or above `threshold` in severity" is `<=` here. [`None`] is the disabled stream, which
+/// `tracing` orders levels by verbosity rather than by severity (`TRACE` is the greatest of them),
+/// so "at or above `threshold` in severity" is `<=` here. [`None`] is the disabled stream, which
 /// nothing clears.
 fn clears(threshold: Option<Level>, metadata: &Metadata<'_>) -> bool {
     threshold.is_some_and(|threshold| *metadata.level() <= threshold)
@@ -316,8 +317,10 @@ fn ensure_fraction(key: &str, value: f32) -> Result<()> {
 mod tests {
     use super::*;
 
-    /// `clears` reads `<=` as "at least this severe", which only holds while `tracing` keeps
-    /// ordering its levels by verbosity. Asserted here rather than assumed in a comment.
+    /// Pins the level ordering `clears` relies on.
+    ///
+    /// `clears` reads `<=` as "at least this severe", which holds only while `tracing` orders its
+    /// levels by verbosity.
     #[test]
     fn tracing_orders_levels_by_verbosity() {
         assert!(Level::ERROR <= Level::WARN);
@@ -343,14 +346,16 @@ mod tests {
         assert_eq!(thresholds.span, Some(Level::INFO));
     }
 
-    /// The default is what the bootstrap subscriber falls back to, so a typo in it would surface
-    /// only on the path that reports a configuration nobody could load.
+    /// Checks that the default log level parses as a filter directive.
+    ///
+    /// The bootstrap subscriber falls back to it, so a typo would surface only on the path that
+    /// reports a configuration nobody could load.
     #[test]
     fn the_default_log_level_is_a_filter_directive() {
         assert!(EnvFilter::try_new(Telemetry::default().log_level).is_ok());
     }
 
-    /// What `install` refuses, and — just as much the point — what it cannot refuse.
+    /// What `install` refuses, and what it cannot refuse.
     ///
     /// `EnvFilter` rejects a level it does not know and syntax it cannot parse, which is what the
     /// error path is for. It accepts a bare word as a target name, so `waarn` is a directive about

@@ -89,7 +89,7 @@ fn count_at(row: &PgRow, column: &'static str) -> Result<u32, StoreError> {
 /// nothing like its response to an unreachable database.
 #[expect(
     clippy::needless_pass_by_value,
-    reason = "used as a function item in `map_err`, which hands over an owned error; taking a               reference would put a closure at every one of its call sites"
+    reason = "used as a function item in `map_err`, which hands over an owned error; taking a reference would put a closure at every one of its call sites"
 )]
 pub(crate) fn backend(error: sqlx::Error) -> StoreError {
     if let sqlx::Error::Database(ref db) = error

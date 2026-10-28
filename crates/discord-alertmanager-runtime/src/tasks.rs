@@ -23,19 +23,22 @@ use crate::service::PipelineService;
 /// the "a failure is logged and the next tick is the retry" rule are written once.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Job {
-    /// Poll Alertmanager and converge the local state onto it.
+    /// The poll that converges the local state onto Alertmanager's.
     Reconcile,
 
-    /// Diff the local silence rows against Alertmanager's.
+    /// The diff of the local silence rows against Alertmanager's.
     SyncSilences,
 
-    /// Return the leases of workers that died holding one.
+    /// The return to the queue of every claim older than three lease durations.
+    ///
+    /// Nothing checks whether the holder is alive, so a worker still running an item past that
+    /// window loses it, and another worker may apply the same effect again.
     ReclaimLeases,
 
-    /// Mention the escalation targets of cards nobody has answered.
+    /// The mention of escalation targets for cards nobody has answered.
     Escalate,
 
-    /// Delete rows past their retention horizon.
+    /// The deletion of rows past their retention horizon.
     Prune,
 }
 
