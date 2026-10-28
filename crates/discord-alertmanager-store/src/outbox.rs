@@ -1,7 +1,7 @@
 //! The durable side-effect queue, and what completing one of its items records.
 
 use chrono::{DateTime, Utc};
-use dam_core::DedupeKey;
+use dam_core::{DedupeKey, NotificationState};
 use serde::{Deserialize, Serialize};
 
 use crate::ids::{ChannelId, MessageId, NotificationId, OutboxId, RoleId, TagId, UserId, WorkerId};
@@ -157,6 +157,15 @@ pub enum Effect {
         locked: bool,
         /// Minutes of inactivity before Discord archives it.
         auto_archive_minutes: u32,
+        /// The card state these flags were planned for.
+        ///
+        /// Flags are absolute, and a failed item is retried after the items queued behind it, so
+        /// a resolve's seal retried after a re-fire's reopen would archive a post whose alert is
+        /// firing again. The worker drops the item when the card has since crossed between
+        /// resolved and live. Absent on rows queued before the field existed, which apply as
+        /// planned.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        planned_for: Option<NotificationState>,
     },
 
     /// A post to pin or unpin.

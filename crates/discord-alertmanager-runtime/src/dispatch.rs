@@ -264,8 +264,21 @@ impl Dispatcher {
                 archived,
                 locked,
                 auto_archive_minutes,
+                planned_for,
             } => {
-                let thread = self.thread(*notification).await?;
+                let card = self.card(*notification).await?;
+                if let Some(planned) = planned_for
+                    && planned.holds_thread_open() != card.state.holds_thread_open()
+                {
+                    // Superseded: the card has crossed between resolved and live since these
+                    // flags were planned, and the transition that moved it queued its own.
+                    debug!(%notification, planned = %planned, now = %card.state, "dropping stale post flags");
+                    return Ok(AppliedEffect::default());
+                }
+
+                let thread = card
+                    .thread_id
+                    .ok_or_else(|| Failure::Drop("the card has no thread".to_owned()))?;
                 self.sink
                     .set_post_flags(
                         thread,

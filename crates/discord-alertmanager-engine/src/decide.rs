@@ -387,6 +387,7 @@ fn update_for(
                 archived: false,
                 locked: false,
                 auto_archive_minutes: auto_archive_minutes(route, effective, settings),
+                planned_for: Some(effective),
             },
             card,
             now,
@@ -464,6 +465,7 @@ fn resolved_post_flags(
                 NotificationState::Resolved,
                 settings,
             ),
+            planned_for: Some(NotificationState::Resolved),
         },
         dedupe_key: card.dedupe_key.clone(),
         // Behind the edit's debounce, and queued after it, so that the claim order — `not_before`
@@ -499,6 +501,7 @@ fn reopened_post_window(
             archived: false,
             locked: false,
             auto_archive_minutes: auto_archive_minutes(route, effective, settings),
+            planned_for: Some(effective),
         },
         dedupe_key: card.dedupe_key.clone(),
         // Behind the debounce, like the resolve's own flags: a re-fire inside that debounce

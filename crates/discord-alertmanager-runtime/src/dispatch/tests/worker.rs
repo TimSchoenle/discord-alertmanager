@@ -209,8 +209,12 @@ impl DiscordSink for Discord {
         self.refuse_stale_tag()
     }
 
-    async fn set_post_flags(&self, _thread: ChannelId, _flags: PostFlags) -> Result<(), SinkError> {
-        unimplemented!("no post here is archived")
+    async fn set_post_flags(&self, _thread: ChannelId, flags: PostFlags) -> Result<(), SinkError> {
+        self.record(format!(
+            "flags archived={} minutes={}",
+            flags.archived, flags.auto_archive_minutes
+        ));
+        Ok(())
     }
 
     async fn set_post_pinned(&self, _thread: ChannelId, pinned: bool) -> Result<(), SinkError> {
@@ -772,6 +776,70 @@ async fn a_retag_writes_the_set_the_card_wants_now() {
     assert_eq!(world.discord.count("tags"), 1);
     assert!(row.applied_tags.contains(&acked));
     assert_ne!(row.tags_hash, before);
+}
+
+/// The seal a resolve queued, as it would be retried after the alert fired again.
+fn resolve_seal(card: NotificationId, planned_for: Option<NotificationState>) -> Effect {
+    Effect::SetFlags {
+        notification: card,
+        archived: true,
+        locked: false,
+        auto_archive_minutes: 60,
+        planned_for,
+    }
+}
+
+#[tokio::test]
+async fn a_seal_planned_for_resolution_is_dropped_once_the_alert_fires_again() {
+    let world = World::new(policy(), Discord::new()).await;
+    let card = world.fire("aa12", "warning").await;
+
+    world
+        .run(card, resolve_seal(card, Some(NotificationState::Resolved)))
+        .await;
+
+    assert_eq!(
+        world.discord.count("flags"),
+        0,
+        "the post is firing; sealing it is stale"
+    );
+    assert!(!world.notification(card).await.archived);
+    assert_eq!(
+        world.queued().await,
+        0,
+        "a stale item is finished, not retried"
+    );
+}
+
+#[tokio::test]
+async fn a_seal_still_matching_the_card_is_applied() {
+    let world = World::new(policy(), Discord::new()).await;
+    let card = world.fire("aa13", "warning").await;
+    world
+        .store
+        .set_notification_state(card, NotificationState::Resolved, Utc::now())
+        .await
+        .expect("the state is written");
+
+    world
+        .run(card, resolve_seal(card, Some(NotificationState::Resolved)))
+        .await;
+
+    assert_eq!(
+        world.discord.calls().last().map(String::as_str),
+        Some("flags archived=true minutes=60")
+    );
+    assert!(world.notification(card).await.archived);
+}
+
+#[tokio::test]
+async fn flags_queued_before_the_planned_state_existed_apply_as_planned() {
+    let world = World::new(policy(), Discord::new()).await;
+    let card = world.fire("aa14", "warning").await;
+
+    world.run(card, resolve_seal(card, None)).await;
+
+    assert_eq!(world.discord.count("flags"), 1);
 }
 
 #[tokio::test]
