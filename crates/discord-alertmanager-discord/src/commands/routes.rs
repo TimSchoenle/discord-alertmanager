@@ -421,7 +421,8 @@ fn forum_checks(
 
     if policy.title_template.trim().is_empty() {
         lines.push(
-            "- **the title template is empty**, and a forum post must have a title".to_owned(),
+            "- the title template is empty, so posts take the thread name: `[SEVERITY] alertname`"
+                .to_owned(),
         );
     }
 
