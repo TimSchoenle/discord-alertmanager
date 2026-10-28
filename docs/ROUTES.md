@@ -49,7 +49,9 @@ tags and `default_tag` (here `unclassified`) when the gateway connects, and a `n
 tag the first time a post carries it. A label tag is named after the value, cut to 20 characters,
 with whitespace replaced by hyphens. That is why this route also needs `Manage Channels`, listed
 under [Discord permissions](../README.md#discord-permissions). With `manage_tags = false`, or
-without the permission, the bot applies only tags that already exist.
+without the permission, the bot applies only tags that already exist. A label tag it fails to
+create is not asked for again for ten minutes, so a forum it cannot edit costs a few calls an
+hour rather than one per post.
 
 A post whose tags all fail to resolve gets `default_tag`. A forum set to require a tag rejects a
 post that carries none, so in such a forum make sure `default_tag` or the state tags exist before

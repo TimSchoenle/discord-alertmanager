@@ -13,9 +13,10 @@
 //! covers the third case, a worker that dies holding a row: the janitor releases it, and the
 //! worker that comes back finds its claim gone rather than writing over somebody else's work.
 
+use std::collections::HashMap;
 use std::future::Future;
-use std::sync::Arc;
-use std::time::Duration;
+use std::sync::{Arc, Mutex, PoisonError};
+use std::time::{Duration, Instant};
 
 use chrono::Utc;
 use dam_core::{Labels, NotificationState};
@@ -58,6 +59,13 @@ const MAX_ATTEMPTS: u32 = 10;
 /// to go quiet.
 const REOPENED_AUTO_ARCHIVE_MINUTES: u32 = 10_080;
 
+/// How long a label tag the bot failed to create is left alone before a post asks for it again.
+///
+/// Without `MANAGE_CHANNELS`, or at Discord's tag ceiling, every attempt fails the same way, and
+/// each one is a channel read and a warning on the post path. Ten minutes bounds that to a
+/// handful an hour while a permission granted later still takes effect without a restart.
+const TAG_RETRY_AFTER: Duration = Duration::from_secs(600);
+
 /// One dispatcher worker.
 pub struct Dispatcher {
     store: Arc<dyn Store>,
@@ -71,6 +79,7 @@ pub struct Dispatcher {
     lane: Option<LaneAssignment>,
     lease: Duration,
     batch: u32,
+    tag_backoff: TagBackoff,
 }
 
 impl Dispatcher {
@@ -105,6 +114,7 @@ impl Dispatcher {
             lane,
             lease,
             batch,
+            tag_backoff: TagBackoff::default(),
         }
     }
 
@@ -526,12 +536,15 @@ impl Dispatcher {
             return false;
         }
 
-        let missing = missing_label_tags(
+        let mut missing = missing_label_tags(
             &self.routing.load(),
             *channel,
             policy,
             &assembled.data.alert.labels,
         );
+
+        let now = Instant::now();
+        self.tag_backoff.retain_due(*channel, &mut missing, now);
 
         if missing.is_empty() {
             return false;
@@ -541,16 +554,19 @@ impl Dispatcher {
             Ok(tags) => tags,
             Err(error) => {
                 warn!(%error, channel = channel.get(), "cannot create a forum's label tags");
+                self.tag_backoff.record(*channel, &missing, now);
                 return false;
             }
         };
 
         // Without `MANAGE_CHANNELS`, or at the tag ceiling, the sink returns the tags that were
         // already there, and there is nothing new to resolve the card against.
-        if !missing
-            .iter()
-            .any(|spec| tags.iter().any(|tag| tag.name == spec.name))
-        {
+        let (created, refused): (Vec<TagSpec>, Vec<TagSpec>) = missing
+            .into_iter()
+            .partition(|spec| tags.iter().any(|tag| tag.name == spec.name));
+        self.tag_backoff.record(*channel, &refused, now);
+
+        if created.is_empty() {
             return false;
         }
 
@@ -982,6 +998,41 @@ fn has_pin_room(pinned: u32, max_pinned: u32) -> bool {
     pinned < max_pinned
 }
 
+/// Label tags this worker recently failed to create, keyed by channel and tag name.
+///
+/// Held per worker rather than shared across the pool: a worker that has not seen a refusal yet
+/// makes one attempt of its own per window, which costs less than another collaborator threaded
+/// through the composition root. Nothing is recorded for a tag that was created, because the
+/// rebuilt routing snapshot already stops it being asked for.
+#[derive(Debug, Default)]
+struct TagBackoff {
+    failed: Mutex<HashMap<(dam_store::ChannelId, String), Instant>>,
+}
+
+impl TagBackoff {
+    /// Drops from `specs` the tags that failed within [`TAG_RETRY_AFTER`] of `now`.
+    ///
+    /// Forgets the entries that have expired on the way, so the map holds at most the tags
+    /// that failed in the last window.
+    fn retain_due(&self, channel: dam_store::ChannelId, specs: &mut Vec<TagSpec>, now: Instant) {
+        let mut failed = self.failed.lock().unwrap_or_else(PoisonError::into_inner);
+        failed.retain(|_, at| now.saturating_duration_since(*at) < TAG_RETRY_AFTER);
+        specs.retain(|spec| !failed.contains_key(&(channel, spec.name.clone())));
+    }
+
+    /// Notes that creating `specs` in `channel` failed at `now`.
+    fn record(&self, channel: dam_store::ChannelId, specs: &[TagSpec], now: Instant) {
+        if specs.is_empty() {
+            return;
+        }
+
+        let mut failed = self.failed.lock().unwrap_or_else(PoisonError::into_inner);
+        for spec in specs {
+            failed.insert((channel, spec.name.clone()), now);
+        }
+    }
+}
+
 /// The label tags a forum post wants that its channel does not have, each named once.
 ///
 /// Created non-moderated, so the bot can apply them as the thread's owner without
@@ -1361,6 +1412,43 @@ mod tests {
         assert!(!has_pin_room(1, 1));
         assert!(has_pin_room(4, 5));
         assert!(!has_pin_room(0, 0));
+    }
+
+    #[test]
+    fn a_refused_tag_is_not_asked_for_again_until_the_window_passes() {
+        let backoff = TagBackoff::default();
+        let channel = ChannelId::new(200);
+        let spec = |name: &str| TagSpec {
+            name: name.to_owned(),
+            moderated: false,
+        };
+        let start = Instant::now();
+
+        backoff.record(channel, &[spec("payments")], start);
+
+        let mut wanted = vec![spec("payments"), spec("billing")];
+        backoff.retain_due(channel, &mut wanted, start + Duration::from_secs(1));
+        assert_eq!(
+            wanted,
+            vec![spec("billing")],
+            "only the refused tag is held back"
+        );
+
+        let mut elsewhere = vec![spec("payments")];
+        backoff.retain_due(ChannelId::new(300), &mut elsewhere, start);
+        assert_eq!(
+            elsewhere.len(),
+            1,
+            "a refusal in one forum says nothing about another"
+        );
+
+        let mut later = vec![spec("payments")];
+        backoff.retain_due(channel, &mut later, start + TAG_RETRY_AFTER);
+        assert_eq!(
+            later.len(),
+            1,
+            "the tag is asked for again once the window has passed"
+        );
     }
 
     #[test]

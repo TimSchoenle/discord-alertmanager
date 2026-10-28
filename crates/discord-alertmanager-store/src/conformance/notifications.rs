@@ -674,7 +674,7 @@ pub(super) async fn pinned_posts_are_counted_per_channel(store: &dyn Store) {
     let plain = DedupeKey::from_stored("a:pins-plain");
     let elsewhere = DedupeKey::from_stored("a:pins-elsewhere");
 
-    card_for(store, route, 140, &pinned).await;
+    let pinned_id = card_for(store, route, 140, &pinned).await;
     card_for(store, route, 140, &plain).await;
     card_for(store, other, 141, &elsewhere).await;
 
@@ -703,5 +703,19 @@ pub(super) async fn pinned_posts_are_counted_per_channel(store: &dyn Store) {
             .expect("the count reads"),
         1,
         "the unpinned post and the pinned post in another channel are not counted"
+    );
+
+    store
+        .orphan_notification(pinned_id, at(40))
+        .await
+        .expect("the card is released");
+
+    assert_eq!(
+        store
+            .pinned_posts(ChannelId::new(140))
+            .await
+            .expect("the count reads"),
+        0,
+        "a deleted message holds no pin, so its row must not hold one of the route's slots"
     );
 }

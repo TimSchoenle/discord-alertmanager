@@ -309,7 +309,7 @@ pub(super) async fn orphan_notification(
     // (channel_id, dedupe_key) is what a fresh card needs freed, and the row is what the
     // alert's history hangs off.
     let affected = sqlx::query(
-        "UPDATE notifications SET state = 'orphaned', message_id = NULL, \
+        "UPDATE notifications SET state = 'orphaned', message_id = NULL, pinned = 0, \
          dedupe_key = 'orphaned:' || id || ':' || dedupe_key, updated_at = ? WHERE id = ?",
     )
     .bind(encode_time(now))

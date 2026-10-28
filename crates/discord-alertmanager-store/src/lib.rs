@@ -305,7 +305,9 @@ pub trait Store: Send + Sync + 'static {
     /// Somebody deleted it, or the channel went. The row is kept, because the history it carries
     /// is the only record that the alert was ever announced, and its dedupe key is released so the
     /// next change posts a fresh card rather than editing a message that is not there. Retrying
-    /// the edit instead would fail for as long as the alert lasts.
+    /// the edit instead would fail for as long as the alert lasts. The pin flag is cleared too: a
+    /// deleted message holds no pin, and [`Store::pinned_posts`] would otherwise count it against
+    /// the route's limit for as long as the row is kept.
     ///
     /// # Errors
     ///
