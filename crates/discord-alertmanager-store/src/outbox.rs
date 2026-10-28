@@ -140,7 +140,10 @@ pub enum Effect {
     SetTags {
         /// The post to change.
         notification: NotificationId,
-        /// The desired tag set, already truncated to Discord's five.
+        /// The tag set wanted when the change was planned, already truncated to Discord's five.
+        ///
+        /// A record of the plan rather than an instruction: the worker resolves the set again
+        /// when it runs, against the card and the forum's tags as they are then.
         tags: Vec<TagId>,
     },
 

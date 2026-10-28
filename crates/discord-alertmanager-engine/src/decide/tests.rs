@@ -1023,15 +1023,36 @@ fn an_update_that_changes_no_state_asks_for_no_pin() {
 
 #[test]
 fn a_card_switching_to_another_alert_is_retagged_without_moving() {
-    let route = forum_route();
-    let delta = delta(EventKind::Updated, AlertStatus::Firing, AmState::Active);
+    let mut route = forum_route();
+    if let RouteTarget::Forum { policy, .. } = &mut route.target {
+        policy.label_tags = vec!["namespace".to_owned()];
+    }
+
+    let mut tags = forum_tags();
+    for (id, name) in [(10, "billing"), (11, "payments")] {
+        tags.push(ForumTag {
+            channel_id: ChannelId::new(200),
+            name: name.to_owned(),
+            id: TagId::new(id),
+            moderated: false,
+            synced_at: now(),
+        });
+    }
+
+    // The card was showing an alert from `billing`, which is the tag it carries; the alert now on
+    // show is from `payments`.
+    let mut delta = delta(EventKind::Updated, AlertStatus::Firing, AmState::Active);
+    delta.alert.labels = labels(&[
+        ("alertname", "PodDown"),
+        ("severity", "critical"),
+        ("namespace", "payments"),
+    ]);
     let key = key_of(&delta);
+    let mut shown = card(NotificationState::Firing, ChannelId::new(200), &key);
+    shown.applied_tags = vec![TagId::new(1), TagId::new(5), TagId::new(10)];
     let mut existing = ExistingCards::new();
-    existing.insert(
-        (ChannelId::new(200), key.clone()),
-        card(NotificationState::Firing, ChannelId::new(200), &key),
-    );
-    let snapshot = RoutingSnapshot::new(vec![route], Vec::new(), forum_tags());
+    existing.insert((ChannelId::new(200), key.clone()), shown);
+    let snapshot = RoutingSnapshot::new(vec![route], Vec::new(), tags);
 
     let decision = decide(
         &delta,
@@ -1045,10 +1066,18 @@ fn a_card_switching_to_another_alert_is_retagged_without_moving() {
 
     let update = &decision.updates[0];
 
-    // The card showed another alert, so the label tags it carries were chosen for that alert's
-    // labels. Nothing else moves: no note, and no pin.
+    // Nothing moves, so there is no note and no pin; only the tags follow the new alert.
     assert_eq!(update.state, None);
     assert_eq!(kinds(update), vec!["edit_card", "set_tags"]);
+
+    let Effect::SetTags { tags, .. } = &update.effects[1].effect else {
+        unreachable!("the second effect is the retag");
+    };
+    assert_eq!(
+        tags,
+        &vec![TagId::new(1), TagId::new(5), TagId::new(11)],
+        "the state and severity tags stay, and the label tag is the new alert's"
+    );
 }
 
 #[test]

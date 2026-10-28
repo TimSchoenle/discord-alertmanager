@@ -258,7 +258,7 @@ impl Dispatcher {
                 self.open_thread(*notification, name).await
             }
             Effect::ThreadNote { notification, text } => self.note(*notification, text).await,
-            Effect::SetTags { notification, tags } => self.retag(*notification, tags).await,
+            Effect::SetTags { notification, .. } => self.retag(*notification).await,
             Effect::SetFlags {
                 notification,
                 archived,
@@ -346,14 +346,17 @@ impl Dispatcher {
             assembled = again;
         }
 
-        let posted = if assembled.target.target.is_forum() {
-            self.sink
-                .create_forum_post(&assembled.target, &assembled.data)
-                .await
-        } else {
-            self.sink
-                .post_card(&assembled.target, &assembled.data)
-                .await
+        let posted = match self.publish(&assembled).await {
+            Err(SinkError::UnknownTag)
+                if self.resync_forum_tags(&assembled.target.target).await =>
+            {
+                let Some(again) = self.assemble(notification, mention).await? else {
+                    return Err(Failure::Drop("the card can no longer be drawn".to_owned()));
+                };
+                assembled = again;
+                self.publish(&assembled).await
+            }
+            other => other,
         }
         .map_err(Failure::from_sink)?;
 
@@ -367,6 +370,22 @@ impl Dispatcher {
             tags_hash: Some(tags_hash(&assembled.target.tags)),
             ..AppliedEffect::default()
         })
+    }
+
+    /// Sends an assembled card to Discord as a forum post or a channel message.
+    async fn publish(
+        &self,
+        assembled: &crate::cards::Assembled,
+    ) -> Result<dam_engine::PostedMessage, SinkError> {
+        if assembled.target.target.is_forum() {
+            self.sink
+                .create_forum_post(&assembled.target, &assembled.data)
+                .await
+        } else {
+            self.sink
+                .post_card(&assembled.target, &assembled.data)
+                .await
+        }
     }
 
     /// Re-renders a card, skipping the call when nothing a viewer can see has changed.
@@ -570,7 +589,38 @@ impl Dispatcher {
             return false;
         }
 
-        if let Err(error) = self.store.sync_forum_tags(*channel, &tags).await {
+        self.adopt_forum_tags(*channel, &tags).await
+    }
+
+    /// Reloads a forum's tags from Discord after a call named one the forum no longer has.
+    ///
+    /// The tag was deleted, or deleted and recreated under a new id, since the routing snapshot
+    /// last read the channel. Returns whether the snapshot was rebuilt, which is what makes a
+    /// second attempt worth making: the card is assembled again against tags that exist, and a
+    /// name that no longer resolves is left off rather than failing the call.
+    async fn resync_forum_tags(&self, target: &RouteTarget) -> bool {
+        let RouteTarget::Forum { channel, .. } = target else {
+            return false;
+        };
+
+        match self.sink.forum_tags(*channel).await {
+            Ok(tags) => self.adopt_forum_tags(*channel, &tags).await,
+            Err(error) => {
+                warn!(%error, channel = channel.get(), "cannot reload a forum's tags");
+                false
+            }
+        }
+    }
+
+    /// Caches a forum's tags as Discord reported them and rebuilds the routing snapshot.
+    ///
+    /// Returns whether the new snapshot is live.
+    async fn adopt_forum_tags(
+        &self,
+        channel: dam_store::ChannelId,
+        tags: &[dam_store::ForumTag],
+    ) -> bool {
+        if let Err(error) = self.store.sync_forum_tags(channel, tags).await {
             warn!(%error, channel = channel.get(), "cannot cache forum tags");
             return false;
         }
@@ -587,77 +637,93 @@ impl Dispatcher {
         }
     }
 
-    /// Applies a post's tags, skipping the call when the post already carries that set.
+    /// Applies the tags a post wants now, skipping the call when it already carries that set.
     ///
-    /// Compared here rather than when the effect is planned. Tag changes coalesce in the queue, so
-    /// the row this worker holds is the latest desired set, and the stored hash is the set the
-    /// last completed call applied. A comparison at planning time would read the stored hash while
-    /// an older change was still queued, skip a revert to the applied set, and let the queued
-    /// change land last.
+    /// The set is resolved here, against the card and the routing snapshot as they are at the
+    /// time of the call, rather than taken from the queued effect. Tag changes coalesce in the
+    /// queue, so the effect only says that the set may have moved; resolving it late picks up a
+    /// state written after it was planned, a tag created or reloaded since, and a label tag this
+    /// call creates. The comparison with the stored hash is made here for the same reason: at
+    /// planning time it would read the hash while an older change was still queued, skip a revert
+    /// to the applied set, and let the queued change land last.
     async fn retag(
         &self,
         notification: dam_store::NotificationId,
-        tags: &[dam_store::TagId],
     ) -> Result<AppliedEffect, Failure> {
-        let card = self.card(notification).await?;
+        let mut assembled = self.wanted_tags(notification).await?;
 
-        let thread = card
+        let thread = assembled
+            .card
             .thread_id
             .ok_or_else(|| Failure::Drop("the card has no thread".to_owned()))?;
 
-        let tags = match self.created_label_tags(&card).await? {
-            Some(resolved) => resolved,
-            None => tags.to_vec(),
-        };
-
-        let hash = tags_hash(&tags);
-        if !card.needs_tag_update(&hash) {
-            debug!(notification = %notification, "skipping a tag write that would change nothing");
-            return Ok(AppliedEffect::default());
+        let mut outcome = self.apply_tags(&assembled, thread).await;
+        if matches!(outcome, Err(SinkError::UnknownTag))
+            && self.resync_forum_tags(&assembled.target.target).await
+        {
+            assembled = self.drawn(notification).await?;
+            outcome = self.apply_tags(&assembled, thread).await;
         }
 
-        reopening(self.sink.as_ref(), thread, || {
-            self.sink.set_post_tags(thread, &tags)
+        outcome
+            .map(Option::unwrap_or_default)
+            .map_err(Failure::from_sink)
+    }
+
+    /// Assembles a card for a retag, creating any label tag it wants first.
+    ///
+    /// When one was created the card is assembled again, because its tags were resolved against
+    /// the snapshot from before the tag existed.
+    async fn wanted_tags(
+        &self,
+        notification: dam_store::NotificationId,
+    ) -> Result<crate::cards::Assembled, Failure> {
+        let assembled = self.drawn(notification).await?;
+
+        if self.create_label_tags(&assembled).await {
+            return self.drawn(notification).await;
+        }
+
+        Ok(assembled)
+    }
+
+    /// Writes an assembled card's tags to its post, unless the post already carries them.
+    ///
+    /// `Ok(None)` means the write was skipped.
+    async fn apply_tags(
+        &self,
+        assembled: &crate::cards::Assembled,
+        thread: dam_store::ChannelId,
+    ) -> Result<Option<AppliedEffect>, SinkError> {
+        let tags = &assembled.target.tags;
+        let hash = tags_hash(tags);
+
+        if !assembled.card.needs_tag_update(&hash) {
+            debug!(notification = %assembled.card.id, "skipping a tag write that would change nothing");
+            return Ok(None);
+        }
+
+        let ((), reopened) = reopening(self.sink.as_ref(), thread, || {
+            self.sink.set_post_tags(thread, tags)
         })
-        .await
-        .map(|((), reopened)| AppliedEffect {
-            applied_tags: Some(tags),
+        .await?;
+
+        Ok(Some(AppliedEffect {
+            applied_tags: Some(tags.clone()),
             tags_hash: Some(hash),
             archived: reopened.then_some(false),
             ..AppliedEffect::default()
-        })
-        .map_err(Failure::from_sink)
+        }))
     }
 
-    /// Creates the label tags a posted card now wants, and returns its tags resolved again when
-    /// any was created.
-    ///
-    /// A post can switch to an alert whose label value has no tag yet, and the planned set left
-    /// that tag out because it did not resolve. `None` means nothing was created and the planned
-    /// set stands. The card is only assembled for a forum route with `manage_tags`, so a retag on
-    /// any other route costs no extra reads.
-    async fn created_label_tags(
+    /// Assembles a card, dropping the effect when it can no longer be drawn.
+    async fn drawn(
         &self,
-        card: &dam_store::Notification,
-    ) -> Result<Option<Vec<dam_store::TagId>>, Failure> {
-        let manages_tags = self.routing.load().route(card.route_id).is_some_and(|route| {
-            matches!(&route.target, RouteTarget::Forum { policy, .. } if policy.manage_tags)
-        });
-        if !manages_tags {
-            return Ok(None);
-        }
-
-        let Some(assembled) = self.assemble(card.id, false).await? else {
-            return Ok(None);
-        };
-        if !self.create_label_tags(&assembled).await {
-            return Ok(None);
-        }
-
-        Ok(self
-            .assemble(card.id, false)
+        notification: dam_store::NotificationId,
+    ) -> Result<crate::cards::Assembled, Failure> {
+        self.assemble(notification, false)
             .await?
-            .map(|again| again.target.tags))
+            .ok_or_else(|| Failure::Drop("the card can no longer be drawn".to_owned()))
     }
 
     /// Opens the thread a route's policy asks for.
