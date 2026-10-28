@@ -605,23 +605,59 @@ impl Dispatcher {
             .thread_id
             .ok_or_else(|| Failure::Drop("the card has no thread".to_owned()))?;
 
-        let hash = tags_hash(tags);
+        let tags = match self.created_label_tags(&card).await? {
+            Some(resolved) => resolved,
+            None => tags.to_vec(),
+        };
+
+        let hash = tags_hash(&tags);
         if !card.needs_tag_update(&hash) {
             debug!(notification = %notification, "skipping a tag write that would change nothing");
             return Ok(AppliedEffect::default());
         }
 
         reopening(self.sink.as_ref(), thread, || {
-            self.sink.set_post_tags(thread, tags)
+            self.sink.set_post_tags(thread, &tags)
         })
         .await
         .map(|((), reopened)| AppliedEffect {
-            applied_tags: Some(tags.to_vec()),
+            applied_tags: Some(tags),
             tags_hash: Some(hash),
             archived: reopened.then_some(false),
             ..AppliedEffect::default()
         })
         .map_err(Failure::from_sink)
+    }
+
+    /// Creates the label tags a posted card now wants, and returns its tags resolved again when
+    /// any was created.
+    ///
+    /// A post can switch to an alert whose label value has no tag yet, and the planned set left
+    /// that tag out because it did not resolve. `None` means nothing was created and the planned
+    /// set stands. The card is only assembled for a forum route with `manage_tags`, so a retag on
+    /// any other route costs no extra reads.
+    async fn created_label_tags(
+        &self,
+        card: &dam_store::Notification,
+    ) -> Result<Option<Vec<dam_store::TagId>>, Failure> {
+        let manages_tags = self.routing.load().route(card.route_id).is_some_and(|route| {
+            matches!(&route.target, RouteTarget::Forum { policy, .. } if policy.manage_tags)
+        });
+        if !manages_tags {
+            return Ok(None);
+        }
+
+        let Some(assembled) = self.assemble(card.id, false).await? else {
+            return Ok(None);
+        };
+        if !self.create_label_tags(&assembled).await {
+            return Ok(None);
+        }
+
+        Ok(self
+            .assemble(card.id, false)
+            .await?
+            .map(|again| again.target.tags))
     }
 
     /// Opens the thread a route's policy asks for.

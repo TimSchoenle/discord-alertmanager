@@ -472,7 +472,12 @@ fn forum_effects(
 ) -> Vec<NewOutboxItem> {
     let mut effects = Vec::new();
 
-    if state.is_some() {
+    // The tags follow the state and the labels of the alert on show. A card can switch to
+    // another alert without moving, when a churned label or a second member of its identity takes
+    // over, and that alert's labels can want different label tags. Asked for only on a state
+    // change or a switch, so a repeat of the same alert queues nothing; the worker skips a set
+    // the post already carries.
+    if state.is_some() || shown.fingerprint != card.fingerprint {
         let tags = desired_tags(
             snapshot,
             channel,
@@ -490,7 +495,9 @@ fn forum_effects(
             card,
             now,
         ));
+    }
 
+    if state.is_some() {
         // Editing a message does not bump a forum's activity sort; only a new message does.
         // Without this note a state change leaves the post buried exactly where it was.
         if policy.bump_on_state_change {

@@ -587,7 +587,11 @@ fn a_card_stays_firing_while_another_alert_behind_it_still_fires() {
         update.fingerprint, live.fingerprint,
         "it shows the one still firing"
     );
-    assert_eq!(kinds(update), vec!["edit_card"]);
+    assert_eq!(
+        kinds(update),
+        vec!["edit_card", "set_tags"],
+        "and takes that alert's tags, with no note or pin for a move that did not happen"
+    );
 
     let alone = decide(
         &gone,
@@ -991,11 +995,10 @@ fn an_update_that_changes_no_state_asks_for_no_pin() {
     let route = forum_route();
     let delta = delta(EventKind::Updated, AlertStatus::Firing, AmState::Active);
     let key = key_of(&delta);
+    let mut shown = card(NotificationState::Firing, ChannelId::new(200), &key);
+    shown.fingerprint = delta.alert.fingerprint.clone();
     let mut existing = ExistingCards::new();
-    existing.insert(
-        (ChannelId::new(200), key.clone()),
-        card(NotificationState::Firing, ChannelId::new(200), &key),
-    );
+    existing.insert((ChannelId::new(200), key.clone()), shown);
     let snapshot = RoutingSnapshot::new(vec![route], Vec::new(), forum_tags());
 
     let decision = decide(
@@ -1016,6 +1019,36 @@ fn an_update_that_changes_no_state_asks_for_no_pin() {
     // alert lasts.
     assert_eq!(update.state, None);
     assert_eq!(kinds(update), vec!["edit_card"]);
+}
+
+#[test]
+fn a_card_switching_to_another_alert_is_retagged_without_moving() {
+    let route = forum_route();
+    let delta = delta(EventKind::Updated, AlertStatus::Firing, AmState::Active);
+    let key = key_of(&delta);
+    let mut existing = ExistingCards::new();
+    existing.insert(
+        (ChannelId::new(200), key.clone()),
+        card(NotificationState::Firing, ChannelId::new(200), &key),
+    );
+    let snapshot = RoutingSnapshot::new(vec![route], Vec::new(), forum_tags());
+
+    let decision = decide(
+        &delta,
+        &snapshot,
+        &quiet(),
+        &existing,
+        &known(false),
+        &DecisionSettings::default(),
+        now(),
+    );
+
+    let update = &decision.updates[0];
+
+    // The card showed another alert, so the label tags it carries were chosen for that alert's
+    // labels. Nothing else moves: no note, and no pin.
+    assert_eq!(update.state, None);
+    assert_eq!(kinds(update), vec!["edit_card", "set_tags"]);
 }
 
 #[test]
