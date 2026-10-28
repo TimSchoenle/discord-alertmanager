@@ -46,8 +46,9 @@ const STARTING_TAGS: [&str; 7] = [
 
 /// Discord as one forum channel, recording every call made to it.
 ///
-/// Holds the forum's tag list, so that creating a tag is visible to the next read of it, and a
-/// switch for each refusal the dispatcher has a path for.
+/// Holds the forum's tag list, so that creating or recreating a tag is visible to the next read
+/// of it and a request naming an id no longer in it is refused, and a switch for each other
+/// refusal the dispatcher has a path for.
 struct Discord {
     calls: std::sync::Mutex<Vec<String>>,
     tags: std::sync::Mutex<Vec<ForumTag>>,
@@ -56,8 +57,6 @@ struct Discord {
     creates_tags: bool,
     /// What a tag request fails with outright, when it fails.
     tag_failure: Option<SinkError>,
-    /// Whether the next post or tag write names a tag Discord no longer has.
-    stale_tag: std::sync::Mutex<bool>,
     /// What a pin request fails with, when it fails.
     pin_refusal: Option<SinkError>,
     next_id: std::sync::Mutex<u64>,
@@ -76,7 +75,6 @@ impl Discord {
             ),
             creates_tags: true,
             tag_failure: None,
-            stale_tag: std::sync::Mutex::new(false),
             pin_refusal: None,
             next_id: std::sync::Mutex::new(1_000),
         }
@@ -118,16 +116,30 @@ impl Discord {
             .map(|tag| tag.id)
     }
 
-    /// Fails once with `UnknownTag` when the switch is set, as Discord does after a tag is
-    /// deleted behind the bot's cache.
-    fn refuse_stale_tag(&self) -> Result<(), SinkError> {
-        let mut stale = self.stale_tag.lock().expect("no test poisons the lock");
-        if *stale {
-            *stale = false;
-            return Err(SinkError::UnknownTag);
-        }
+    /// Deletes a tag and creates it again under a new id, behind the bot's cache, as a moderator
+    /// tidying the forum does. Returns the old id and the new one.
+    fn recreate(&self, name: &str) -> (TagId, TagId) {
+        let fresh = TagId::new(self.fresh_id());
+        let mut tags = self.tags.lock().expect("no test poisons the lock");
+        let tag = tags
+            .iter_mut()
+            .find(|tag| tag.name == name)
+            .expect("the forum has the tag");
+        let old = std::mem::replace(&mut tag.id, fresh);
+        (old, fresh)
+    }
 
-        Ok(())
+    /// Refuses a request naming a tag id the forum no longer has, as Discord does.
+    fn refuse_unknown_tags(&self, requested: &[TagId]) -> Result<(), SinkError> {
+        let tags = self.tags.lock().expect("no test poisons the lock");
+        if requested
+            .iter()
+            .all(|id| tags.iter().any(|tag| tag.id == *id))
+        {
+            Ok(())
+        } else {
+            Err(SinkError::UnknownTag)
+        }
     }
 }
 
@@ -136,6 +148,13 @@ fn ids(tags: &[TagId]) -> String {
     let mut ids: Vec<u64> = tags.iter().map(|tag| tag.get()).collect();
     ids.sort_unstable();
     format!("{ids:?}")
+}
+
+/// Whether a recorded post or tag write names a tag id, read back from its rendered list.
+fn names(call: &str, tag: TagId) -> bool {
+    call.split(['[', ']', ',', ' '])
+        .filter_map(|part| part.parse::<u64>().ok())
+        .any(|id| id == tag.get())
 }
 
 fn tag(name: &str, id: u64) -> ForumTag {
@@ -164,7 +183,7 @@ impl DiscordSink for Discord {
         _card: &CardData,
     ) -> Result<PostedMessage, SinkError> {
         self.record(format!("post {}", ids(&target.tags)));
-        self.refuse_stale_tag()?;
+        self.refuse_unknown_tags(&target.tags)?;
 
         let id = self.fresh_id();
 
@@ -206,7 +225,7 @@ impl DiscordSink for Discord {
 
     async fn set_post_tags(&self, _thread: ChannelId, tags: &[TagId]) -> Result<(), SinkError> {
         self.record(format!("tags {}", ids(tags)));
-        self.refuse_stale_tag()
+        self.refuse_unknown_tags(tags)
     }
 
     async fn set_post_flags(&self, _thread: ChannelId, flags: PostFlags) -> Result<(), SinkError> {
@@ -708,9 +727,8 @@ async fn a_refused_label_tag_is_not_asked_for_again_within_the_window() {
 
 #[tokio::test]
 async fn a_post_naming_a_deleted_tag_reloads_the_forum_and_goes_out() {
-    let discord = Discord::new();
-    *discord.stale_tag.lock().expect("no test poisons the lock") = true;
-    let world = World::new(policy(), discord).await;
+    let world = World::new(policy(), Discord::new()).await;
+    let (old, fresh) = world.discord.recreate("warning");
 
     let card = world.fire("aa0c", "warning").await;
 
@@ -724,7 +742,12 @@ async fn a_post_naming_a_deleted_tag_reloads_the_forum_and_goes_out() {
         2,
         "one refused post and one that went out: {calls:?}"
     );
-    assert!(calls.contains(&"read tags".to_owned()));
+    assert!(names(posts[0], old), "{calls:?}");
+    assert!(
+        names(posts[1], fresh) && !names(posts[1], old),
+        "the retry carries the reloaded id: {calls:?}"
+    );
+    assert_eq!(world.discord.count("read tags"), 1);
     assert!(world.notification(card).await.message_id.is_some());
 }
 
@@ -852,11 +875,7 @@ async fn a_retag_naming_a_deleted_tag_reloads_the_forum_and_writes_again() {
         .set_notification_state(card, NotificationState::Acked, Utc::now())
         .await
         .expect("the state is written");
-    *world
-        .discord
-        .stale_tag
-        .lock()
-        .expect("no test poisons the lock") = true;
+    let (old, fresh) = world.discord.recreate("acked");
     world
         .run(
             card,
@@ -867,11 +886,16 @@ async fn a_retag_naming_a_deleted_tag_reloads_the_forum_and_writes_again() {
         )
         .await;
 
-    assert_eq!(
-        world.discord.count("tags"),
-        2,
-        "{:?}",
-        world.discord.calls()
+    let calls = world.discord.calls();
+    let writes: Vec<&String> = calls
+        .iter()
+        .filter(|call| call.starts_with("tags"))
+        .collect();
+    assert_eq!(writes.len(), 2, "{calls:?}");
+    assert!(names(writes[0], old), "{calls:?}");
+    assert!(
+        names(writes[1], fresh) && !names(writes[1], old),
+        "the retry carries the reloaded id: {calls:?}"
     );
     assert_eq!(world.discord.count("read tags"), 1);
     assert_eq!(world.queued().await, 0);
