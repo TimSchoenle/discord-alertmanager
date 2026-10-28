@@ -82,6 +82,10 @@ impl Job {
 ///
 /// A failed pass is logged and not retried early: the next tick is the retry, and hammering an
 /// Alertmanager that is already struggling helps nobody.
+///
+/// # Panics
+///
+/// Panics if polled outside a Tokio runtime with the time driver enabled.
 pub async fn run(
     job: Job,
     service: Arc<PipelineService>,
