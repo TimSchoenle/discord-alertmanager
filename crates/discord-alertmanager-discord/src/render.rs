@@ -495,7 +495,7 @@ fn budget(title: &str, description: &str, footer: &str, fields: &mut Vec<(String
 ///
 /// The render time is deliberately absent. Folding it in would make every card differ from itself
 /// one debounce interval later, which turns the skip-if-unchanged rule into an edit per interval
-/// per open alert — the exact load it exists to prevent.
+/// per open alert, the exact load it exists to prevent.
 fn hash(
     card: &CardData,
     title: &str,

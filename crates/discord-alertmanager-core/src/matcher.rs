@@ -181,7 +181,7 @@ impl PartialEq for Matcher {
 
 impl Eq for Matcher {}
 
-/// A conjunction of matchers. All of them must hold.
+/// A conjunction of matchers, all of which must hold.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MatcherSet(Vec<Matcher>);
 
@@ -202,6 +202,23 @@ impl MatcherSet {
     ///
     /// Returns [`CoreError::BadMatcherExpression`] for a matcher with no operator or an empty
     /// name, and propagates the label-name and regex errors of [`Matcher::new`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dam_core::{LabelName, Labels, MatcherSet};
+    ///
+    /// let set = MatcherSet::parse("{severity=critical, namespace=~\"prod-.*\"}")?;
+    /// assert_eq!(set.as_slice().len(), 2);
+    ///
+    /// let mut labels = Labels::new();
+    /// labels.insert(LabelName::new("severity")?, "critical")?;
+    /// labels.insert(LabelName::new("namespace")?, "prod-eu")?;
+    /// assert!(set.matches(&labels));
+    ///
+    /// assert!(MatcherSet::parse("severity").is_err());
+    /// # Ok::<(), dam_core::CoreError>(())
+    /// ```
     pub fn parse(expression: &str) -> Result<Self, CoreError> {
         let trimmed = expression.trim();
         let trimmed = trimmed

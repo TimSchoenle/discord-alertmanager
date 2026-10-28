@@ -69,7 +69,7 @@ pub struct Route {
     /// Guild this route delivers in.
     pub guild_id: GuildId,
 
-    /// Name shown in `/route list` and in a card's footer. Unique within a guild.
+    /// Name shown in `/route list` and in a card's footer, unique within a guild.
     pub name: String,
 
     /// The matcher expression as written.
@@ -93,7 +93,7 @@ pub struct Route {
     /// When and to whom this route escalates a card nobody has taken.
     pub escalation: Option<Escalation>,
 
-    /// Evaluation order. Lower runs first.
+    /// Evaluation order, lowest first.
     pub priority: i32,
 
     /// Whether evaluation continues past this route once it matches.
@@ -183,8 +183,8 @@ impl FromStr for GroupStrategy {
 ///
 /// An enum here, where the configuration file has a flat table with a `kind` discriminant. The
 /// flat shape exists because it is what a TOML section can express; this shape exists because
-/// the four targets have genuinely different mechanics, and making that a compile-time
-/// distinction is what keeps forum handling out of the text-channel path.
+/// the four targets have different mechanics, and making that a compile-time distinction is what
+/// keeps forum handling out of the text-channel path.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum RouteTarget {
@@ -263,7 +263,7 @@ pub struct ThreadPolicy {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ThreadTrigger {
-    /// Nothing. The densest option, and the one that needs the fewest permissions.
+    /// Nothing, the densest option and the one that needs the fewest permissions.
     #[default]
     Never,
 
@@ -434,7 +434,9 @@ pub struct IgnoreRule {
     /// The compiled matchers.
     pub matchers: MatcherSet,
 
-    /// Why the rule exists. Required, because an unexplained mute outlives whoever set it.
+    /// Why the rule exists.
+    ///
+    /// Required, because an unexplained mute outlives whoever set it.
     pub reason: String,
 
     /// Who set it.

@@ -4,9 +4,9 @@
 //! registry buys is a single seam every command passes through: the capability check runs before
 //! any handler body, every mutating command and every refusal writes an audit row, and every
 //! handler defers before it touches I/O. The cost is argument extraction, which is the helpers at
-//! the bottom of this file, and that is an honest trade rather than a free one — a project that
-//! valued delivery speed over dependency count could take `poise` and delete this module without
-//! touching anything else, because commands only ever call into `dam_store` and `dam_engine`.
+//! the bottom of this file. A project that valued delivery speed over dependency count could take
+//! `poise` and replace this registry and its helpers. The handlers' calls into `dam_core`,
+//! `dam_store`, `dam_engine` and `dam_config` would stay as they are.
 //!
 //! # Deferral is not optional
 //!

@@ -51,7 +51,7 @@ pub struct RouteConfig {
     /// Evaluation order. Lower runs first.
     pub priority: i32,
 
-    /// Keep evaluating later routes after this one matches.
+    /// Whether later routes are still evaluated after this one matches.
     ///
     /// This is Alertmanager's own `continue`, spelled out because `continue` is a Rust keyword.
     pub continue_to_next: bool,
@@ -265,7 +265,7 @@ pub struct TargetPolicy {
     /// name and then to the fingerprint. An empty title fails post creation outright.
     pub title_template: String,
 
-    /// Create missing forum tags, which needs `MANAGE_CHANNELS`.
+    /// Whether missing forum tags are created, which needs `MANAGE_CHANNELS`.
     ///
     /// Created tags are non-moderated on purpose: a moderated tag can only be applied by a member
     /// holding `MANAGE_THREADS`, while a non-moderated one can be set by the thread's owner,
@@ -277,7 +277,7 @@ pub struct TargetPolicy {
     #[cfg_attr(feature = "config-schema", config(nested))]
     pub state_tags: ForumStateTags,
 
-    /// Apply a tag named after the alert's severity.
+    /// Whether each post gets a tag named after the alert's severity.
     pub severity_tags: bool,
 
     /// Labels whose values become tags, at most three.
@@ -300,7 +300,7 @@ pub struct TargetPolicy {
     #[cfg_attr(feature = "config-schema", config(range(min = 60, max = 10080)))]
     pub auto_archive_minutes: Option<u32>,
 
-    /// Archive a forum post when its alert resolves.
+    /// Whether a forum post is archived when its alert resolves.
     pub archive_on_resolve: bool,
 
     /// Lock a forum post when its alert resolves.
@@ -321,7 +321,7 @@ pub struct TargetPolicy {
     /// Most posts pinned at once.
     pub max_pinned: u32,
 
-    /// Post a one-line thread note on every state change.
+    /// Whether every state change posts a one-line note in the thread.
     ///
     /// Editing a message does not bump a forum's activity sort; only a new message does. Without
     /// this, a state change that only edits the card leaves the post buried where it was. The

@@ -79,8 +79,9 @@ pub enum Separation {
         second: ChannelId,
     },
 
-    /// The alert re-fired after `older` had been resolved for longer than the regroup window, so
-    /// `newer` was posted in its place.
+    /// The alert came back after `older` resolved, and `newer` was posted in its place.
+    ///
+    /// That happens once `older` has been resolved for longer than the regroup window.
     Replaced {
         /// The card that was resolved for too long.
         older: NotificationId,

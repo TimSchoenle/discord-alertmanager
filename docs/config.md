@@ -21,11 +21,11 @@ indirection, in that order of precedence.
 |---|---|---|---|---|---|
 | `discord.token` | `SecretString` | `DAM_DISCORD__TOKEN` | unset | secret | Bot token. Supply it through `DAM_DISCORD__TOKEN_FILE` or the secrets directory. |
 | `discord.dev_guild_id` | `u64` | `DAM_DISCORD__DEV_GUILD_ID` | unset | — | Guild to register slash commands into. Registration is global when unset. |
-| `discord.capture_reply_text` | `bool` | `DAM_DISCORD__CAPTURE_REPLY_TEXT` | `false` | — | Capture the text of thread replies, which needs the privileged `MESSAGE_CONTENT` intent. |
-| `discord.capabilities.view` | `Vec<String>` | `DAM_DISCORD__CAPABILITIES__VIEW` | `[@everyone]` | — | Read alerts, silences and routes. Grants no mutation of any kind. |
-| `discord.capabilities.operate` | `Vec<String>` | `DAM_DISCORD__CAPABILITIES__OPERATE` | `[]` | — | Acknowledge, assign, and add or remove bot-local ignores. |
-| `discord.capabilities.silence` | `Vec<String>` | `DAM_DISCORD__CAPABILITIES__SILENCE` | `[]` | — | Create, extend and expire Alertmanager silences, which affects every receiver. |
-| `discord.capabilities.admin` | `Vec<String>` | `DAM_DISCORD__CAPABILITIES__ADMIN` | `[]` | — | Manage routes and read the effective configuration. |
+| `discord.capture_reply_text` | `bool` | `DAM_DISCORD__CAPTURE_REPLY_TEXT` | `false` | — | Whether thread reply text is captured, which needs the privileged `MESSAGE_CONTENT` intent. |
+| `discord.capabilities.view` | `Vec<String>` | `DAM_DISCORD__CAPABILITIES__VIEW` | `[@everyone]` | — | Roles that may read alerts, silences and ignores, and manage their own subscriptions. |
+| `discord.capabilities.operate` | `Vec<String>` | `DAM_DISCORD__CAPABILITIES__OPERATE` | `[]` | — | Roles that may acknowledge, assign, and add or remove bot-local ignores. |
+| `discord.capabilities.silence` | `Vec<String>` | `DAM_DISCORD__CAPABILITIES__SILENCE` | `[]` | — | Roles that may create, extend and expire Alertmanager silences, which affect every receiver. |
+| `discord.capabilities.admin` | `Vec<String>` | `DAM_DISCORD__CAPABILITIES__ADMIN` | `[]` | — | Roles that may manage routes and read the effective configuration. |
 | `alertmanager.endpoints` | `Vec<Url>` | `DAM_ALERTMANAGER__ENDPOINTS` | `[]` | — | Base URLs of the Alertmanager peers, tried in order. |
 | `alertmanager.bearer_token` | `SecretString` | `DAM_ALERTMANAGER__BEARER_TOKEN` | unset | secret | Bearer token sent to Alertmanager. Supply it through the secrets directory or `_FILE`. |
 | `alertmanager.basic_username` | `String` | `DAM_ALERTMANAGER__BASIC_USERNAME` | unset | — | Username for basic authentication. Ignored when `bearer_token` is set. |
@@ -40,11 +40,11 @@ indirection, in that order of precedence.
 | `storage.sqlite.path` | `PathBuf` | `DAM_STORAGE__SQLITE__PATH` | `discord-alertmanager.db` | — | Path to the database file, created on first start if it does not exist. |
 | `storage.sqlite.max_connections` | `u32` | `DAM_STORAGE__SQLITE__MAX_CONNECTIONS` | `4` | — | Size of the read pool. The writer is always one connection. |
 | `storage.sqlite.acquire_timeout_secs` | `u64` | `DAM_STORAGE__SQLITE__ACQUIRE_TIMEOUT_SECS` | `5` | — | Seconds to wait for a connection from the pool before failing the operation. |
-| `storage.sqlite.migrate_on_start` | `bool` | `DAM_STORAGE__SQLITE__MIGRATE_ON_START` | `true` | — | Run pending migrations during startup. |
-| `storage.postgres.url` | `SecretString` | `DAM_STORAGE__POSTGRES__URL` | unset | secret | Connection URL. Supply it through `DAM_STORAGE__POSTGRES__URL_FILE` or the secrets directory, since it carries the password. |
+| `storage.sqlite.migrate_on_start` | `bool` | `DAM_STORAGE__SQLITE__MIGRATE_ON_START` | `true` | — | Whether pending migrations run during startup. |
+| `storage.postgres.url` | `SecretString` | `DAM_STORAGE__POSTGRES__URL` | unset | secret | Connection URL, which carries the password. |
 | `storage.postgres.max_connections` | `u32` | `DAM_STORAGE__POSTGRES__MAX_CONNECTIONS` | `16` | — | Maximum pooled connections. |
 | `storage.postgres.acquire_timeout_secs` | `u64` | `DAM_STORAGE__POSTGRES__ACQUIRE_TIMEOUT_SECS` | `5` | — | Seconds to wait for a connection from the pool before failing the operation. |
-| `storage.postgres.migrate_on_start` | `bool` | `DAM_STORAGE__POSTGRES__MIGRATE_ON_START` | `true` | — | Run pending migrations during startup. |
+| `storage.postgres.migrate_on_start` | `bool` | `DAM_STORAGE__POSTGRES__MIGRATE_ON_START` | `true` | — | Whether pending migrations run during startup. |
 | `ingest.bind` | `SocketAddr` | `DAM_INGEST__BIND` | `0.0.0.0:9099` | — | Address and port to listen on. |
 | `ingest.webhook_path` | `String` | `DAM_INGEST__WEBHOOK_PATH` | `/webhook` | — | Path Alertmanager posts the version-4 envelope to. |
 | `ingest.webhook_token` | `SecretString` | `DAM_INGEST__WEBHOOK_TOKEN` | unset | secret | Bearer token every webhook request has to carry. |
@@ -59,10 +59,10 @@ indirection, in that order of precedence.
 | `engine.silence_sync_interval_secs` | `u64` | `DAM_ENGINE__SILENCE_SYNC_INTERVAL_SECS` | `30` | — | Seconds between silence syncs. |
 | `engine.escalation_interval_secs` | `u64` | `DAM_ENGINE__ESCALATION_INTERVAL_SECS` | `15` | — | Seconds between escalation timer sweeps. |
 | `engine.prune_interval_secs` | `u64` | `DAM_ENGINE__PRUNE_INTERVAL_SECS` | `3600` | — | Seconds between retention sweeps. |
-| `engine.deadman_window_secs` | `u64` | `DAM_ENGINE__DEADMAN_WINDOW_SECS` | `1800` | — | Seconds of webhook silence that, combined with an unreachable Alertmanager, trips the deadman. |
+| `engine.deadman_window_secs` | `u64` | `DAM_ENGINE__DEADMAN_WINDOW_SECS` | `1800` | — | Seconds without a webhook delivery after which the deadman trips. |
 | `engine.regroup_window_secs` | `u64` | `DAM_ENGINE__REGROUP_WINDOW_SECS` | `1800` | — | Seconds a resolved card stays re-armable. |
 | `engine.dedupe_ignore_labels` | `Vec<String>` | `DAM_ENGINE__DEDUPE_IGNORE_LABELS` | `[]` | — | Labels that do not decide which card an alert is shown on. |
-| `engine.persist_events` | `bool` | `DAM_ENGINE__PERSIST_EVENTS` | `true` | — | Record a row in `alert_events` for every state transition. |
+| `engine.persist_events` | `bool` | `DAM_ENGINE__PERSIST_EVENTS` | `true` | — | Whether every state transition writes a row to `alert_events`. |
 | `engine.storm.threshold` | `u32` | `DAM_ENGINE__STORM__THRESHOLD` | `50` | — | Alerts on one route inside the window that trigger digest mode. |
 | `engine.storm.window_secs` | `u64` | `DAM_ENGINE__STORM__WINDOW_SECS` | `60` | — | Length of the window, in seconds. |
 | `engine.storm.forum_threshold` | `u32` | `DAM_ENGINE__STORM__FORUM_THRESHOLD` | `20` | — | Threshold for forum routes, which is lower. |
@@ -73,14 +73,14 @@ indirection, in that order of precedence.
 | `render.description_budget` | `usize` | `DAM_RENDER__DESCRIPTION_BUDGET` | `1500` | — | Characters of annotation text a card may carry before it is truncated. |
 | `render.key_labels` | `Vec<String>` | `DAM_RENDER__KEY_LABELS` | `[namespace, instance, job]` | — | Labels promoted to their own inline field on the card, in order. |
 | `render.thread_archive_after_minutes` | `u32` | `DAM_RENDER__THREAD_ARCHIVE_AFTER_MINUTES` | `1440` | — | Minutes of inactivity after which an alert thread archives. |
-| `render.show_fingerprint` | `bool` | `DAM_RENDER__SHOW_FINGERPRINT` | `true` | — | Show a short fingerprint in the card footer. |
+| `render.show_fingerprint` | `bool` | `DAM_RENDER__SHOW_FINGERPRINT` | `true` | — | Whether the card footer shows a short fingerprint. |
 | `links.prometheus_base` | `Url` | `DAM_LINKS__PROMETHEUS_BASE` | unset | — | Prometheus base URL, available to templates as `links.prometheus_base`. |
 | `links.grafana_base` | `Url` | `DAM_LINKS__GRAFANA_BASE` | unset | — | Grafana base URL, available to templates as `links.grafana_base`. |
 | `links.allowed_hosts` | `Vec<String>` | `DAM_LINKS__ALLOWED_HOSTS` | `[]` | — | Hosts a rendered button may point at. |
 | `links.window_lead_secs` | `u64` | `DAM_LINKS__WINDOW_LEAD_SECS` | `900` | — | Seconds of graph shown before the alert started. |
 | `links.window_trail_secs` | `u64` | `DAM_LINKS__WINDOW_TRAIL_SECS` | `300` | — | Seconds of graph shown after the alert ended, or after now while it is firing. |
 | `links.buttons` | `Vec<LinkButton>` | `DAM_LINKS__BUTTONS` | `[]` | — | The buttons themselves, rendered in order. |
-| `observability.metrics_enabled` | `bool` | `DAM_OBSERVABILITY__METRICS_ENABLED` | `true` | — | Serve Prometheus metrics at `/metrics` on the ingest listener. |
+| `observability.metrics_enabled` | `bool` | `DAM_OBSERVABILITY__METRICS_ENABLED` | `true` | — | Whether Prometheus metrics are served at `/metrics` on the ingest listener. |
 | `observability.admin_channel_id` | `u64` | `DAM_OBSERVABILITY__ADMIN_CHANNEL_ID` | unset | — | Channel the deadman and route-health notices post to. |
 | `telemetry.log_level` | `String` | `DAM_TELEMETRY__LOG_LEVEL` | `warn,discord_alertmanager=info,dam_=info` | — | Filter directives for the log stream, in `RUST_LOG` syntax. |
 | `telemetry.log_format` | `LogFormat`: `plain` \| `json` | `DAM_TELEMETRY__LOG_FORMAT` | `plain` | — | How each log line is written. |
@@ -93,9 +93,9 @@ indirection, in that order of precedence.
 | `telemetry.sentry.event_level` | `CaptureLevel`: `off` \| `error` \| `warn` \| `info` \| `debug` \| `trace` | `DAM_TELEMETRY__SENTRY__EVENT_LEVEL` | `error` | — | Level at or above which a log record is sent as an event of its own. |
 | `telemetry.sentry.breadcrumb_level` | `CaptureLevel`: `off` \| `error` \| `warn` \| `info` \| `debug` \| `trace` | `DAM_TELEMETRY__SENTRY__BREADCRUMB_LEVEL` | `info` | — | Level at or above which a log record is kept as a breadcrumb behind the next event. |
 | `telemetry.sentry.span_level` | `CaptureLevel`: `off` \| `error` \| `warn` \| `info` \| `debug` \| `trace` | `DAM_TELEMETRY__SENTRY__SPAN_LEVEL` | `info` | — | Level at or above which a span joins the trace. |
-| `telemetry.sentry.attach_stacktrace` | `bool` | `DAM_TELEMETRY__SENTRY__ATTACH_STACKTRACE` | `false` | — | Attach a stack trace to every event, not only to panics. |
-| `telemetry.sentry.send_default_pii` | `bool` | `DAM_TELEMETRY__SENTRY__SEND_DEFAULT_PII` | `false` | — | Send the IP addresses, headers and user identifiers Sentry calls default PII. |
+| `telemetry.sentry.attach_stacktrace` | `bool` | `DAM_TELEMETRY__SENTRY__ATTACH_STACKTRACE` | `false` | — | Whether captured messages carry a stack trace, as panics always do. |
+| `telemetry.sentry.send_default_pii` | `bool` | `DAM_TELEMETRY__SENTRY__SEND_DEFAULT_PII` | `false` | — | Whether events carry the addresses, headers and user identifiers Sentry calls default PII. |
 | `telemetry.sentry.max_breadcrumbs` | `usize` | `DAM_TELEMETRY__SENTRY__MAX_BREADCRUMBS` | `100` | — | How many breadcrumbs are kept behind an event. |
 | `telemetry.sentry.shutdown_timeout_secs` | `u64` | `DAM_TELEMETRY__SENTRY__SHUTDOWN_TIMEOUT_SECS` | `2` | — | Seconds to spend delivering whatever is still queued during shutdown. |
-| `telemetry.sentry.debug` | `bool` | `DAM_TELEMETRY__SENTRY__DEBUG` | `false` | — | Log what the Sentry client itself is doing. |
+| `telemetry.sentry.debug` | `bool` | `DAM_TELEMETRY__SENTRY__DEBUG` | `false` | — | Whether the Sentry client logs its own activity. |
 | `routes` | `Vec<RouteConfig>` | `DAM_ROUTES` | `[]` | — | Routes declared in the file, which cannot be edited or deleted from Discord. |

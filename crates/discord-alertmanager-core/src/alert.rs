@@ -115,7 +115,7 @@ impl FromIterator<(String, String)> for Annotations {
 )]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
-    /// Informational. Never mentions anyone.
+    /// Informational, and never mentions anyone.
     #[default]
     Info,
 

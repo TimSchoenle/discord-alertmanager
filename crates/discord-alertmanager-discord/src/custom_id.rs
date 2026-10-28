@@ -36,28 +36,28 @@ const ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 /// bytes and a descriptive name spends a fifth of it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Action {
-    /// Take the alert.
+    /// The button that takes the alert.
     Ack,
 
-    /// Give it back.
+    /// The button that gives a taken alert back.
     Unack,
 
-    /// Open the duration picker for an Alertmanager silence.
+    /// The button that opens the duration picker for an Alertmanager silence.
     SilenceMenu,
 
-    /// Create the silence the picker chose, with the duration in the argument.
+    /// A choice in the silence picker, with the duration in the argument.
     SilenceFor,
 
-    /// Open the duration picker for a bot-local ignore.
+    /// The button that opens the duration picker for a bot-local ignore.
     IgnoreMenu,
 
-    /// Create the ignore the picker chose, with the duration in the argument.
+    /// A choice in the ignore picker, with the duration in the argument.
     IgnoreFor,
 
-    /// Show the whole alert, ephemerally.
+    /// The button that shows the whole alert, ephemerally.
     Details,
 
-    /// Move to another page of a list, with the offset in the argument.
+    /// A list's pager button, with the offset of the page it leads to in the argument.
     Page,
 }
 
@@ -137,6 +137,22 @@ impl CustomId {
     ///
     /// Returns [`CustomIdError::TooLong`] when the argument pushes it past a hundred bytes, and
     /// [`CustomIdError::Malformed`] when the argument contains the separator.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dam_discord::{Action, CustomId};
+    /// use dam_store::NotificationId;
+    ///
+    /// let id = CustomId::with_argument(Action::SilenceFor, NotificationId::new(42), "2h");
+    /// let wire = id.encode()?;
+    /// assert!(wire.len() <= dam_discord::MAX_CUSTOM_ID);
+    /// assert_eq!(CustomId::decode(&wire)?, id);
+    ///
+    /// let separator = CustomId::with_argument(Action::Page, NotificationId::new(42), "a:b");
+    /// assert!(separator.encode().is_err());
+    /// # Ok::<(), dam_discord::CustomIdError>(())
+    /// ```
     pub fn encode(&self) -> Result<String, CustomIdError> {
         if let Some(argument) = &self.argument
             && argument.contains(':')

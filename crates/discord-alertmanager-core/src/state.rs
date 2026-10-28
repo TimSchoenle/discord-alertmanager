@@ -17,16 +17,16 @@ use crate::alert::{AlertStatus, AmState, EventKind};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum NotificationState {
-    /// Firing and unacknowledged. The state that pins, mentions and colours red.
+    /// Firing and unacknowledged, the state that pins, mentions and colours red.
     Firing,
 
-    /// Somebody has taken it. Still firing.
+    /// Still firing, and somebody has taken it.
     Acked,
 
-    /// An Alertmanager silence is suppressing it. Still firing, and nobody is being told.
+    /// Still firing, with an Alertmanager silence suppressing it so nobody is being told.
     Silenced,
 
-    /// A bot-local ignore rule is muting it. Alertmanager is still notifying everyone else.
+    /// Still firing, muted by a bot-local ignore rule while Alertmanager notifies everyone else.
     Ignored,
 
     /// The condition stopped holding.
@@ -199,7 +199,7 @@ pub fn next_state(
 /// The state a card starts in for a newly delivered alert.
 ///
 /// A card is never born acknowledged, so the only question is whether Alertmanager is already
-/// suppressing the alert when it first arrives — which happens whenever a silence predates the
+/// suppressing the alert when it first arrives, which happens whenever a silence predates the
 /// alert it covers.
 #[must_use]
 pub fn initial_state(status: AlertStatus, am_state: AmState, ignored: bool) -> NotificationState {

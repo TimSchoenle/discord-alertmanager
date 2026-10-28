@@ -48,7 +48,9 @@ pub enum ConnectError {
 pub struct Settings {
     /// Path to the database file, created on first start if it does not exist.
     pub path: std::path::PathBuf,
-    /// Size of the read pool. The writer is always effectively one connection.
+    /// Size of the read pool.
+    ///
+    /// The writer is always effectively one connection.
     pub max_connections: u32,
     /// How long to wait for a connection from the pool before failing the operation.
     pub acquire_timeout: Duration,
@@ -90,8 +92,9 @@ fn regroup_window(value: Duration) -> chrono::Duration {
 }
 
 impl SqliteStore {
-    /// Opens the database file, applies the pragmas every connection needs, and optionally
-    /// migrates.
+    /// Opens the database file with the pragmas every connection needs.
+    ///
+    /// Pending migrations run before it returns when `migrate_on_start` is set.
     ///
     /// # Errors
     ///
@@ -143,9 +146,10 @@ impl SqliteStore {
     }
 }
 
-/// Builds connection options for a file path, tolerating the `Path` not being valid UTF-8 by
-/// falling back to `Display`, which is the only case `SqliteConnectOptions::filename` cannot take
-/// directly on every platform.
+/// Builds connection options for a file path, including one that is not valid UTF-8.
+///
+/// A UTF-8 path is parsed as a `sqlite:` URL. Any other path, or one that does not parse, goes to
+/// `SqliteConnectOptions::filename` unchanged.
 fn connect_options(path: &Path) -> SqliteConnectOptions {
     path.to_str()
         .and_then(|value| SqliteConnectOptions::from_str(&format!("sqlite:{value}")).ok())

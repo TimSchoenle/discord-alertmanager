@@ -84,18 +84,19 @@ pub struct Sentry {
     ///
     /// Only this bot's own spans are traced, whatever this says, and there is no key to widen
     /// that. A dependency instruments its internals for its own logs, and the fields it attaches
-    /// are debug renderings of whatever the call was holding — not something to hand to a third
-    /// party, and enough of them to bury the trace they surround.
+    /// are debug renderings of whatever the call was holding. None of that belongs with a third
+    /// party, and there is enough of it to bury the trace it surrounds.
     #[cfg_attr(feature = "config-schema", config(values))]
     pub span_level: CaptureLevel,
 
-    /// Attach a stack trace to every event, not only to panics.
+    /// Whether captured messages carry a stack trace, as panics always do.
     ///
     /// Useful while a fault is being chased and expensive afterwards: it captures and symbolicates
-    /// a backtrace on every capture, including the ones that were only ever going to be counted.
+    /// a backtrace on every captured message, including the ones that were only ever going to be
+    /// counted.
     pub attach_stacktrace: bool,
 
-    /// Send the IP addresses, headers and user identifiers Sentry calls default PII.
+    /// Whether events carry the addresses, headers and user identifiers Sentry calls default PII.
     ///
     /// Off, and worth leaving off. The alerts this bot handles carry infrastructure labels, and
     /// the Discord side carries user identifiers; neither needs to reach a third party for an
@@ -112,7 +113,7 @@ pub struct Sentry {
     /// process is stopping.
     pub shutdown_timeout_secs: u64,
 
-    /// Log what the Sentry client itself is doing.
+    /// Whether the Sentry client logs its own activity.
     ///
     /// For diagnosing reporting that is not arriving, and nothing else. It is noisy, and it prints
     /// the DSN.

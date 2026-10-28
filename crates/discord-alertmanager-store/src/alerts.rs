@@ -119,19 +119,19 @@ impl AlertRecord {
 /// at compile time, because the SQL it produces depends on which fields are set.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AlertQuery {
-    /// Keep only alerts in these statuses. Empty means every status.
+    /// The statuses an alert must have one of, or every status when empty.
     pub statuses: Vec<AlertStatus>,
 
-    /// Keep only alerts at or above this severity.
+    /// The lowest severity returned, or `None` for any.
     pub min_severity: Option<Severity>,
 
-    /// Keep only alerts whose labels satisfy every one of these.
+    /// Matchers an alert's labels must all satisfy, or none when empty.
     ///
     /// Carried as name, operator and value rather than as a compiled `MatcherSet`, because a
     /// backend turns them into SQL predicates where it can and evaluates the rest in memory.
     pub matchers: Vec<QueryMatcher>,
 
-    /// Keep only alerts with a notification in this state.
+    /// The state an alert's notification must be in, or `None` for any.
     pub notification_state: Option<NotificationState>,
 
     /// Where to start.

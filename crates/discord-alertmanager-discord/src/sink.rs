@@ -70,8 +70,8 @@ impl SerenitySink {
     ///
     /// `mention` is what separates a first post from an edit. Discord does not notify anyone for a
     /// mention inside an embed, so the mentions live in the message body, and the allowed-mentions
-    /// list is set from what the card actually carries — an empty one on an edit, which is what
-    /// stops a re-render from paging the on-call again.
+    /// list is set from what the card carries. On an edit that list is empty, which is what stops
+    /// a re-render from paging the on-call again.
     fn message(&self, card: &CardData) -> CreateMessage {
         let rendered = self.renderer.render(card);
         let mut message = CreateMessage::new()

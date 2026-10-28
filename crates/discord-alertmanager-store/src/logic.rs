@@ -48,6 +48,35 @@ pub struct Transition {
 /// `regroup` is how long a resolved alert may stay quiet and still count its re-fire as a flap.
 /// Which card the re-fire lands on is not decided here: that belongs to the card, and the
 /// decision reads it off the card's own resolution time.
+///
+/// # Examples
+///
+/// ```
+/// use chrono::{Duration, TimeZone, Utc};
+/// use dam_core::{Alert, AlertStatus, AmState, Annotations, EventKind, Fingerprint, Labels};
+/// use dam_store::classify;
+///
+/// let now = Utc.with_ymd_and_hms(2026, 1, 1, 12, 0, 0).unwrap();
+/// let alert = Alert {
+///     fingerprint: Fingerprint::new("a1b2c3d4e5f60718")?,
+///     labels: Labels::new(),
+///     annotations: Annotations::new(),
+///     starts_at: now,
+///     ends_at: None,
+///     generator_url: None,
+///     status: AlertStatus::Firing,
+///     am_state: AmState::Active,
+///     silenced_by: Vec::new(),
+///     inhibited_by: Vec::new(),
+///     group_key: None,
+/// };
+///
+/// // A fingerprint with no stored row is a first sighting.
+/// let transition = classify(None, &alert, now, Duration::minutes(30)).expect("a first sighting");
+/// assert_eq!(transition.kind, EventKind::Fired);
+/// assert_eq!(transition.flap_count, 0);
+/// # Ok::<(), dam_core::CoreError>(())
+/// ```
 #[must_use]
 pub fn classify(
     previous: Option<&AlertRecord>,

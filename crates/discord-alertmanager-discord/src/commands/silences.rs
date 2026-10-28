@@ -254,7 +254,7 @@ async fn list(
 /// Pushes a silence's expiry out, by replacing it with itself.
 ///
 /// Alertmanager updates a silence when the request carries its id, so this is one call rather than
-/// an expire and a create — which would leave a window where the alert was not silenced at all.
+/// an expire and a create, which would leave a window where the alert was not silenced at all.
 async fn extend(
     ctx: &CommandCtx<'_>,
     options: &[CommandDataOption],

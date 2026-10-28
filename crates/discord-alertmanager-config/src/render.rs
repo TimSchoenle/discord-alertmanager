@@ -41,7 +41,7 @@ pub struct Render {
     #[cfg_attr(feature = "config-schema", config(range(min = 60, max = 10080)))]
     pub thread_archive_after_minutes: u32,
 
-    /// Show a short fingerprint in the card footer.
+    /// Whether the card footer shows a short fingerprint.
     pub show_fingerprint: bool,
 }
 

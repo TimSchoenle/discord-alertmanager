@@ -180,7 +180,9 @@ pub(crate) struct NewIgnore<'a> {
     /// The matcher expression, as written.
     pub(crate) matchers: &'a str,
 
-    /// Why the rule exists. Required, because an unexplained mute outlives whoever set it.
+    /// Why the rule exists.
+    ///
+    /// Required, because an unexplained mute outlives whoever set it.
     pub(crate) reason: &'a str,
 
     /// Who set it.

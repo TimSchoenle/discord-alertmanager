@@ -84,7 +84,7 @@ impl NewOutboxItem {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Effect {
-    /// Post a card for a notification that has no message yet.
+    /// A card to post for a notification that has no message yet.
     PostCard {
         /// The card to post.
         notification: NotificationId,
@@ -95,13 +95,13 @@ pub enum Effect {
         mention: bool,
     },
 
-    /// Re-render an existing card.
+    /// An existing card to re-render.
     EditCard {
         /// The card to edit.
         notification: NotificationId,
     },
 
-    /// Re-render a card and re-apply its forum tags, whatever the stored hashes say.
+    /// A card to re-render and whose forum tags to re-apply, whatever the stored hashes say.
     ///
     /// The repair path, and the only effect that makes two calls. An edit and a tag change each
     /// skip when the hash on the row matches what they would send, and that hash is precisely
@@ -117,7 +117,7 @@ pub enum Effect {
         notification: NotificationId,
     },
 
-    /// Open the thread a route's policy asks for.
+    /// A thread to open, as the route's policy asks.
     OpenThread {
         /// The card the thread hangs off.
         notification: NotificationId,
@@ -125,7 +125,7 @@ pub enum Effect {
         name: String,
     },
 
-    /// Post a one-line note in a card's thread.
+    /// A one-line note to post in a card's thread.
     ///
     /// Also what resurfaces a forum post: editing a message does not bump a forum's activity
     /// sort, so a state change that only edits the card leaves the post buried.
@@ -136,7 +136,7 @@ pub enum Effect {
         text: String,
     },
 
-    /// Replace the tags on a forum post.
+    /// A forum post's replacement tag set.
     SetTags {
         /// The post to change.
         notification: NotificationId,
@@ -144,7 +144,7 @@ pub enum Effect {
         tags: Vec<TagId>,
     },
 
-    /// Change a forum post's archive, lock and auto-archive flags.
+    /// New archive, lock and auto-archive flags for a forum post.
     SetFlags {
         /// The post to change.
         notification: NotificationId,
@@ -156,7 +156,7 @@ pub enum Effect {
         auto_archive_minutes: u32,
     },
 
-    /// Pin or unpin a post.
+    /// A post to pin or unpin.
     SetPinned {
         /// The post to change.
         notification: NotificationId,
@@ -164,25 +164,25 @@ pub enum Effect {
         pinned: bool,
     },
 
-    /// Strip or disable a resolved card's components.
+    /// A resolved card whose components to strip or disable.
     DisableComponents {
         /// The card to change.
         notification: NotificationId,
     },
 
-    /// Create or replace an Alertmanager silence.
+    /// An Alertmanager silence to create or replace.
     CreateSilence {
         /// The silence request, held as written so a retry re-sends the same thing.
         request: SilenceEffect,
     },
 
-    /// Expire an Alertmanager silence.
+    /// An Alertmanager silence to expire.
     ExpireSilence {
         /// The silence to expire.
         am_id: String,
     },
 
-    /// Mention a route's escalation targets about a card nobody has taken.
+    /// A mention of a route's escalation targets, about a card nobody has taken.
     ///
     /// Carries who to mention rather than the route to read them from, so the note that is sent
     /// is the policy as it stood when the sweep decided, not as it stands whenever a retry
@@ -196,11 +196,11 @@ pub enum Effect {
         users: Vec<UserId>,
     },
 
-    /// Post a line into the administrative channel.
+    /// A line to post in the administrative channel.
     ///
     /// The one effect naming a channel instead of a card. The deadman and the route-health
     /// notices are about the bot rather than about any alert, and by the time either fires there
-    /// may be no card to hang it off — a route the bot cannot post to being the ordinary case.
+    /// may be no card to hang it off. A route the bot cannot post to is the ordinary case.
     AdminNotice {
         /// The channel to write in.
         channel: ChannelId,
@@ -252,21 +252,23 @@ impl Effect {
 
     /// Whether a later item of this kind supersedes an earlier one *for the same card*.
     ///
-    /// Two queued edits of one card are one edit of its current state; two queued notes are two
-    /// different sentences. Coalescing the first pair is what keeps a storm inside Discord's edit
-    /// limits, and coalescing the second would lose a line of the timeline.
-    ///
-    /// The fold is per kind as well as per card, which is what keeps a resync intact: an ordinary
-    /// edit queued behind one cannot replace it and hand the card back to the hash check the
-    /// resync was run to escape.
-    ///
-    /// The card, and never the dedupe key, is the scope. One alert fans out to every route that
-    /// matches it, and each of those cards is keyed under the same per-alert key in a channel of
-    /// its own; folding on the key alone would let the edit for one card overwrite the queued
-    /// edit for another and leave that card frozen at whatever it last rendered. Every
-    /// coalescable variant therefore names a notification, and the store folds on that.
+    /// A backend folds a later item into an unclaimed row of the same kind for the same
+    /// notification. The row keeps its id, takes the later payload and keeps the earlier
+    /// `not_before`. It never folds on the dedupe key.
     #[must_use]
     pub fn is_coalescable(&self) -> bool {
+        // Two queued edits of one card are one edit of its current state; two queued notes are two
+        // different sentences. Coalescing the first pair keeps a storm inside Discord's edit
+        // limits, and coalescing the second would lose a line of the timeline.
+        //
+        // Folding per kind keeps a resync intact: an ordinary edit queued behind one cannot
+        // replace it and hand the card back to the hash check the resync was run to escape.
+        //
+        // The card is the scope, not the dedupe key. One alert fans out to every route that
+        // matches it, and each of those cards is keyed under the same per-alert key in a channel
+        // of its own. Folding on the key alone would let the edit for one card overwrite the
+        // queued edit for another and leave that card frozen at whatever it last rendered. Every
+        // coalescable variant therefore names a notification.
         matches!(
             self,
             Self::EditCard { .. } | Self::ResyncCard { .. } | Self::SetTags { .. }
@@ -305,8 +307,9 @@ pub struct SilenceEffect {
     pub origin_message: Option<String>,
 }
 
-/// What a completed effect changed, to be written back in the same transaction that clears the
-/// item.
+/// What a completed effect changed.
+///
+/// It is written back in the same transaction that clears the item.
 ///
 /// The dispatcher never writes these fields directly. An effect that succeeded and a row that
 /// records it have to move together, or a crash between them leaves a card the bot will post a

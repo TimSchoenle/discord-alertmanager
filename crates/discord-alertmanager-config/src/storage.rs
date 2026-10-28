@@ -72,7 +72,7 @@ pub struct SqliteConfig {
     #[cfg_attr(feature = "config-schema", config(range(min = 1)))]
     pub acquire_timeout_secs: u64,
 
-    /// Run pending migrations during startup.
+    /// Whether pending migrations run during startup.
     ///
     /// Set this false where a separate job owns migrations, which is what a `GitOps` deployment
     /// usually wants: the bot then refuses to start against a schema it does not recognise
@@ -99,8 +99,9 @@ impl Default for SqliteConfig {
 )]
 #[serde(default, deny_unknown_fields)]
 pub struct PostgresConfig {
-    /// Connection URL. Supply it through `DAM_STORAGE__POSTGRES__URL_FILE` or the secrets
-    /// directory, since it carries the password.
+    /// Connection URL, which carries the password.
+    ///
+    /// Supply it through `DAM_STORAGE__POSTGRES__URL_FILE` or the secrets directory.
     #[cfg_attr(feature = "config-schema", config(secret))]
     #[serde(skip_serializing)]
     pub url: SecretString,
@@ -114,7 +115,7 @@ pub struct PostgresConfig {
     #[cfg_attr(feature = "config-schema", config(range(min = 1)))]
     pub acquire_timeout_secs: u64,
 
-    /// Run pending migrations during startup.
+    /// Whether pending migrations run during startup.
     pub migrate_on_start: bool,
 }
 

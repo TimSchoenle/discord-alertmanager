@@ -15,7 +15,7 @@ use serde::Deserialize;
 )]
 #[serde(default, deny_unknown_fields)]
 pub struct Observability {
-    /// Serve Prometheus metrics at `/metrics` on the ingest listener.
+    /// Whether Prometheus metrics are served at `/metrics` on the ingest listener.
     pub metrics_enabled: bool,
 
     /// Channel the deadman and route-health notices post to.
