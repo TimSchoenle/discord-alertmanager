@@ -8,9 +8,8 @@ pre-1.0, `fix` moves the patch, and `docs`, `chore`, `refactor` and `test` move 
 
 ## Generated files
 
-The files below are committed, and none of them is written by hand. Each generated document says
-so in its first lines, and editing the output instead of its source is reverted by the next
-render.
+The files below are committed and generated from the sources in the table, so do not edit them by
+hand: the next render replaces any change made to the output instead of its source.
 
 | File | Written by | Source |
 | --- | --- | --- |
