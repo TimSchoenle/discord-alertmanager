@@ -119,7 +119,7 @@ jobs:
       # absent from the diff.
       - name: Collect the README payload
         id: variables
-        uses: TimSchoenle/actions/actions/common/readme-variables@7fad0f1921ffec7dc6eda32e8fb07c9bd4688624 # tag=actions-common-readme-variables-v2.0.1
+        uses: TimSchoenle/actions/actions/common/readme-variables@421289db958b620e2772ba46d11d014bf25a371b # tag=actions-common-readme-variables-v2.1.0
         with:
           manifest: crates/discord-alertmanager/Cargo.toml
           branch: ${{ github.event.repository.default_branch }}
@@ -250,7 +250,7 @@ jobs:
 
       - name: Collect the README payload
         id: variables
-        uses: TimSchoenle/actions/actions/common/readme-variables@7fad0f1921ffec7dc6eda32e8fb07c9bd4688624 # tag=actions-common-readme-variables-v2.0.1
+        uses: TimSchoenle/actions/actions/common/readme-variables@421289db958b620e2772ba46d11d014bf25a371b # tag=actions-common-readme-variables-v2.1.0
         with:
           manifest: crates/discord-alertmanager/Cargo.toml
           branch: ${{ github.event.repository.default_branch }}
