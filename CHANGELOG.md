@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.4](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.9.3...v0.9.4) (2026-10-29)
+
+
+### Dependencies
+
+* **deps:** update alpine:3.24 docker digest to be26560 ([#205](https://github.com/TimSchoenle/discord-alertmanager/issues/205)) ([5fa872b](https://github.com/TimSchoenle/discord-alertmanager/commit/5fa872bfc185f565ede7445417497cc15628ba72))
+* **deps:** update rust crate minijinja to v3.0.3 ([#206](https://github.com/TimSchoenle/discord-alertmanager/issues/206)) ([094b4d9](https://github.com/TimSchoenle/discord-alertmanager/commit/094b4d97dd8f23a20663d61129011ef3d4eabe1b))
+
 ## [0.9.3](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.9.2...v0.9.3) (2026-10-28)
 
 
