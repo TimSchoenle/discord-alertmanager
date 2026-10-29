@@ -413,7 +413,7 @@ jobs:
       # `image` is empty, so the two checks needing one are skipped and this job stays the
       # cheap half.
       - name: Check the committed contract and the Dockerfile LABEL region
-        uses: TimSchoenle/actions/actions/rust/config-contract@ea4465fbe2bec98efad19b63849f8d1ac67b5c88 # tag=actions-rust-config-contract-v1.4.0
+        uses: TimSchoenle/actions/actions/rust/config-contract@495fd50fd4a5ae3d9fb1496c96eada74c6f2529a # tag=actions-rust-config-contract-v2.0.0
         with:
           example: config-schema
           package: discord-alertmanager-config
@@ -524,7 +524,7 @@ jobs:
       # a contract behind it.
       - name: Verify the image carries the contract labels
         id: contract
-        uses: TimSchoenle/actions/actions/rust/config-contract@ea4465fbe2bec98efad19b63849f8d1ac67b5c88 # tag=actions-rust-config-contract-v1.4.0
+        uses: TimSchoenle/actions/actions/rust/config-contract@495fd50fd4a5ae3d9fb1496c96eada74c6f2529a # tag=actions-rust-config-contract-v2.0.0
         with:
           example: config-schema
           package: discord-alertmanager-config
