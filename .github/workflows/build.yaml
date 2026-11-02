@@ -623,3 +623,50 @@ jobs:
 
       - name: Dependency Review
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+
+  # The one check the `main` ruleset requires from this workflow. Requiring each job by name
+  # breaks quietly: a renamed or added job is simply not required, and a matrix leg reports under
+  # its expanded name. This job needs every job that gates a merge and fails unless each of them
+  # succeeded or was skipped by its own `if`, so the ruleset names one stable context and the gate
+  # follows this list.
+  #
+  # `always()` because a job whose `needs` failed is skipped by default, and a skipped check
+  # satisfies a ruleset. `image-size-report` is left out: it reports and gates nothing.
+  ci-summary:
+    name: CI Summary
+    if: always()
+    needs:
+      - check
+      - test
+      - clippy
+      - coverage
+      - fmt
+      - fmt-commit
+      - doc
+      - msrv
+      - architecture
+      - config-docs
+      - query-cache
+      - config-contract
+      - docker-build-test
+      - dependency-review
+    runs-on: ubuntu-latest
+    permissions: { }
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      # The results arrive through the environment rather than interpolated into the script.
+      - name: Fail unless every needed job succeeded or was skipped
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          printf '%s' "${NEEDS}" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          failed="$(printf '%s' "${NEEDS}" | jq -r '[to_entries[] | select(.value.result != "success" and .value.result != "skipped") | .key] | join(", ")')"
+          if [ -n "${failed}" ]; then
+            echo "::error::Did not succeed: ${failed}"
+            exit 1
+          fi
