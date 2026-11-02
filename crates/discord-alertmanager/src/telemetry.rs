@@ -272,7 +272,11 @@ where
             .with_max_level_hint(thresholds.event),
     );
 
-    spans.and_then(breadcrumbs).and_then(errors)
+    // A `Vec` rather than `Layer::and_then`: a chain of filtered layers built with `and_then`
+    // reports only its outermost filter's level hint once it sits on a `Registry`, which would
+    // disable every callsite more verbose than the event threshold. A `Vec` takes the most
+    // verbose hint of its members, and notifies them in order.
+    vec![spans.boxed(), breadcrumbs.boxed(), errors.boxed()]
 }
 
 /// Whether an event becomes a breadcrumb: it clears the breadcrumb threshold, and not the event
@@ -397,6 +401,57 @@ mod tests {
 
         // Accepted as a target name, not a level. The trap the key documents.
         assert!(EnvFilter::try_new("waarn").is_ok());
+    }
+
+    /// Wired into a subscriber with the default thresholds and a bound client, an `ERROR` event
+    /// is reported on its own, an `INFO` event rides along as its breadcrumb, and a `DEBUG` event
+    /// is dropped.
+    #[test]
+    fn the_layers_route_each_event_to_one_sink() {
+        let events = capture(Thresholds::from(&Telemetry::default().sentry), || {
+            tracing::debug!("dropped");
+            tracing::info!("trail");
+            tracing::error!("report");
+        });
+
+        assert_eq!(events.len(), 1, "only the error is reported");
+        let trail: Vec<_> = events[0]
+            .breadcrumbs
+            .values
+            .iter()
+            .filter_map(|breadcrumb| breadcrumb.message.as_deref())
+            .collect();
+        assert_eq!(trail, ["trail"]);
+    }
+
+    /// Runs `emit` under the Sentry layers and a client whose transport keeps what it is sent.
+    fn capture(
+        thresholds: Thresholds,
+        emit: impl FnOnce(),
+    ) -> Vec<sentry::protocol::Event<'static>> {
+        #[derive(Default)]
+        struct Kept(std::sync::Mutex<Vec<sentry::protocol::Event<'static>>>);
+
+        impl sentry::Transport for Kept {
+            fn send_envelope(&self, envelope: sentry::Envelope) {
+                if let Some(event) = envelope.event() {
+                    self.0.lock().expect("not poisoned").push(event.clone());
+                }
+            }
+        }
+
+        let kept = Arc::new(Kept::default());
+        let mut options = sentry::ClientOptions::new();
+        options.dsn = Some("https://key@sentry.invalid/1".parse().expect("a valid DSN"));
+        options.transport = Some(Arc::new(Arc::clone(&kept)));
+        let client = sentry::Client::from_config(options);
+        let hub = Arc::new(sentry::Hub::new_from_top(sentry::Hub::current()));
+        hub.bind_client(Some(Arc::new(client)));
+
+        let subscriber = tracing_subscriber::registry().with(sentry_layer(thresholds));
+        sentry::Hub::run(hub, || tracing::subscriber::with_default(subscriber, emit));
+
+        std::mem::take(&mut *kept.0.lock().expect("not poisoned"))
     }
 
     #[test]
