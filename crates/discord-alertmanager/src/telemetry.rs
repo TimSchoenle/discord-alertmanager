@@ -28,12 +28,13 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use dam_config::{CaptureLevel, LogFormat, Sentry as SentryConfig, Telemetry};
 use secrecy::ExposeSecret;
-use sentry::integrations::tracing::EventFilter;
+use sentry::integrations::tracing::{BreadcrumbLayer, ErrorLayer, SpanLayer};
 use sentry::types::Dsn;
 use tracing::{Level, Metadata, Subscriber};
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::filter::filter_fn;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::registry::LookupSpan;
+use tracing_subscriber::{EnvFilter, Layer};
 
 /// Environment spelling of `telemetry.log_format`, read directly by the bootstrap subscriber.
 const LOG_FORMAT_VAR: &str = dam_config::LOG_FORMAT_VAR;
@@ -242,25 +243,42 @@ pub(crate) fn flush_sentry() {
     }
 }
 
-/// The Sentry layer, filtered by the configured thresholds.
+/// The Sentry layers, each filtered by the configured thresholds.
 ///
-/// A record is one thing or the other, never both: a record that already carries its own report
-/// does not also need to be a breadcrumb behind the next one.
-fn sentry_layer<S>(thresholds: Thresholds) -> sentry::integrations::tracing::SentryLayer<S>
+/// One layer per sink: [`SpanLayer`] for this workspace's spans, [`BreadcrumbLayer`] for events
+/// that clear the breadcrumb threshold but not the event threshold, and [`ErrorLayer`] for events
+/// that clear the event threshold. A record is one thing or the other, never both: a record that
+/// already carries its own report does not also need to be a breadcrumb behind the next one.
+///
+/// Breadcrumbs sit ahead of errors, the order the SDK documents for a trail to be complete when
+/// the error it leads up to is captured. Every filter carries a level hint, so a callsite no layer
+/// wants is disabled outright rather than evaluated per record.
+fn sentry_layer<S>(thresholds: Thresholds) -> impl Layer<S>
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
 {
-    sentry::integrations::tracing::layer()
-        .event_filter(move |metadata| {
-            if clears(thresholds.event, metadata) {
-                EventFilter::Event
-            } else if clears(thresholds.breadcrumb, metadata) {
-                EventFilter::Breadcrumb
-            } else {
-                EventFilter::Ignore
-            }
+    let spans = SpanLayer::new().with_filter(
+        filter_fn(move |metadata| {
+            metadata.is_span() && is_own_work(metadata) && clears(thresholds.span, metadata)
         })
-        .span_filter(move |metadata| is_own_work(metadata) && clears(thresholds.span, metadata))
+        .with_max_level_hint(thresholds.span),
+    );
+    let breadcrumbs = BreadcrumbLayer::new().with_filter(
+        filter_fn(move |metadata| metadata.is_event() && is_breadcrumb(thresholds, metadata))
+            .with_max_level_hint(thresholds.breadcrumb),
+    );
+    let errors = ErrorLayer::new().with_filter(
+        filter_fn(move |metadata| metadata.is_event() && clears(thresholds.event, metadata))
+            .with_max_level_hint(thresholds.event),
+    );
+
+    spans.and_then(breadcrumbs).and_then(errors)
+}
+
+/// Whether an event becomes a breadcrumb: it clears the breadcrumb threshold, and not the event
+/// threshold that would make it a report of its own.
+fn is_breadcrumb(thresholds: Thresholds, metadata: &Metadata<'_>) -> bool {
+    clears(thresholds.breadcrumb, metadata) && !clears(thresholds.event, metadata)
 }
 
 /// Whether a span belongs to this workspace rather than to a dependency.
