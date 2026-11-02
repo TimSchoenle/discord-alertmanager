@@ -68,7 +68,7 @@ jobs:
       has_changes: ${{ steps.patch.outputs.has_changes }}
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: audit
 
@@ -119,7 +119,7 @@ jobs:
       # absent from the diff.
       - name: Collect the README payload
         id: variables
-        uses: TimSchoenle/actions/actions/common/readme-variables@421289db958b620e2772ba46d11d014bf25a371b # tag=actions-common-readme-variables-v2.1.0
+        uses: TimSchoenle/actions/actions/common/readme-variables@dc5b395636dc1954383f11af4062a08814e9b15a # tag=actions-common-readme-variables-v2.1.1
         with:
           manifest: crates/discord-alertmanager/Cargo.toml
           branch: ${{ github.event.repository.default_branch }}
@@ -127,7 +127,7 @@ jobs:
 
       # Written, not committed: the commit is `render-commit`'s, over every generated file at once.
       - name: Render the README
-        uses: TimSchoenle/actions/actions/common/render-template@495fd50fd4a5ae3d9fb1496c96eada74c6f2529a # tag=actions-common-render-template-v3.0.0
+        uses: TimSchoenle/actions/actions/common/render-template@dc5b395636dc1954383f11af4062a08814e9b15a # tag=actions-common-render-template-v3.0.1
         with:
           template: .github/templates/README.md.hbs
           output: README.md
@@ -138,7 +138,7 @@ jobs:
       # outside it.
       - name: Create Patch
         id: patch
-        uses: TimSchoenle/actions/actions/common/create-patch@bbc2c5e2a0f9345cb2e84946846736f047a6eae3 # tag=actions-common-create-patch-v1.1.0
+        uses: TimSchoenle/actions/actions/common/create-patch@dc5b395636dc1954383f11af4062a08814e9b15a # tag=actions-common-create-patch-v1.1.1
         with:
           artifact_name: docs-render
           paths: README.md docs/config.md docs/config.json docs/config.contract.json config.example.toml
@@ -164,7 +164,7 @@ jobs:
       # Nothing from the branch runs here, so the egress this job needs is known in full: GitHub
       # for the checkout, the token and the commit, and the artifact service for the patch.
       - name: Harden Runner
-        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -201,7 +201,7 @@ jobs:
       # `outcome: branch_moved`; the new head starts a new run, which renders again.
       - name: Commit the generated documentation
         id: commit
-        uses: TimSchoenle/actions/actions/common/commit-patch@bbc2c5e2a0f9345cb2e84946846736f047a6eae3 # tag=actions-common-commit-patch-v1.1.0
+        uses: TimSchoenle/actions/actions/common/commit-patch@dc5b395636dc1954383f11af4062a08814e9b15a # tag=actions-common-commit-patch-v1.1.1
         with:
           token: ${{ steps.generate_token.outputs.token }}
           artifact_name: docs-render
@@ -232,7 +232,7 @@ jobs:
       contents: read
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: audit
 
@@ -250,7 +250,7 @@ jobs:
 
       - name: Collect the README payload
         id: variables
-        uses: TimSchoenle/actions/actions/common/readme-variables@421289db958b620e2772ba46d11d014bf25a371b # tag=actions-common-readme-variables-v2.1.0
+        uses: TimSchoenle/actions/actions/common/readme-variables@dc5b395636dc1954383f11af4062a08814e9b15a # tag=actions-common-readme-variables-v2.1.1
         with:
           manifest: crates/discord-alertmanager/Cargo.toml
           branch: ${{ github.event.repository.default_branch }}
@@ -258,7 +258,7 @@ jobs:
 
       # Writes nothing; fails with the first differing line when README.md is stale.
       - name: Verify README.md is current
-        uses: TimSchoenle/actions/actions/common/render-template@495fd50fd4a5ae3d9fb1496c96eada74c6f2529a # tag=actions-common-render-template-v3.0.0
+        uses: TimSchoenle/actions/actions/common/render-template@dc5b395636dc1954383f11af4062a08814e9b15a # tag=actions-common-render-template-v3.0.1
         with:
           template: .github/templates/README.md.hbs
           output: README.md
