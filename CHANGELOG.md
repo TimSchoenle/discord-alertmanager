@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.9.4](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.9.3...v0.9.4) (2026-11-05)
+
+
+### Bug Fixes
+
+* **telemetry:** migrate to the split sentry-tracing layers ([#217](https://github.com/TimSchoenle/discord-alertmanager/issues/217)) ([12e68e4](https://github.com/TimSchoenle/discord-alertmanager/commit/12e68e4a55094f3b24f17483c1624a4c50b4c7c8))
+
+
+### Dependencies
+
+* **deps:** update alpine:3.24 docker digest to be26560 ([#205](https://github.com/TimSchoenle/discord-alertmanager/issues/205)) ([5fa872b](https://github.com/TimSchoenle/discord-alertmanager/commit/5fa872bfc185f565ede7445417497cc15628ba72))
+* **deps:** update rust crate minijinja to v3.0.3 ([#206](https://github.com/TimSchoenle/discord-alertmanager/issues/206)) ([094b4d9](https://github.com/TimSchoenle/discord-alertmanager/commit/094b4d97dd8f23a20663d61129011ef3d4eabe1b))
+* **deps:** update rust crate minijinja to v3.0.5 ([#213](https://github.com/TimSchoenle/discord-alertmanager/issues/213)) ([d5be9aa](https://github.com/TimSchoenle/discord-alertmanager/commit/d5be9aa82b1c34686a53f80c77c65d9f58b5fead))
+* **deps:** update rust crate sentry to v0.49.5 ([#214](https://github.com/TimSchoenle/discord-alertmanager/issues/214)) ([5a13036](https://github.com/TimSchoenle/discord-alertmanager/commit/5a1303640b5b4de43596d5be404517abd98cad87))
+* **deps:** update rust crate terrace-config to v0.18.0 ([#215](https://github.com/TimSchoenle/discord-alertmanager/issues/215)) ([df02604](https://github.com/TimSchoenle/discord-alertmanager/commit/df02604a0e5cf913f4943769d36e642b61cb3c1f))
+
 ## [0.9.3](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.9.2...v0.9.3) (2026-10-28)
 
 
