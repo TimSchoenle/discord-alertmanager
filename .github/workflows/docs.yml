@@ -143,7 +143,7 @@ jobs:
       - name: Fail while the patch is uncommitted
         if: steps.patch.outputs.has_changes == 'true'
         run: |
-          echo "::error::README.md docs/config.md docs/config.json docs/config.contract.json config.example.toml changed; docs-commit.yml commits them and the run on that commit decides. If no bot commit appears, regenerate them locally and push."
+          echo "::error::README.md docs/config.md docs/config.json docs/config.contract.json config.example.toml changed; docs-commit.yml commits the patch and the run on that commit decides. If no bot commit appears, regenerate the files locally and push."
           exit 1
 
   check:
