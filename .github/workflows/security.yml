@@ -16,21 +16,24 @@ on:
   # A dependency that was clean when it was merged is the normal way an advisory arrives.
   schedule:
     - cron: '0 6 * * 1'
+  workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions: { }
 
 jobs:
   # jactionlint keeps every actionlint check and has a rule for every zizmor audit. The shared action
-  # runs the pedantic profile offline (.github/jactionlint.yaml holds the repository's rule choices),
-  # annotates the findings and uploads the SARIF to code scanning under the category jactionlint.
+  # runs the pedantic profile online (.github/jactionlint.yaml holds the repository's rule choices),
+  # so it also asks GitHub about the actions in use (impostor commits, vulnerable versions, moved
+  # tags, archived repositories). It annotates the findings, uploads the SARIF to code scanning under
+  # the category jactionlint and, with strict-exit, fails on findings of every level.
   action-lint:
     name: Action Lint
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       contents: read # to fetch code
       security-events: write # to upload SARIF results
@@ -47,6 +50,9 @@ jobs:
 
       - name: Run jactionlint
         uses: TimSchoenle/actions/actions/security/jactionlint@e2799424abd778c41e7f6d1547fd402386ef398e # tag=actions-security-jactionlint-v1.1.0
+        with:
+          online: 'true'
+          strict-exit: 'true'
 
   # `deny.toml` holds four rules and all four are this project's own decisions rather than
   # defaults: the licence allowlist, one TLS stack, `anyhow` confined to the binary and the build
