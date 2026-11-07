@@ -31,6 +31,7 @@ jobs:
   check:
     name: Check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read # Required to checkout the code
     steps:
@@ -47,6 +48,7 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read # Required to checkout the code
     steps:
@@ -66,6 +68,7 @@ jobs:
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read # Required to checkout the code
       checks: write # Required to annotate the commit with clippy warnings
@@ -117,6 +120,7 @@ jobs:
     name: Auto Format
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read # Required to checkout the code
     outputs:
@@ -153,6 +157,7 @@ jobs:
       name: ci
       deployment: false
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # Shared with docs.yml rather than with the rest of this workflow: both jobs commit to the
     # pull request branch through the API, which rejects a commit whose parent has moved. Racing
     # them would fail one of the two for a reason its log does not explain, so they queue. Only
@@ -180,7 +185,7 @@ jobs:
         id: generate_token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app-id: ${{ secrets.ACTIONS_MAINTENANCE_APP_ID }}
+          client-id: ${{ secrets.ACTIONS_MAINTENANCE_APP_ID }}
           private-key: ${{ secrets.ACTIONS_MAINTENANCE_PRIVATE_KEY }}
           permission-contents: write # Required to commit the patch to the pull request's branch
 
@@ -203,6 +208,7 @@ jobs:
   doc:
     name: Doc
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read # Required to checkout the code
     env:
@@ -248,6 +254,7 @@ jobs:
   msrv:
     name: MSRV
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read # Required to checkout the code
     steps:
@@ -287,6 +294,7 @@ jobs:
   architecture:
     name: Architecture
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read # Required to checkout the code
     steps:
@@ -315,6 +323,7 @@ jobs:
   config-docs:
     name: Config Docs
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read # Required to checkout the code
     steps:
@@ -392,6 +401,7 @@ jobs:
   config-contract:
     name: Config Contract
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read # Required to checkout the code
     steps:
@@ -424,6 +434,7 @@ jobs:
   docker-build-test:
     name: Docker Build and Test (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     needs: check
     strategy:
       fail-fast: false
@@ -586,6 +597,7 @@ jobs:
   image-size-report:
     name: Image Size Report
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs: docker-build-test
     if: always() && github.event_name == 'pull_request'
     permissions:
@@ -603,6 +615,7 @@ jobs:
   dependency-review:
     name: Dependency Review
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs: check
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}-dependency-review
@@ -651,6 +664,7 @@ jobs:
       - docker-build-test
       - dependency-review
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions: { }
     steps:
       - name: Harden Runner
