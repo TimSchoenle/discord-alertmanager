@@ -80,7 +80,7 @@ jobs:
       # The pinned toolchain from `rust-toolchain.toml`, as `Config Docs` in build.yaml uses, so the
       # regenerated files are byte-identical to what that gate renders.
       - name: Install pinned toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2.0.1
 
       # The command a developer runs, not a second spelling of the cargo invocations behind it.
       # The contract is rendered without `--version`, `--revision` or `--created`, so it does not
