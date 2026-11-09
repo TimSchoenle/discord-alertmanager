@@ -13,7 +13,7 @@ hand: the next render replaces any change made to the output instead of its sour
 
 | File | Written by | Source |
 | --- | --- | --- |
-| `README.md` | `.github/workflows/docs.yml` | `.github/templates/README.md.hbs` |
+| `README.md` | `.github/workflows/generate.yaml` | `.github/templates/README.md.hbs` |
 | `docs/config.md`, `docs/config.json`, `docs/config.contract.json`, `config.example.toml` | `cargo xtask config-docs` | the types in `crates/discord-alertmanager-config` |
 | `crates/discord-alertmanager-store-postgres/.sqlx/`, `crates/discord-alertmanager-store-sqlite/.sqlx/` | `cargo xtask db-prepare` | each backend's queries and `migrations/` |
 | `CHANGELOG.md`, the version in both manifests and in `Cargo.lock` | `.github/workflows/release-please.yaml` | the conventional-commit subjects since the last tag |

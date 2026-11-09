@@ -2,8 +2,8 @@
 #
 # Emits this repository's half of the README render payload as strict JSON on stdout.
 #
-# It is the `extra` input of the `readme-variables` action in docs.yml, deep-merged over what that
-# action derives. Two kinds of fact arrive this way.
+# It is the `extra` input of the `readme-variables` action in generate.yaml and docs.yml,
+# deep-merged over what that action derives. Two kinds of fact arrive this way.
 #
 # The first kind the action cannot see. It reads one manifest, and this is a virtual workspace:
 # `crates/discord-alertmanager/Cargo.toml` names the package and its description, while the
