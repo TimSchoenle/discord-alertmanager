@@ -30,7 +30,7 @@ jobs:
   # half, generate-commit.yaml, runs in the `ci` environment from the default branch's copy, mints
   # the maintenance App's token and commits that patch; it runs nothing from the checkout.
   fmt:
-    name: Auto Format
+    name: Rust Format
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
