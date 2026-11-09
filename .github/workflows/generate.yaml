@@ -1,0 +1,175 @@
+name: Generate
+
+# Every file a tool writes rather than a person. Each generator job runs on the pull request's head
+# and uploads a patch; the Generated Files job is a required check and fails while a patch is not
+# committed yet or a generator failed.
+# generate-commit.yaml, a workflow_run workflow the pull request cannot edit, commits the merged
+# patch to the branch, and the run on that commit decides.
+#
+# Both generators run the pull request's code (`cargo fmt` with its toolchain and `rustfmt.toml`,
+# `cargo xtask config-docs`, the payload script), so they hold no secret and no write permission and
+# hand on only a patch. The reverse gates stay elsewhere: `config-docs` and `config-contract` in
+# build.yaml and the `readme` job in docs.yml run on every event, which also covers `main` and forks.
+#
+# No `paths` filter: the Generated Files check has to report on every pull request to be required.
+
+on:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: { }
+
+jobs:
+  # Auto-format comes in two halves. `cargo fmt` runs the toolchain `rust-toolchain.toml` names
+  # and reads `rustfmt.toml`, both of which the pull request controls, so the half that runs it
+  # holds no secret and a read-only `GITHUB_TOKEN` and hands on only a patch artifact. The second
+  # half, generate-commit.yaml, runs in the `ci` environment from the default branch's copy, mints
+  # the maintenance App's token and commits that patch; it runs nothing from the checkout.
+  fmt:
+    name: Rust Format
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read # Required to checkout the code
+    outputs:
+      has_changes: ${{ steps.format.outputs.changes_detected }}
+      artifact_name: ${{ steps.format.outputs.artifact_name }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      # The pull request head, not the default merge commit: the patch is committed to the branch,
+      # so it has to be computed against the commit the branch points at.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Auto Format
+        id: format
+        uses: TimSchoenle/actions/actions/rust/auto-format@e4229b81c3c3c880b9561dc4d53bd87ccf49eaf3 # tag=actions-rust-auto-format-v2.0.1
+        with:
+          artifact_name: rust-auto-format
+
+  render:
+    name: render
+    runs-on: ubuntu-latest
+    # Compiling `xtask` and the schema example is most of this budget.
+    timeout-minutes: 25
+    # This half runs the pull request's code — `xtask`, the generator example, the payload script
+    # — so it holds no secret and no write token. It writes the regenerated files into its own
+    # checkout and uploads them as a patch; generate-commit.yaml commits that patch
+    # without running anything from the branch.
+    permissions:
+      contents: read # Required to checkout the code
+    outputs:
+      has_changes: ${{ steps.patch.outputs.has_changes }}
+      artifact_name: ${{ steps.patch.outputs.artifact_name }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      # The pull request head, not the merge commit: the render has to read the manifests the pull
+      # request proposes, and the patch is committed to the branch, so it has to be computed against
+      # the commit the branch points at. The SHA rather than the branch name, so the patch's base is
+      # the commit generate-commit.yaml checks the branch against.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      # The pinned toolchain from `rust-toolchain.toml`, as `Config Docs` in build.yaml uses, so the
+      # regenerated files are byte-identical to what that gate renders.
+      - name: Install pinned toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2.0.1
+
+      # The command a developer runs, not a second spelling of the cargo invocations behind it.
+      # The contract is rendered without `--version`, `--revision` or `--created`, so it does not
+      # move between runs over the same tree. It goes first because the README payload below reads
+      # `docs/config.md` as regenerated here.
+      - name: Regenerate the configuration reference and contract
+        run: cargo xtask config-docs
+
+      # Invoked through `bash` rather than executed: the repository is authored on Windows, where
+      # git does not record the executable bit. It reads `docs/config.md` as regenerated above.
+      #
+      # Assigned before it is echoed. With `echo "json=$(...)"` the exit status belongs to `echo`,
+      # so a failed generator leaves the step green, `readme-variables` reads the empty `extra` as
+      # `{}` by design, and the failure surfaces several steps later as a strict-mode error about
+      # an undefined template variable.
+      - name: Generate the README payload fragment
+        id: config
+        run: |
+          set -euo pipefail
+          json="$(bash .github/scripts/readme-variables.sh)"
+          echo "json=${json}" >> "$GITHUB_OUTPUT"
+
+      # `manifest` is the binary crate, not the repository root: the root is a virtual workspace
+      # manifest with no `[package]` table and the action refuses it by name. The crates that
+      # inherit their version from `[workspace.package]` cannot be read either, which is why the
+      # binary states its own and the script above fails when the two disagree.
+      #
+      # `branch` is the default branch rather than the action's `github.ref_name` default, which on
+      # a `pull_request` event is `<number>/merge`. Left alone, the badge URLs rendered here and the
+      # ones rendered by `check` on `main` differ, and the gate fails on every merge for a reason
+      # absent from the diff.
+      - name: Collect the README payload
+        id: variables
+        uses: TimSchoenle/actions/actions/common/readme-variables@dc5b395636dc1954383f11af4062a08814e9b15a # tag=actions-common-readme-variables-v2.1.1
+        with:
+          manifest: crates/discord-alertmanager/Cargo.toml
+          branch: ${{ github.event.repository.default_branch }}
+          extra: ${{ steps.config.outputs.json }}
+
+      # Written, not committed: the commit is generate-commit.yaml's, over every generated file at once.
+      - name: Render the README
+        uses: TimSchoenle/actions/actions/common/render-template@dc5b395636dc1954383f11af4062a08814e9b15a # tag=actions-common-render-template-v3.0.1
+        with:
+          template: .github/templates/README.md.hbs
+          output: README.md
+          variables: ${{ steps.variables.outputs.variables }}
+
+      # Every generated path is named, so nothing else left dirty in the workspace rides along.
+      # generate-commit.yaml holds the same list as its allowlist and refuses a patch
+      # touching anything outside it.
+      - name: Create Patch
+        id: patch
+        uses: TimSchoenle/actions/actions/common/create-patch@dc5b395636dc1954383f11af4062a08814e9b15a # tag=actions-common-create-patch-v1.1.1
+        with:
+          artifact_name: docs-render
+          paths: README.md docs/config.md docs/config.json docs/config.contract.json config.example.toml
+
+  # The required check. It needs every generator above and runs whatever their result, so it
+  # reports on every pull request.
+  verdict:
+    name: Generated Files
+    needs: [ fmt, render ]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # to check out the commit the merged patch is made from
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            *.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+
+      - name: Generated Files Verdict
+        uses: TimSchoenle/actions/actions/common/generated-files-verdict@927daf80ad493b627b7384abf496d83abbac5f43 # tag=actions-common-generated-files-verdict-v1.2.0
+        with:
+          needs: ${{ toJSON(needs) }}
