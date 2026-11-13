@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.9.5](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.9.4...v0.9.5) (2026-11-12)
+
+
+### Dependencies
+
+* **deps:** update alpine:3.24 docker digest to f59abe6 ([#229](https://github.com/TimSchoenle/discord-alertmanager/issues/229)) ([3c9ed8c](https://github.com/TimSchoenle/discord-alertmanager/commit/3c9ed8c11df2188de7dcc7ccdea79372d872cc8d))
+* **deps:** update rust crate arc-swap to v1.9.4 ([#231](https://github.com/TimSchoenle/discord-alertmanager/issues/231)) ([25a6c32](https://github.com/TimSchoenle/discord-alertmanager/commit/25a6c32a7bbe346298e469c880491d9f202cf07c))
+* **deps:** update rust crate minijinja to v3.1.0 ([#232](https://github.com/TimSchoenle/discord-alertmanager/issues/232)) ([bb30a29](https://github.com/TimSchoenle/discord-alertmanager/commit/bb30a2921f784eb994cf30b992e9dbb5ca403578))
+* **deps:** update rust crate terrace-config to v0.18.1 ([#224](https://github.com/TimSchoenle/discord-alertmanager/issues/224)) ([e1fc881](https://github.com/TimSchoenle/discord-alertmanager/commit/e1fc881f30c58f8eded74651f257872854db5061))
+
 ## [0.9.4](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.9.3...v0.9.4) (2026-11-05)
 
 
