@@ -143,7 +143,7 @@ jobs:
       # touching anything outside it.
       - name: Create Patch
         id: patch
-        uses: TimSchoenle/actions/actions/common/create-patch@b37134ffa35b3ce98437447e3b4c76933eb65c04 # tag=actions-common-create-patch-v1.1.2
+        uses: TimSchoenle/actions/actions/common/create-patch@0b3967d3d992d12aa88da1f8facf412b162d5ab2 # tag=actions-common-create-patch-v2.1.1
         with:
           artifact_name: docs-render
           paths: README.md docs/config.md docs/config.json docs/config.contract.json config.example.toml
