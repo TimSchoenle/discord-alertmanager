@@ -38,6 +38,12 @@ ignore = [
     # not carry `AAA Certificate Services`. Its only emSign root is the RSA `emSign Root CA - G1`,
     # so no path the gateway verifies reaches those intermediates.
     { id = "RUSTSEC-2026-0382", reason = "webpki-roots 1.0.11 trusts neither the emSign ECC roots nor AAA Certificate Services, so the distrusted intermediates have no trusted path." },
+    # `astral-tokio-tar` is unmaintained, with no successor release. It enters the graph only
+    # through `testcontainers`, a dev-dependency of the Postgres store tests and a dependency of
+    # `xtask`, which regenerates the sqlx offline cache; neither is part of the service binary or
+    # the image (`cargo build -p discord-alertmanager`). `testcontainers` 0.28 still depends on it.
+    # Reviewed 2026-11-15; re-review when `testcontainers` replaces it.
+    { id = "RUSTSEC-2026-0440", reason = "Unmaintained, reached only through testcontainers in tests and xtask; nothing it touches ships." },
 ]
 
 [licenses]
