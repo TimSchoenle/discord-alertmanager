@@ -22,7 +22,6 @@ chrono.workspace = true
 dam-config.workspace = true
 dam-core.workspace = true
 dam-store.workspace = true
-metrics.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

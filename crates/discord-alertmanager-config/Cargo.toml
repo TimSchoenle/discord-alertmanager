@@ -21,8 +21,6 @@ path = "src/lib.rs"
 config-schema = ["terrace-config/schema-cli"]
 
 [dependencies]
-chrono.workspace = true
-humantime.workspace = true
 secrecy.workspace = true
 serde.workspace = true
 terrace-config.workspace = true
