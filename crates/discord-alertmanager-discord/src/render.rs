@@ -741,7 +741,7 @@ mod tests {
 
         let title = json["title"].as_str().unwrap_or_default();
         let description = json["description"].as_str().unwrap_or_default();
-        let fields = json["fields"].as_array().map(Vec::len).unwrap_or_default();
+        let fields = json["fields"].as_array().map_or_default(Vec::len);
 
         assert!(
             discord_len(title) <= TITLE_LIMIT,
@@ -753,18 +753,15 @@ mod tests {
 
         let total: usize = discord_len(title)
             + discord_len(description)
-            + json["fields"]
-                .as_array()
-                .map(|fields| {
-                    fields
-                        .iter()
-                        .map(|field| {
-                            discord_len(field["name"].as_str().unwrap_or_default())
-                                + discord_len(field["value"].as_str().unwrap_or_default())
-                        })
-                        .sum::<usize>()
-                })
-                .unwrap_or_default();
+            + json["fields"].as_array().map_or_default(|fields| {
+                fields
+                    .iter()
+                    .map(|field| {
+                        discord_len(field["name"].as_str().unwrap_or_default())
+                            + discord_len(field["value"].as_str().unwrap_or_default())
+                    })
+                    .sum::<usize>()
+            });
 
         assert!(total <= EMBED_BUDGET, "the embed is {total} characters");
     }

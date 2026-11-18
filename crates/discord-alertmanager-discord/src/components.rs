@@ -76,17 +76,13 @@ pub(crate) async fn dispatch(
         }
     };
 
-    let roles: Vec<RoleId> = interaction
-        .member
-        .as_ref()
-        .map(|member| {
-            member
-                .roles
-                .iter()
-                .map(|role| RoleId::new(role.get()))
-                .collect()
-        })
-        .unwrap_or_default();
+    let roles: Vec<RoleId> = interaction.member.as_ref().map_or_default(|member| {
+        member
+            .roles
+            .iter()
+            .map(|role| RoleId::new(role.get()))
+            .collect()
+    });
 
     let names = role_names(ctx, interaction);
     let actor = UserId::new(interaction.user.id.get());
