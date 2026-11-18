@@ -2,6 +2,6 @@
 # The floor is `rust-version` in Cargo.toml, which the `msrv` CI job checks with a toolchain of
 # that version. Renovate moves the two together; this file is about reproducibility, not the floor.
 [toolchain]
-channel = "1.99.1"
+channel = "1.100.0"
 components = ["rustfmt", "clippy"]
 profile = "minimal"

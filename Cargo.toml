@@ -15,7 +15,7 @@ authors = ["Tim Schönle"]
 # Follows the pinned toolchain: Renovate's `rust toolchain` group (the shared `rust-application`
 # preset from TimSchoenle/actions) moves it with `channel` in rust-toolchain.toml. It must never
 # drop below the highest MSRV in the tree: terrace-config declares 1.94, serenity 0.12 needs 1.74.
-rust-version = "1.99"
+rust-version = "1.100"
 
 # One version per dependency for the whole workspace. A member takes what it needs by name with
 # `dep.workspace = true`; nothing pins a version locally, so two crates cannot drift apart and
@@ -94,7 +94,6 @@ serde_json = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
 regex = "1"
 minijinja = { version = "3", default-features = false, features = ["builtins"] }
-humantime = "2"
 url = { version = "2", features = ["serde"] }
 
 # --- security ---------------------------------------------------------------------------------

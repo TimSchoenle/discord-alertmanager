@@ -82,8 +82,7 @@ async fn alertmanager(ctx: &CommandCtx<'_>) -> Result<Response, CommandError> {
         .alertmanager
         .receivers()
         .await
-        .map(|receivers| receivers.len())
-        .unwrap_or_default();
+        .map_or_default(|receivers| receivers.len());
 
     let mut embed = CreateEmbed::new()
         .title("Alertmanager")

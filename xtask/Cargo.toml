@@ -19,7 +19,6 @@ path = "src/main.rs"
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
-sqlx = { workspace = true, features = ["postgres", "sqlite"] }
 testcontainers.workspace = true
 testcontainers-modules = { workspace = true, features = ["postgres"] }
 tokio = { workspace = true, features = ["macros", "process", "rt-multi-thread"] }
