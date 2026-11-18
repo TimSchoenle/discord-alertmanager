@@ -340,8 +340,7 @@ impl SqlAlertFilter {
                 .collect(),
             severities: query
                 .min_severity
-                .map(severities_at_or_above)
-                .unwrap_or_default()
+                .map_or_default(severities_at_or_above)
                 .into_iter()
                 .map(str::to_owned)
                 .collect(),
