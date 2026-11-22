@@ -50,7 +50,7 @@ jobs:
 
       - name: Collect the README payload
         id: variables
-        uses: TimSchoenle/actions/actions/common/readme-variables@0b3967d3d992d12aa88da1f8facf412b162d5ab2 # tag=actions-common-readme-variables-v2.1.6
+        uses: TimSchoenle/actions/actions/common/readme-variables@54a4dc05fd351a9bf9e9638fa3ebbc572b5f2d7f # tag=actions-common-readme-variables-v2.1.7
         with:
           manifest: crates/discord-alertmanager/Cargo.toml
           branch: ${{ github.event.repository.default_branch }}
@@ -58,7 +58,7 @@ jobs:
 
       # Writes nothing; fails with the first differing line when README.md is stale.
       - name: Verify README.md is current
-        uses: TimSchoenle/actions/actions/common/render-template@0b3967d3d992d12aa88da1f8facf412b162d5ab2 # tag=actions-common-render-template-v3.0.6
+        uses: TimSchoenle/actions/actions/common/render-template@54a4dc05fd351a9bf9e9638fa3ebbc572b5f2d7f # tag=actions-common-render-template-v3.0.7
         with:
           template: .github/templates/README.md.hbs
           output: README.md
