@@ -61,7 +61,7 @@ jobs:
       # taking a service container, so that `cargo test` on a laptop exercises the same backend
       # this job does. The runner image ships a Docker daemon, so nothing here has to arrange one.
       - name: Run Test
-        uses: TimSchoenle/actions/actions/rust/test@49acdef9979f343817ec2a85ddd25e5f34befc8b # tag=actions-rust-test-v2.0.0
+        uses: TimSchoenle/actions/actions/rust/test@54a4dc05fd351a9bf9e9638fa3ebbc572b5f2d7f # tag=actions-rust-test-v2.0.1
         with:
           test_arguments: '--workspace --all-features'
 
@@ -81,7 +81,7 @@ jobs:
       # The lint set is `[workspace.lints]` in the root manifest and is inherited by every member.
       # `-D warnings` is what turns those `warn` levels into a gate.
       - name: Run Clippy
-        uses: TimSchoenle/actions/actions/rust/clippy@49acdef9979f343817ec2a85ddd25e5f34befc8b # tag=actions-rust-clippy-v2.0.0
+        uses: TimSchoenle/actions/actions/rust/clippy@ded012bb09f11e42381c9b1b7c3ff0dbc09156bf # tag=actions-rust-clippy-v2.0.1
         with:
           clippy_arguments: '--workspace --all-targets --all-features -- -D warnings'
 
@@ -103,7 +103,7 @@ jobs:
           egress-policy: audit
 
       - name: Run Coverage
-        uses: TimSchoenle/actions/actions/rust/coverage-codecov@49acdef9979f343817ec2a85ddd25e5f34befc8b # tag=actions-rust-coverage-codecov-v2.1.0
+        uses: TimSchoenle/actions/actions/rust/coverage-codecov@54a4dc05fd351a9bf9e9638fa3ebbc572b5f2d7f # tag=actions-rust-coverage-codecov-v2.1.1
         with:
           test_arguments: '--workspace --all-features'
           flags: rust
@@ -329,7 +329,7 @@ jobs:
       # `image` is empty, so the two checks needing one are skipped and this job stays the
       # cheap half.
       - name: Check the committed contract and the Dockerfile LABEL region
-        uses: TimSchoenle/actions/actions/rust/config-contract@0b3967d3d992d12aa88da1f8facf412b162d5ab2 # tag=actions-rust-config-contract-v2.0.6
+        uses: TimSchoenle/actions/actions/rust/config-contract@54a4dc05fd351a9bf9e9638fa3ebbc572b5f2d7f # tag=actions-rust-config-contract-v2.0.7
         with:
           example: config-schema
           package: discord-alertmanager-config
@@ -441,7 +441,7 @@ jobs:
       # a contract behind it.
       - name: Verify the image carries the contract labels
         id: contract
-        uses: TimSchoenle/actions/actions/rust/config-contract@0b3967d3d992d12aa88da1f8facf412b162d5ab2 # tag=actions-rust-config-contract-v2.0.6
+        uses: TimSchoenle/actions/actions/rust/config-contract@54a4dc05fd351a9bf9e9638fa3ebbc572b5f2d7f # tag=actions-rust-config-contract-v2.0.7
         with:
           example: config-schema
           package: discord-alertmanager-config
@@ -490,7 +490,7 @@ jobs:
       # from overwriting each other's results. `comment: summary` because a leg can only own its
       # own comment: each one uploads a fragment, and `image-size-report` below posts one table.
       - name: Check Docker image
-        uses: TimSchoenle/actions/actions/docker/image-check@0b3967d3d992d12aa88da1f8facf412b162d5ab2 # tag=actions-docker-image-check-v1.1.17
+        uses: TimSchoenle/actions/actions/docker/image-check@ded012bb09f11e42381c9b1b7c3ff0dbc09156bf # tag=actions-docker-image-check-v1.1.19
         with:
           image: discord-alertmanager:test
           platform: ${{ matrix.platform }}
@@ -516,7 +516,7 @@ jobs:
           egress-policy: audit
 
       - name: Comment image size on PR
-        uses: TimSchoenle/actions/actions/docker/image-check-summary@0b3967d3d992d12aa88da1f8facf412b162d5ab2 # tag=actions-docker-image-check-summary-v2.0.7
+        uses: TimSchoenle/actions/actions/docker/image-check-summary@ded012bb09f11e42381c9b1b7c3ff0dbc09156bf # tag=actions-docker-image-check-summary-v2.0.9
 
   dependency-review:
     name: Dependency Review

@@ -53,7 +53,7 @@ jobs:
 
       - name: Auto Format
         id: format
-        uses: TimSchoenle/actions/actions/rust/auto-format@0b3967d3d992d12aa88da1f8facf412b162d5ab2 # tag=actions-rust-auto-format-v2.0.5
+        uses: TimSchoenle/actions/actions/rust/auto-format@ded012bb09f11e42381c9b1b7c3ff0dbc09156bf # tag=actions-rust-auto-format-v2.0.7
         with:
           artifact_name: rust-auto-format
 
@@ -124,7 +124,7 @@ jobs:
       # absent from the diff.
       - name: Collect the README payload
         id: variables
-        uses: TimSchoenle/actions/actions/common/readme-variables@0b3967d3d992d12aa88da1f8facf412b162d5ab2 # tag=actions-common-readme-variables-v2.1.6
+        uses: TimSchoenle/actions/actions/common/readme-variables@54a4dc05fd351a9bf9e9638fa3ebbc572b5f2d7f # tag=actions-common-readme-variables-v2.1.7
         with:
           manifest: crates/discord-alertmanager/Cargo.toml
           branch: ${{ github.event.repository.default_branch }}
@@ -132,7 +132,7 @@ jobs:
 
       # Written, not committed: the commit is generate-commit.yaml's, over every generated file at once.
       - name: Render the README
-        uses: TimSchoenle/actions/actions/common/render-template@0b3967d3d992d12aa88da1f8facf412b162d5ab2 # tag=actions-common-render-template-v3.0.6
+        uses: TimSchoenle/actions/actions/common/render-template@54a4dc05fd351a9bf9e9638fa3ebbc572b5f2d7f # tag=actions-common-render-template-v3.0.7
         with:
           template: .github/templates/README.md.hbs
           output: README.md
@@ -143,7 +143,7 @@ jobs:
       # touching anything outside it.
       - name: Create Patch
         id: patch
-        uses: TimSchoenle/actions/actions/common/create-patch@0b3967d3d992d12aa88da1f8facf412b162d5ab2 # tag=actions-common-create-patch-v2.1.1
+        uses: TimSchoenle/actions/actions/common/create-patch@54a4dc05fd351a9bf9e9638fa3ebbc572b5f2d7f # tag=actions-common-create-patch-v2.1.2
         with:
           artifact_name: docs-render
           paths: README.md docs/config.md docs/config.json docs/config.contract.json config.example.toml
@@ -170,6 +170,6 @@ jobs:
             *.blob.core.windows.net:443
 
       - name: Generated Files Verdict
-        uses: TimSchoenle/actions/actions/common/generated-files-verdict@0b3967d3d992d12aa88da1f8facf412b162d5ab2 # tag=actions-common-generated-files-verdict-v1.2.6
+        uses: TimSchoenle/actions/actions/common/generated-files-verdict@ded012bb09f11e42381c9b1b7c3ff0dbc09156bf # tag=actions-common-generated-files-verdict-v1.2.8
         with:
           needs: ${{ toJSON(needs) }}
