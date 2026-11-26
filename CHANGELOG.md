@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.9.6](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.9.5...v0.9.6) (2026-11-26)
+
+
+### Dependencies
+
+* **deps:** lock file maintenance ([#255](https://github.com/TimSchoenle/discord-alertmanager/issues/255)) ([b778a63](https://github.com/TimSchoenle/discord-alertmanager/commit/b778a63a9c7a83bb76601011cb0b01f7063199c7))
+* **deps:** update lukemathwalker/cargo-chef:latest-rust-alpine docker digest to 3dc65f9 ([#243](https://github.com/TimSchoenle/discord-alertmanager/issues/243)) ([75f185f](https://github.com/TimSchoenle/discord-alertmanager/commit/75f185fb5dfa29cc6b53c3affc5035beebf17930))
+* **deps:** update rust crate clap to v4.6.8 ([#245](https://github.com/TimSchoenle/discord-alertmanager/issues/245)) ([0a1868a](https://github.com/TimSchoenle/discord-alertmanager/commit/0a1868ab459cf7aeb9fdc78b09af4039024ac60b))
+* **deps:** update rust crate clap to v4.6.9 ([#254](https://github.com/TimSchoenle/discord-alertmanager/issues/254)) ([724f560](https://github.com/TimSchoenle/discord-alertmanager/commit/724f56082859290cccf8d692fb753c13867be08f))
+* **deps:** update rust crate regex to v1.13.2 ([#246](https://github.com/TimSchoenle/discord-alertmanager/issues/246)) ([d05c6ad](https://github.com/TimSchoenle/discord-alertmanager/commit/d05c6ad4472e9538ac274d507010c229a4b9e453))
+* **deps:** update rust crate sentry to v0.49.6 ([#247](https://github.com/TimSchoenle/discord-alertmanager/issues/247)) ([1b517a1](https://github.com/TimSchoenle/discord-alertmanager/commit/1b517a1704a2ed7b2e98e5be9afd7b1c090fd066))
+* **deps:** update rust crate sqlx to v0.9.1 ([#248](https://github.com/TimSchoenle/discord-alertmanager/issues/248)) ([6da44a7](https://github.com/TimSchoenle/discord-alertmanager/commit/6da44a77ad23d9e480e48cf8a59f96e8ff9bc3fa))
+* **deps:** update rust crate terrace-config to v0.18.2 ([#253](https://github.com/TimSchoenle/discord-alertmanager/issues/253)) ([1817407](https://github.com/TimSchoenle/discord-alertmanager/commit/18174073736463e83714a0b86f370bb4db3a460a))
+* **deps:** update rust crate url to v2.5.9 [security] ([#251](https://github.com/TimSchoenle/discord-alertmanager/issues/251)) ([93bcb87](https://github.com/TimSchoenle/discord-alertmanager/commit/93bcb87caae875207b3b71dbe4eb107bf08ffb4e))
+* **deps:** update rust toolchain (minor) ([#242](https://github.com/TimSchoenle/discord-alertmanager/issues/242)) ([f4ac4df](https://github.com/TimSchoenle/discord-alertmanager/commit/f4ac4dfb29b6ee26eacfea1edfb1b7c69858214c))
+
 ## [0.9.5](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.9.4...v0.9.5) (2026-11-16)
 
 
