@@ -61,7 +61,7 @@ jobs:
       # taking a service container, so that `cargo test` on a laptop exercises the same backend
       # this job does. The runner image ships a Docker daemon, so nothing here has to arrange one.
       - name: Run Test
-        uses: TimSchoenle/actions/actions/rust/test@54a4dc05fd351a9bf9e9638fa3ebbc572b5f2d7f # tag=actions-rust-test-v2.0.1
+        uses: TimSchoenle/actions/actions/rust/test@7594d1c64de290a99195e47fc6d7b5699243b951 # tag=actions-rust-test-v2.0.2
         with:
           test_arguments: '--workspace --all-features'
 
@@ -103,7 +103,7 @@ jobs:
           egress-policy: audit
 
       - name: Run Coverage
-        uses: TimSchoenle/actions/actions/rust/coverage-codecov@54a4dc05fd351a9bf9e9638fa3ebbc572b5f2d7f # tag=actions-rust-coverage-codecov-v2.1.1
+        uses: TimSchoenle/actions/actions/rust/coverage-codecov@7594d1c64de290a99195e47fc6d7b5699243b951 # tag=actions-rust-coverage-codecov-v2.1.2
         with:
           test_arguments: '--workspace --all-features'
           flags: rust
@@ -329,7 +329,7 @@ jobs:
       # `image` is empty, so the two checks needing one are skipped and this job stays the
       # cheap half.
       - name: Check the committed contract and the Dockerfile LABEL region
-        uses: TimSchoenle/actions/actions/rust/config-contract@54a4dc05fd351a9bf9e9638fa3ebbc572b5f2d7f # tag=actions-rust-config-contract-v2.0.7
+        uses: TimSchoenle/actions/actions/rust/config-contract@7594d1c64de290a99195e47fc6d7b5699243b951 # tag=actions-rust-config-contract-v2.0.8
         with:
           example: config-schema
           package: discord-alertmanager-config
@@ -441,7 +441,7 @@ jobs:
       # a contract behind it.
       - name: Verify the image carries the contract labels
         id: contract
-        uses: TimSchoenle/actions/actions/rust/config-contract@54a4dc05fd351a9bf9e9638fa3ebbc572b5f2d7f # tag=actions-rust-config-contract-v2.0.7
+        uses: TimSchoenle/actions/actions/rust/config-contract@7594d1c64de290a99195e47fc6d7b5699243b951 # tag=actions-rust-config-contract-v2.0.8
         with:
           example: config-schema
           package: discord-alertmanager-config
