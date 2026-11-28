@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.9.7](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.9.6...v0.9.7) (2026-11-28)
+
+
+### Dependencies
+
+* **deps:** update rust crate anyhow to v1.0.105 ([#261](https://github.com/TimSchoenle/discord-alertmanager/issues/261)) ([39363d4](https://github.com/TimSchoenle/discord-alertmanager/commit/39363d49279accb289e3007458b97580e523622d))
+* **deps:** update rust crate clap to v4.6.10 ([#263](https://github.com/TimSchoenle/discord-alertmanager/issues/263)) ([71d50b0](https://github.com/TimSchoenle/discord-alertmanager/commit/71d50b0a51177845cfe94f0b8186368fd8e320a4))
+* **deps:** update rust crate rstest to 0.29 ([#259](https://github.com/TimSchoenle/discord-alertmanager/issues/259)) ([df4e0ac](https://github.com/TimSchoenle/discord-alertmanager/commit/df4e0ac816246ee829837405d4947f8d4767094a))
+* **deps:** update rust crate terrace-config to v0.18.3 ([#258](https://github.com/TimSchoenle/discord-alertmanager/issues/258)) ([4195bf4](https://github.com/TimSchoenle/discord-alertmanager/commit/4195bf4ce50969432d93f0dba39c26c68bfaa68b))
+* **deps:** update rust to v1.100.1 ([#264](https://github.com/TimSchoenle/discord-alertmanager/issues/264)) ([f1f5366](https://github.com/TimSchoenle/discord-alertmanager/commit/f1f53661ed65202b74d39dac854b07eb743827b4))
+
 ## [0.9.6](https://github.com/TimSchoenle/discord-alertmanager/compare/v0.9.5...v0.9.6) (2026-11-26)
 
 
